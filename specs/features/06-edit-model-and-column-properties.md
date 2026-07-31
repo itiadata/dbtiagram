@@ -1,7 +1,7 @@
 ---
 id: 06
 title: Edit model and column properties in the diagram
-status: implemented
+status: done
 priority: high
 created: 2026-08-01
 owner: unassigned
