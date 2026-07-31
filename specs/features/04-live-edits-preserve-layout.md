@@ -1,7 +1,7 @@
 ---
 id: 04
 title: Live model.yml edits reflected without losing layout
-status: implemented
+status: done
 priority: high
 created: 2026-07-31
 owner: unassigned
