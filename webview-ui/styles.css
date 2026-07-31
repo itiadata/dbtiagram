@@ -128,31 +128,77 @@ body {
   background: color-mix(in srgb, var(--card) 55%, transparent);
 }
 
-.sidebar__title {
-  margin: 0;
-  font-size: 14px;
-  font-weight: 600;
-}
-
 .sidebar__section {
   display: flex;
   flex-direction: column;
   gap: 6px;
 }
 
-.sidebar__section-header {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
+/* Top-level sections in the sidebar column get more breathing room so the
+   column can host several collapsible sections side by side (spec 05). */
+.sidebar__section--filter {
+  gap: 12px;
 }
 
-.sidebar__section-header h3 {
-  margin: 0;
+/* Full-width header button: chevron + title (+ optional count). Clicking
+   anywhere on it collapses/expands the section body. */
+.sidebar__section-toggle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  padding: 2px 4px;
+  border: none;
+  border-radius: 3px;
+  background: none;
+  font: inherit;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.sidebar__section-toggle:hover {
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
+}
+
+.sidebar__chevron {
+  flex-shrink: 0;
+  width: 0;
+  height: 0;
+  border-left: 5px solid currentColor;
+  border-top: 4px solid transparent;
+  border-bottom: 4px solid transparent;
+  transition: transform 0.15s ease;
+}
+
+.sidebar__chevron--open {
+  transform: rotate(90deg);
+}
+
+.sidebar__section-title {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   font-size: 11px;
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.04em;
   color: var(--muted);
+}
+
+.sidebar__section--filter .sidebar__section-title {
+  font-size: 14px;
+  font-weight: 600;
+  text-transform: none;
+  letter-spacing: normal;
+  color: var(--text);
+}
+
+.sidebar__section-body {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
 }
 
 .sidebar__count {

@@ -51,8 +51,15 @@ all **unchanged**.
 ## Scope
 
 - **A left sidebar** in the webview layout (`.app` becomes a sidebar + main
-  column). This spec fills it with the Filter section; the container is
-  explicitly intended to host other UI in the future.
+  column). This spec fills it with a **collapsible** Filter section (chevron
+  toggle in its header) containing the two sub-sections; the container is
+  explicitly intended to host other UI in the future, each as its own
+  collapsible section in the same column.
+- **Collapsible sections**: the Filter section and each sub-section (Model yml
+  files, Models) collapse/expand via a chevron toggle in its header. A
+  collapsed sub-section header keeps its `checked/total` count visible. Collapse
+  state is plain webview state (survives panel hide/reveal, resets on reopen),
+  matching the filter-selection persistence policy below.
 - **Model yml files filter**: checkbox list of every parsed model.yml file
   (each with the model names it defines), all checked by default, plus a
   name-search box.
@@ -190,9 +197,14 @@ All functions are pure and MUST NOT import `vscode`:
   via `mergeFlowNodes` — refitting the viewport never snaps tables back to
   dagre slots.
 
-New `FilterSidebar.tsx` (presentational, props only):
+New `FilterSidebar.tsx`:
 
-- `<aside className="sidebar">` with the "Filter" title.
+- `<aside className="sidebar">` with the collapsible "Filter" section.
+- Sections are rendered by a local `CollapsibleSection` component: a full-width
+  header **button** (chevron + title + optional count, `aria-expanded`) whose
+  body (search box + list) unmounts while collapsed. Three toggles exist —
+  Filter (top level, `large` styling), Model yml files, and Models — each a
+  plain `useState` inside `FilterSidebar`; no filter data flows through them.
 - **Model yml files** section: header with a `checked/total` count, a search
   input (`aria-label="Search model yml files"`, placeholder "Search files…"),
   and a scrollable checkbox list of the files whose `label` matches the search.
@@ -208,12 +220,14 @@ New `FilterSidebar.tsx` (presentational, props only):
   into `.sidebar` (fixed ~260px, `border-right`, `overflow-y: auto`) and
   `.app__main` (flex column containing the existing header, banners, form,
   canvas — unchanged internally).
-- Sidebar styles: `.sidebar__title`, `.sidebar__section`,
-  `.sidebar__section-header` (h3 + count), `.sidebar__search`, `.sidebar__list`
-  (scrollable, max-height), `.sidebar__item` rows, `.sidebar__item-label`
-  (ellipsis), `.sidebar__empty`, and `.empty-overlay` (absolute, centered over
-  the canvas, pointer-events: none). Dark theme continues via the existing
-  `prefers-color-scheme` block.
+- Sidebar styles: `.sidebar__section`, `.sidebar__section-toggle` (the
+  full-width header button), `.sidebar__chevron` (rotates 90° when open),
+  `.sidebar__section-title` (with a `--filter` variant for the top-level
+  title), `.sidebar__section-body`, `.sidebar__count`, `.sidebar__search`,
+  `.sidebar__list` (scrollable, max-height), `.sidebar__item` rows,
+  `.sidebar__item-label` (ellipsis), `.sidebar__empty`, and `.empty-overlay`
+  (absolute, centered over the canvas, pointer-events: none). Dark theme
+  continues via the existing `prefers-color-scheme` block.
 
 ### 7. Tests (`test/unit/`)
 
@@ -279,6 +293,19 @@ When the user types "order" in the Model yml files search box
 Then the file list shows only entries whose label contains "order"
 And the diagram is unchanged
 And unchecking a file from the narrowed list still applies to the diagram
+```
+
+### Sections collapse and expand
+
+```
+Given the dbt Diagram is open
+When the user clicks the "Model yml files" section header
+Then that section's search box and file list hide
+And its header still shows the checked/total count
+When the user clicks the header again
+Then the list reappears with the same search text and selection
+When the user clicks the "Filter" header
+Then both sub-sections collapse together
 ```
 
 ### Duplicate file names are disambiguated with their folder
@@ -353,6 +380,9 @@ And typing in either search box does not move or refit the diagram
       are preserved (spec 04 `mergeFlowNodes` unchanged).
 - [ ] Header status shows the filtered count ("X of Y models") when filters
       hide anything.
+- [ ] The Filter section and each sub-section collapse/expand via a chevron
+      toggle in their header; a collapsed sub-section keeps its `checked/total`
+      count visible, and collapse state is plain webview state.
 - [ ] `src/shared/labels.ts` and `src/shared/filter.ts` are pure (no `vscode`
       import) and covered by sub-second Vitest unit tests.
 - [ ] `npm test` and `npm run typecheck` pass; `src/dbt/*`,

@@ -2,11 +2,52 @@
  * Left sidebar of the diagram webview (spec 05): a Filter section with two
  * checkbox lists — model yml files (with file precedence) and models. Both
  * lists have a search box that narrows the visible rows without changing the
- * diagram. The sidebar is deliberately generic so future features can add
- * their own sections here.
+ * diagram. Every section (Filter and each sub-section) collapses/expands via a
+ * chevron toggle in its header; the sidebar is deliberately generic so future
+ * features can add their own collapsible sections to the column.
  */
+import { useState, type ReactNode } from 'react';
 import { matchesSearch } from '../src/shared/filter';
 import type { DiagramModelFile } from '../src/shared/protocol';
+
+interface CollapsibleSectionProps {
+  title: string;
+  open: boolean;
+  onToggle: () => void;
+  /** Optional `checked/total` label shown in the header, kept visible while collapsed. */
+  count?: string;
+  /** Larger title styling for the top-level sections in the sidebar column. */
+  large?: boolean;
+  children: ReactNode;
+}
+
+function CollapsibleSection({
+  title,
+  open,
+  onToggle,
+  count,
+  large,
+  children,
+}: CollapsibleSectionProps): JSX.Element {
+  return (
+    <section className={`sidebar__section${large ? ' sidebar__section--filter' : ''}`}>
+      <button
+        type="button"
+        className="sidebar__section-toggle"
+        aria-expanded={open}
+        onClick={onToggle}
+      >
+        <span
+          className={`sidebar__chevron${open ? ' sidebar__chevron--open' : ''}`}
+          aria-hidden="true"
+        />
+        <span className="sidebar__section-title">{title}</span>
+        {count !== undefined && <span className="sidebar__count">{count}</span>}
+      </button>
+      {open && <div className="sidebar__section-body">{children}</div>}
+    </section>
+  );
+}
 
 interface FilterSidebarProps {
   files: DiagramModelFile[];
@@ -31,6 +72,13 @@ export function FilterSidebar({
   onToggleFile,
   onToggleModel,
 }: FilterSidebarProps): JSX.Element {
+  // Collapse toggles are plain webview state: they survive panel hide/reveal
+  // (retainContextWhenHidden) and reset on reopen. All filter data still flows
+  // through props.
+  const [filterOpen, setFilterOpen] = useState(true);
+  const [filesOpen, setFilesOpen] = useState(true);
+  const [modelsOpen, setModelsOpen] = useState(true);
+
   // Model names are unique in dbt; dedupe in case a name ever spans files.
   const allModelNames = [...new Set(files.flatMap((file) => file.models))];
   const visibleFiles = files.filter((file) => matchesSearch(file.label, fileSearch));
@@ -40,71 +88,74 @@ export function FilterSidebar({
 
   return (
     <aside className="sidebar">
-      <h2 className="sidebar__title">Filter</h2>
+      <CollapsibleSection
+        title="Filter"
+        open={filterOpen}
+        onToggle={() => setFilterOpen((open) => !open)}
+        large
+      >
+        <CollapsibleSection
+          title="Model yml files"
+          count={`${checkedFileCount}/${files.length}`}
+          open={filesOpen}
+          onToggle={() => setFilesOpen((open) => !open)}
+        >
+          <input
+            className="sidebar__search"
+            aria-label="Search model yml files"
+            placeholder="Search files…"
+            value={fileSearch}
+            onChange={(e) => onFileSearchChange(e.target.value)}
+          />
+          <ul className="sidebar__list">
+            {visibleFiles.map((file) => (
+              <li key={file.uri}>
+                <label className="sidebar__item">
+                  <input
+                    type="checkbox"
+                    checked={selectedFiles.has(file.uri)}
+                    onChange={(e) => onToggleFile(file.uri, e.target.checked)}
+                  />
+                  <span className="sidebar__item-label" title={file.uri}>
+                    {file.label}
+                  </span>
+                </label>
+              </li>
+            ))}
+            {visibleFiles.length === 0 && <li className="sidebar__empty">No matches</li>}
+          </ul>
+        </CollapsibleSection>
 
-      <section className="sidebar__section">
-        <header className="sidebar__section-header">
-          <h3>Model yml files</h3>
-          <span className="sidebar__count">
-            {checkedFileCount}/{files.length}
-          </span>
-        </header>
-        <input
-          className="sidebar__search"
-          aria-label="Search model yml files"
-          placeholder="Search files…"
-          value={fileSearch}
-          onChange={(e) => onFileSearchChange(e.target.value)}
-        />
-        <ul className="sidebar__list">
-          {visibleFiles.map((file) => (
-            <li key={file.uri}>
-              <label className="sidebar__item">
-                <input
-                  type="checkbox"
-                  checked={selectedFiles.has(file.uri)}
-                  onChange={(e) => onToggleFile(file.uri, e.target.checked)}
-                />
-                <span className="sidebar__item-label" title={file.uri}>
-                  {file.label}
-                </span>
-              </label>
-            </li>
-          ))}
-          {visibleFiles.length === 0 && <li className="sidebar__empty">No matches</li>}
-        </ul>
-      </section>
-
-      <section className="sidebar__section">
-        <header className="sidebar__section-header">
-          <h3>Models</h3>
-          <span className="sidebar__count">
-            {checkedModelCount}/{allModelNames.length}
-          </span>
-        </header>
-        <input
-          className="sidebar__search"
-          aria-label="Search models"
-          placeholder="Search models…"
-          value={modelSearch}
-          onChange={(e) => onModelSearchChange(e.target.value)}
-        />
-        <ul className="sidebar__list">
-          {visibleModels.map((name) => (
-            <li key={name}>
-              <label className="sidebar__item">
-                <input
-                  type="checkbox"
-                  checked={selectedModels.has(name)}
-                  onChange={(e) => onToggleModel(name, e.target.checked)}
-                />
-                <span className="sidebar__item-label">{name}</span>
-              </label>
-            </li>
-          ))}
-          {visibleModels.length === 0 && <li className="sidebar__empty">No matches</li>}
-        </ul>
-      </section>
+        <CollapsibleSection
+          title="Models"
+          count={`${checkedModelCount}/${allModelNames.length}`}
+          open={modelsOpen}
+          onToggle={() => setModelsOpen((open) => !open)}
+        >
+          <input
+            className="sidebar__search"
+            aria-label="Search models"
+            placeholder="Search models…"
+            value={modelSearch}
+            onChange={(e) => onModelSearchChange(e.target.value)}
+          />
+          <ul className="sidebar__list">
+            {visibleModels.map((name) => (
+              <li key={name}>
+                <label className="sidebar__item">
+                  <input
+                    type="checkbox"
+                    checked={selectedModels.has(name)}
+                    onChange={(e) => onToggleModel(name, e.target.checked)}
+                  />
+                  <span className="sidebar__item-label">{name}</span>
+                </label>
+              </li>
+            ))}
+            {visibleModels.length === 0 && <li className="sidebar__empty">No matches</li>}
+          </ul>
+        </CollapsibleSection>
+      </CollapsibleSection>
     </aside>
   );
 }
