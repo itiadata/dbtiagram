@@ -21,6 +21,7 @@ import {
   type NodeChange,
   type NodeTypes,
 } from '@xyflow/react';
+import type { ModelEdit } from '../src/dbt/edit';
 import type { DiagramGraph } from '../src/diagram/graph';
 import { buildFlowElements, type FlowElements } from '../src/diagram/flow';
 import { layoutDiagram } from '../src/diagram/layout';
@@ -31,6 +32,7 @@ import type {
   MessageToExtension,
   MessageToWebview,
 } from '../src/shared/protocol';
+import { DetailsSidebar, type SelectedEntity } from './DetailsSidebar';
 import {
   DiagramInteractionContext,
   type DiagramInteractionContextValue,
@@ -42,28 +44,28 @@ const vscode = window.acquireVsCodeApi();
 
 const nodeTypes: NodeTypes = { table: TableNode };
 
-interface FormState {
-  model: string;
-  column: string;
-  dataType: string;
-  description: string;
-}
+/** What the user selected on the diagram (spec 06): a table or a column. */
+type Selection =
+  | { kind: 'table'; id: string }
+  | { kind: 'column'; model: string; column: string }
+  | null;
 
 interface ColumnRef {
   model: string;
   column: string;
 }
 
+/** A rename of the selected entity, pending the host's verdict (spec 06). */
+interface PendingRename {
+  oldRef: Exclude<Selection, null>;
+  newRef: Exclude<Selection, null>;
+}
+
 export function App(): JSX.Element {
   const [graph, setGraph] = useState<DiagramGraph | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [pendingErrors, setPendingErrors] = useState<string[]>([]);
-  const [form, setForm] = useState<FormState>({
-    model: '',
-    column: '',
-    dataType: '',
-    description: '',
-  });
+  const [selection, setSelection] = useState<Selection>(null);
   const [hoveredEdgeId, setHoveredEdgeId] = useState<string | null>(null);
   const [hoveredColumn, setHoveredColumn] = useState<ColumnRef | null>(null);
   const [layoutTick, setLayoutTick] = useState(0);
@@ -81,6 +83,14 @@ export function App(): JSX.Element {
   // files/models (default checked) apart from ones the user unchecked.
   const previousFileUrisRef = useRef<string[]>([]);
   const previousModelNamesRef = useRef<string[]>([]);
+
+  // Spec 06: the current selection is mirrored into a ref so the `onEdit`
+  // funnel (created once) can read the freshest value without re-creating.
+  const selectionRef = useRef<Selection>(null);
+  const pendingRenameRef = useRef<PendingRename | null>(null);
+  useEffect(() => {
+    selectionRef.current = selection;
+  }, [selection]);
 
   // Models held by files that are currently checked: the Models filter only
   // lists these (spec 05, reactive model list). Models of unchecked files are
@@ -101,7 +111,9 @@ export function App(): JSX.Element {
       switch (message.type) {
         case 'diagram:update': {
           setGraph(message.diagram);
-          setPendingErrors(message.pendingErrors.map((pending) => `${pending.uri}: ${pending.message}`));
+          setPendingErrors(
+            message.pendingErrors.map((pending) => `${pending.uri}: ${pending.message}`),
+          );
           setError(null);
           setModelFiles(message.modelFiles);
 
@@ -114,11 +126,37 @@ export function App(): JSX.Element {
           const previousNames = previousModelNamesRef.current;
           setSelectedModels((current) => reconcileSelection(previousNames, modelNames, current));
           previousModelNamesRef.current = modelNames;
+
+          // Spec 06: the edit was accepted — the optimistically moved selection
+          // (if any) is now valid, so the bookkeeping ref is dropped.
+          pendingRenameRef.current = null;
+
+          // Reconcile the selection against the FULL graph: a selection that is
+          // merely filtered out by the sidebar survives; one whose entity truly
+          // disappeared (external delete, vanished column) clears.
+          setSelection((current) => {
+            if (current === null) return current;
+            if (current.kind === 'table') {
+              return message.diagram.nodes.some((node) => node.id === current.id)
+                ? current
+                : null;
+            }
+            const node = message.diagram.nodes.find((n) => n.id === current.model);
+            if (node === undefined) return null;
+            return node.columns.some((col) => col.name === current.column) ? current : null;
+          });
           break;
         }
-        case 'diagram:error':
+        case 'diagram:error': {
           setError(message.message);
+          // A rejected rename (e.g. duplicate name) reverts the optimistic
+          // selection; the graph is unchanged, so the old reference is valid.
+          if (pendingRenameRef.current !== null) {
+            setSelection(pendingRenameRef.current.oldRef);
+            pendingRenameRef.current = null;
+          }
           break;
+        }
       }
     };
     window.addEventListener('message', listener);
@@ -207,10 +245,99 @@ export function App(): JSX.Element {
     );
   }, []);
 
+  const onTableSelect = useCallback((model: string): void => {
+    setSelection({ kind: 'table', id: model });
+  }, []);
+
+  const onColumnSelect = useCallback((model: string, column: string): void => {
+    setSelection({ kind: 'column', model, column });
+  }, []);
+
+  const onPaneClick = useCallback((): void => {
+    setSelection(null);
+  }, []);
+
+  /**
+   * The single funnel every mutation goes through (inline editing and the
+   * details sidebar). Renames of the currently selected entity move the
+   * selection optimistically and record `pendingRenameRef` so a rejected edit
+   * (diagram:error) can revert it; an accepted edit (diagram:update) clears
+   * the ref with the selection already at its new identity.
+   */
+  const onEdit = useCallback((edit: ModelEdit): void => {
+    const current = selectionRef.current;
+    if (current !== null) {
+      if (edit.kind === 'setModelName' && current.kind === 'table' && current.id === edit.model) {
+        const name = edit.name.trim();
+        if (name.length > 0 && name !== current.id) {
+          const newRef: Exclude<Selection, null> = { kind: 'table', id: name };
+          pendingRenameRef.current = { oldRef: current, newRef };
+          setSelection(newRef);
+        }
+      } else if (
+        edit.kind === 'setColumnName' &&
+        current.kind === 'column' &&
+        current.model === edit.model &&
+        current.column === edit.column
+      ) {
+        const name = edit.name.trim();
+        if (name.length > 0 && name !== current.column) {
+          const newRef: Exclude<Selection, null> = { kind: 'column', model: edit.model, column: name };
+          pendingRenameRef.current = { oldRef: current, newRef };
+          setSelection(newRef);
+        }
+      }
+    }
+    vscode.postMessage({ type: 'diagram:edit', edit } satisfies MessageToExtension);
+  }, []);
+
   const interaction: DiagramInteractionContextValue = useMemo(
-    () => ({ highlightedColumns, onColumnHover, onColumnLeave }),
-    [highlightedColumns, onColumnHover, onColumnLeave],
+    () => ({
+      highlightedColumns,
+      onColumnHover,
+      onColumnLeave,
+      selectedTableId: selection !== null && selection.kind === 'table' ? selection.id : null,
+      selectedColumnRef:
+        selection !== null && selection.kind === 'column'
+          ? { model: selection.model, column: selection.column }
+          : null,
+      onTableSelect,
+      onColumnSelect,
+      onEdit,
+    }),
+    [
+      highlightedColumns,
+      onColumnHover,
+      onColumnLeave,
+      selection,
+      onTableSelect,
+      onColumnSelect,
+      onEdit,
+    ],
   );
+
+  // The details sidebar derives its displayed entity from the FULL graph so a
+  // filtered-out selection stays editable (spec 06, section 4).
+  const selectedEntity = useMemo<SelectedEntity | null>(() => {
+    if (graph === null || selection === null) return null;
+    if (selection.kind === 'table') {
+      const node = graph.nodes.find((n) => n.id === selection.id);
+      return node === undefined ? null : { kind: 'table', node };
+    }
+    const node = graph.nodes.find((n) => n.id === selection.model);
+    if (node === undefined) return null;
+    const column = node.columns.find((c) => c.name === selection.column);
+    return column === undefined ? null : { kind: 'column', node, column };
+  }, [graph, selection]);
+
+  // Remount the sidebar fields when the selected entity changes so drafts
+  // start fresh from the new entity's values (spec 06, section 6).
+  const detailsKey =
+    selectedEntity === null
+      ? 'none'
+      : selectedEntity.kind === 'table'
+        ? `table:${selectedEntity.node.id}`
+        : `column:${selectedEntity.node.id}.${selectedEntity.column.name}`;
 
   const onEdgeMouseEnter = useCallback((_event: ReactMouseEvent, edge: Edge): void => {
     setHoveredEdgeId(edge.id);
@@ -272,26 +399,6 @@ export function App(): JSX.Element {
     setFilterTick((tick) => tick + 1);
   }, [availableModelNames]);
 
-  const addColumn = (): void => {
-    const column = form.column.trim();
-    if (column.length === 0 || form.model.length === 0) {
-      setError('A model name and column name are required.');
-      return;
-    }
-    vscode.postMessage({
-      type: 'diagram:edit',
-      edit: {
-        kind: 'addColumn',
-        model: form.model,
-        column: {
-          name: column,
-          dataType: form.dataType.trim() || undefined,
-          description: form.description.trim() || undefined,
-        },
-      },
-    } satisfies MessageToExtension);
-  };
-
   const statusText =
     graph === null || visibleGraph === null
       ? 'loading…'
@@ -337,36 +444,6 @@ export function App(): JSX.Element {
             </div>
           )}
 
-          <section className="form">
-            <input
-              aria-label="Model name"
-              placeholder="Model name"
-              value={form.model}
-              onChange={(e) => setForm({ ...form, model: e.target.value })}
-            />
-            <input
-              aria-label="Column name"
-              placeholder="Column name"
-              value={form.column}
-              onChange={(e) => setForm({ ...form, column: e.target.value })}
-            />
-            <input
-              aria-label="Data type"
-              placeholder="Data type (e.g. numeric)"
-              value={form.dataType}
-              onChange={(e) => setForm({ ...form, dataType: e.target.value })}
-            />
-            <input
-              aria-label="Description"
-              placeholder="Description"
-              value={form.description}
-              onChange={(e) => setForm({ ...form, description: e.target.value })}
-            />
-            <button type="button" onClick={addColumn}>
-              Add column
-            </button>
-          </section>
-
           {graph === null || flow === null ? (
             <p className="empty">No diagram yet.</p>
           ) : (
@@ -384,12 +461,15 @@ export function App(): JSX.Element {
                     onEdgeMouseEnter={onEdgeMouseEnter}
                     onEdgeMouseLeave={onEdgeMouseLeave}
                     onAutoLayout={onAutoLayout}
+                    onPaneClick={onPaneClick}
                   />
                 </DiagramInteractionContext.Provider>
               </ReactFlowProvider>
             </section>
           )}
         </div>
+
+        <DetailsSidebar key={detailsKey} entity={selectedEntity} onEdit={onEdit} />
       </div>
     </main>
   );
@@ -403,6 +483,7 @@ interface DiagramCanvasProps {
   onEdgeMouseEnter: (event: ReactMouseEvent, edge: Edge) => void;
   onEdgeMouseLeave: () => void;
   onAutoLayout: () => void;
+  onPaneClick: () => void;
 }
 
 function DiagramCanvas({
@@ -413,6 +494,7 @@ function DiagramCanvas({
   onEdgeMouseEnter,
   onEdgeMouseLeave,
   onAutoLayout,
+  onPaneClick,
 }: DiagramCanvasProps): JSX.Element {
   const { fitView } = useReactFlow();
   const [rfNodes, setRfNodes] = useState<Node[]>([]);
@@ -469,9 +551,14 @@ function DiagramCanvas({
       fitView
       fitViewOptions={{ padding: 0.15, maxZoom: 1 }}
       nodesConnectable={false}
+      // Selection is our own webview state (spec 06): clicking the header/row
+      // selects; clicking the canvas deselects. React Flow's native selection
+      // is disabled so its highlight never fights the card's --selected styles.
+      elementsSelectable={false}
       proOptions={{ hideAttribution: false }}
       onEdgeMouseEnter={onEdgeMouseEnter}
       onEdgeMouseLeave={onEdgeMouseLeave}
+      onPaneClick={onPaneClick}
       minZoom={0.1}
       maxZoom={2}
     >

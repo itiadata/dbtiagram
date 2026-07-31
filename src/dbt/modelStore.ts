@@ -9,7 +9,7 @@
  * `records`, so a mid-edit (as-you-type) YAML slip never blanks the diagram.
  */
 import { ModelYmlParseError, parseModelYml } from './parse';
-import type { ModelYmlFile } from './types';
+import type { ModelDefinition, ModelYmlFile } from './types';
 
 /** A parsed model.yml file keyed by its file-system path. */
 export interface ModelFileRecord {
@@ -90,6 +90,42 @@ export function applyFileRenamed(
   content: string,
 ): ModelStore {
   return applyTextChange(applyFileDeleted(store, oldUri), newUri, content);
+}
+
+/**
+ * Maps the edited flat model list back onto the store's records **by
+ * position** (spec 06), returning only the records whose slice actually
+ * changed.
+ *
+ * The flat list passed to `applyEdit` is the records' models concatenated in
+ * record order; `applyEdit` returns a new list of the same length in the same
+ * order. Unchanged models are the same objects (see `src/dbt/edit.ts`), so an
+ * element-wise reference comparison tells a changed file apart from an
+ * untouched one. This is what makes renames persist to the right file: the
+ * match is positional, never name-based.
+ */
+export function distributeEditedModels(
+  store: ModelStore,
+  edited: ModelDefinition[],
+): ModelFileRecord[] {
+  const changed: ModelFileRecord[] = [];
+  let offset = 0;
+  for (const record of store.records) {
+    const length = record.file.models.length;
+    const slice = edited.slice(offset, offset + length);
+    offset += length;
+    if (slice.length !== length) {
+      throw new Error('distributeEditedModels: edited model count does not match the store');
+    }
+    const differs = slice.some((model, index) => model !== record.file.models[index]);
+    if (differs) {
+      changed.push({
+        uri: record.uri,
+        file: { version: record.file.version, models: slice },
+      });
+    }
+  }
+  return changed;
 }
 
 /**

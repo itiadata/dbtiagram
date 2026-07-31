@@ -11,11 +11,12 @@ import {
   applyFileRenamed,
   applyTextChange,
   createModelStore,
+  distributeEditedModels,
   replaceModelStore,
   upsertRecord,
   type ModelStore,
 } from '../dbt/modelStore';
-import type { ModelDefinition, ModelYmlFile } from '../dbt/types';
+import type { ModelDefinition } from '../dbt/types';
 import { buildDiagram } from '../diagram/graph';
 import { matchesGlob } from '../shared/glob';
 import { disambiguateFileLabels } from '../shared/labels';
@@ -224,15 +225,14 @@ export class DiagramPanel {
     const all: ModelDefinition[] = this.store.records.flatMap((record) => record.file.models);
     const { models } = applyEdit(all, edit);
 
-    for (const record of this.store.records) {
-      const names = new Set(record.file.models.map((model) => model.name));
-      const edited = models.filter((model) => names.has(model.name));
-      if (edited.length > 0) {
-        const file: ModelYmlFile = { version: record.file.version, models: edited };
-        this.store = upsertRecord(this.store, record.uri, file);
-        await writeModelYmlFile(vscode.Uri.file(record.uri), file);
-        this.selfWrites.set(record.uri, Date.now());
-      }
+    // Index-based write-back (spec 06): `models` is the records' models
+    // concatenated in record order, so distributeEditedModels maps each slice
+    // back onto its original record by position — renames persist correctly,
+    // and untouched files are not rewritten.
+    for (const record of distributeEditedModels(this.store, models)) {
+      this.store = upsertRecord(this.store, record.uri, record.file);
+      await writeModelYmlFile(vscode.Uri.file(record.uri), record.file);
+      this.selfWrites.set(record.uri, Date.now());
     }
 
     this.publish();

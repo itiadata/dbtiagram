@@ -18,7 +18,7 @@ up-to-date spec in `specs/features/`.
 | 03  | React Flow diagram with automatic layout | Done |
 | 04  | Live model.yml edits reflected without losing layout | Done |
 | 05  | Filter diagram by model.yml files and models | Done |
-| 06  | Edit model and column properties in the diagram | Approved |
+| 06  | Edit model and column properties in the diagram | Implemented |
 
 Status values: `draft` → `approved` → `implemented` → `done`.
 

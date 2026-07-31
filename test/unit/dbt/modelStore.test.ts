@@ -1,11 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import { parseModelYml } from '../../../src/dbt/parse';
 import type { ModelYmlFile } from '../../../src/dbt/types';
+import { applyEdit } from '../../../src/dbt/edit';
 import {
   applyFileDeleted,
   applyFileRenamed,
   applyTextChange,
   createModelStore,
+  distributeEditedModels,
   replaceModelStore,
   upsertRecord,
 } from '../../../src/dbt/modelStore';
@@ -34,6 +36,14 @@ models:
     columns:
       - name: order_id
       bad indentation here
+`;
+
+const CUSTOMERS_YML = `version: 2
+models:
+  - name: customers
+    columns:
+      - name: id
+        data_type: integer
 `;
 
 function parseYml(content: string): ModelYmlFile {
@@ -165,5 +175,107 @@ describe('modelStore', () => {
     expect(store.records).toBe(originalRecords);
     expect(store.pendingErrors.size).toBe(0);
     expect(next).not.toBe(store);
+  });
+});
+
+describe('distributeEditedModels', () => {
+  /** A store with two records: orders.yml (orders) and customers.yml (customers). */
+  function twoRecordStore() {
+    const store = createModelStore();
+    const a = upsertRecord(store, '/a/orders.yml', parseYml(ORDERS_YML));
+    return upsertRecord(a, '/a/customers.yml', parseYml(CUSTOMERS_YML));
+  }
+
+  /** Applies `edit` to the store's flat model list and distributes the result. */
+  function distribute(store: ReturnType<typeof twoRecordStore>, edit: Parameters<typeof applyEdit>[1]) {
+    const all = store.records.flatMap((record) => record.file.models);
+    const { models } = applyEdit(all, edit);
+    return distributeEditedModels(store, models);
+  }
+
+  it('returns an empty list when every model is unchanged', () => {
+    const store = twoRecordStore();
+    const all = store.records.flatMap((record) => record.file.models);
+    expect(distributeEditedModels(store, all)).toEqual([]);
+  });
+
+  it('does not rewrite files whose models are unchanged', () => {
+    const store = twoRecordStore();
+    // Editing customers leaves the orders slice untouched.
+    const changed = distribute(store, {
+      kind: 'setModelDescription',
+      model: 'customers',
+      description: 'All customers',
+    });
+    expect(changed.map((record) => record.uri)).toEqual(['/a/customers.yml']);
+  });
+
+  it('lands a renamed model on its original record by position', () => {
+    const store = twoRecordStore();
+    const changed = distribute(store, {
+      kind: 'setModelName',
+      model: 'orders',
+      name: 'orders_v2',
+    });
+    expect(changed.map((record) => record.uri)).toEqual(['/a/orders.yml']);
+    expect(changed[0].file.models.map((model) => model.name)).toEqual(['orders_v2']);
+  });
+
+  it('lands a column rename on the right record', () => {
+    const store = twoRecordStore();
+    const changed = distribute(store, {
+      kind: 'setColumnName',
+      model: 'orders',
+      column: 'order_id',
+      name: 'order_key',
+    });
+    expect(changed.map((record) => record.uri)).toEqual(['/a/orders.yml']);
+    expect(changed[0].file.models[0].columns?.[0].name).toBe('order_key');
+  });
+
+  it('preserves record order and per-record model order', () => {
+    const store = createModelStore();
+    let next = upsertRecord(store, '/a/customers.yml', parseYml(CUSTOMERS_YML));
+    next = upsertRecord(next, '/a/orders.yml', parseYml(ORDERS_YML));
+    const changed = distribute(next, {
+      kind: 'setColumnDataType',
+      model: 'orders',
+      column: 'order_id',
+      dataType: 'bigint',
+    });
+    expect(changed.map((record) => record.uri)).toEqual(['/a/orders.yml']);
+    expect(changed[0].file.models.map((model) => model.name)).toEqual(['orders']);
+    // The untouched customers record keeps its model intact.
+    expect(changed[0].file.version).toBe(2);
+  });
+
+  it('throws when the edited list length does not match the store', () => {
+    const store = twoRecordStore();
+    const all = store.records.flatMap((record) => record.file.models);
+    expect(() => distributeEditedModels(store, all.slice(1))).toThrow(
+      /does not match the store/,
+    );
+  });
+
+  it('handles multi-model records and multi-record edits', () => {
+    const store = createModelStore();
+    const withTwo: ModelYmlFile = parseYml(`version: 2
+models:
+  - name: orders
+  - name: order_items
+`);
+    let next = upsertRecord(store, '/a/orders.yml', withTwo);
+    next = upsertRecord(next, '/a/customers.yml', parseYml(ORDERS_YML));
+
+    const changed = distribute(next, {
+      kind: 'setModelDescription',
+      model: 'order_items',
+      description: 'Line items',
+    });
+    expect(changed.map((record) => record.uri)).toEqual(['/a/orders.yml']);
+    expect(changed[0].file.models.map((model) => model.name)).toEqual(['orders', 'order_items']);
+    // The model that was not edited keeps its object identity in the file.
+    const originalModels = withTwo.models;
+    expect(changed[0].file.models[0]).toBe(originalModels[0]);
   });
 });
