@@ -19,10 +19,3 @@ Follow AGENTS.md strictly. The four non-negotiable rules:
 
 Feature specs are drafted directly by the primary agent and brought to the
 user for approval — no dedicated spec-writing subagent.
-
-### Pre-commit security gate
-
-Before EVERY commit, spawn the `security-review` subagent against the staged +
-unstaged + untracked change set. Commit only after it returns
-`VERDICT: CLEAN`, or when the user explicitly adjudicates every finding. Never
-commit tokens, credentials, private keys, or `.gitignore` violations.
