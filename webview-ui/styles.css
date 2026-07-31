@@ -23,9 +23,21 @@ body {
 }
 
 .app {
+  height: 100vh;
+}
+
+/* Left sidebar (spec 05) + main column. The sidebar is the stable home for
+   future UI; this feature fills it with the Filter section. */
+.app__body {
+  display: flex;
+  height: 100vh;
+}
+
+.app__main {
   display: flex;
   flex-direction: column;
-  height: 100vh;
+  flex: 1;
+  min-width: 0;
 }
 
 .app__header {
@@ -98,6 +110,119 @@ body {
 
 .empty {
   padding: 16px;
+  color: var(--muted);
+}
+
+/* ---- Sidebar (spec 05) ---- */
+
+.sidebar {
+  width: 260px;
+  flex-shrink: 0;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 12px;
+  overflow-y: auto;
+  border-right: 1px solid var(--border);
+  background: color-mix(in srgb, var(--card) 55%, transparent);
+}
+
+.sidebar__title {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.sidebar__section {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.sidebar__section-header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+}
+
+.sidebar__section-header h3 {
+  margin: 0;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+}
+
+.sidebar__count {
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.sidebar__search {
+  font: inherit;
+  font-size: 12px;
+  padding: 4px 6px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--card);
+  color: var(--text);
+}
+
+.sidebar__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  overflow-y: auto;
+  max-height: 240px;
+}
+
+.sidebar__item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 4px;
+  border-radius: 3px;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.sidebar__item:hover {
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+}
+
+.sidebar__item input {
+  flex-shrink: 0;
+  margin: 0;
+}
+
+.sidebar__item-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sidebar__empty {
+  padding: 4px;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+/* Overlay shown over the (still-mounted) canvas when the filters hide every
+   table (spec 05): pointer-events none so the flow stays interactive. */
+.empty-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+  font-size: 13px;
   color: var(--muted);
 }
 

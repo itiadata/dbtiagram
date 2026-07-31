@@ -18,7 +18,8 @@ import {
 import type { ModelDefinition, ModelYmlFile } from '../dbt/types';
 import { buildDiagram } from '../diagram/graph';
 import { matchesGlob } from '../shared/glob';
-import type { MessageToExtension, MessageToWebview } from '../shared/protocol';
+import { disambiguateFileLabels } from '../shared/labels';
+import type { DiagramModelFile, MessageToExtension, MessageToWebview } from '../shared/protocol';
 import { registerModelWatcher } from '../vscode/modelWatcher';
 import { loadModelYmlFiles, readFileText, writeModelYmlFile } from '../vscode/project';
 
@@ -114,7 +115,23 @@ export class DiagramPanel {
       uri,
       message,
     }));
-    this.postMessage({ type: 'diagram:update', diagram: buildDiagram(models), pendingErrors });
+
+    // Per-file metadata the webview uses to filter the diagram (spec 05). The
+    // full graph is always sent; filtering is a webview-side view concern.
+    const uris = this.store.records.map((record) => record.uri);
+    const labels = disambiguateFileLabels(uris, workspaceRoot());
+    const modelFiles: DiagramModelFile[] = this.store.records.map((record) => ({
+      uri: record.uri,
+      label: labels.get(record.uri) ?? fallbackLabel(record.uri),
+      models: record.file.models.map((model) => model.name),
+    }));
+
+    this.postMessage({
+      type: 'diagram:update',
+      diagram: buildDiagram(models),
+      pendingErrors,
+      modelFiles,
+    });
   }
 
   /** Reloads every model.yml file from disk, keeping last good data for broken files. */
@@ -267,4 +284,15 @@ function getNonce(): string {
     nonce += chars.charAt(Math.floor(Math.random() * chars.length));
   }
   return nonce;
+}
+
+/** The first workspace folder, used as the root for VS Code-style file labels. */
+function workspaceRoot(): string | undefined {
+  return vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+}
+
+/** Last-resort file label when the pure disambiguator has no entry. */
+function fallbackLabel(uri: string): string {
+  const parts = uri.split(/[\\/]/);
+  return parts[parts.length - 1] ?? uri;
 }

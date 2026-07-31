@@ -1,7 +1,7 @@
 ---
 id: 05
 title: Filter diagram by model.yml files and models
-status: draft
+status: implemented
 priority: medium
 created: 2026-07-31
 owner: unassigned
