@@ -17,10 +17,8 @@ Follow AGENTS.md strictly. The four non-negotiable rules:
 4. **Self-Verification.** Run `npm test` and `npm run typecheck` and resolve
    every failure before declaring a task complete.
 
-Specialized subagents may be spawned automatically when a task fits their
-scope. Available subagents: `spec-author` (drafting/extending feature specs).
-When behavior is ambiguous or a spec would be large, delegate the drafting to
-`spec-author`, then bring the result back to the user for approval.
+Feature specs are drafted directly by the primary agent and brought to the
+user for approval — no dedicated spec-writing subagent.
 
 ### Pre-commit security gate
 
