@@ -15,7 +15,7 @@ up-to-date spec in `specs/features/`.
 |-----|---------|--------|
 | 01  | Open dbt Diagram from the editor title bar | Done |
 | 02  | Column-level foreign key edges | Done |
-| 03  | React Flow diagram with automatic layout | Done |
+| 03  | React Flow diagram with automatic layout | Implemented |
 
 Status values: `draft` → `approved` → `implemented` → `done`.
 
@@ -26,8 +26,15 @@ Status values: `draft` → `approved` → `implemented` → `done`.
 3. **Implement.** Code is written test-first: pure logic in `src/dbt/` and
    `src/diagram/` with Vitest unit tests in `test/unit/`; VS Code API wiring in
    `src/vscode/` and `src/webview/`; integration coverage in `test/integration/`.
-4. **Verify.** Run `npm test` and `npm run typecheck` and resolve every failure.
-5. **Done.** Update the spec status and the index above.
+4. **Automatic Verify.** Run `npm test` and `npm run typecheck` and resolve every
+   failure. This is automatic and runs before every commit.
+5. **Manual Verify.** The user manually tests the feature in VS Code and reports
+   adjustments. For each request the agent updates the spec first (the spec stays
+   the source of truth), then applies the matching code changes, then re-runs
+   Automatic Verify — iterating until the user is satisfied. The spec status
+   stays `implemented` throughout this step.
+6. **Done.** Only when the user explicitly confirms the feature is done does the
+   agent set the spec status to `done` and update the index above.
 
 When a scenario's desired behavior is ambiguous, ask the user — never guess.
 
@@ -36,4 +43,6 @@ When a scenario's desired behavior is ambiguous, ask the user — never guess.
 Git history mirrors this lifecycle (see AGENTS.md → Git & Version Control):
 spec drafts are iterated in the working tree **without commits**; a
 `docs(spec): ... (approved)` commit is created only at approval time; the
-implementing `feat:` commit includes the status change to `done`.
+implementing `feat:` commit leaves the spec at `implemented`; the
+`docs(spec): mark feature XX done` commit is created only after the user
+confirms the Manual Verify step.

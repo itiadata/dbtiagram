@@ -114,8 +114,12 @@ automatically; no user action is required for routine work.
 - **Spec drafting produces no commits.** Iterate on the spec in the working tree
   as many times as needed; commit only at the moment of approval
   (`docs(spec): ... (approved)`).
-- The `docs(spec): mark feature XX done` status update is folded into the
-  `feat:` commit that completes the feature, not a separate commit.
+- A feature reaches `done` only after the user confirms the Manual Verify step
+  (see `specs/README.md` → Workflow). The implementing `feat:` commit leaves the
+  spec at `implemented`; the `docs(spec): mark feature XX done` status update is
+  committed separately at that point. Adjustments requested during Manual Verify
+  update the spec first, then the code (`fix:` or `feat:` as appropriate), and
+  must pass Automatic Verify before committing.
 - Never commit with failing tests or typecheck errors (`npm test` +
   `npm run typecheck` must be green first).
 - **Security gate:** before every commit, run the `security-review` subagent

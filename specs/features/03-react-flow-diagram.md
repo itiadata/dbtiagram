@@ -1,7 +1,7 @@
 ---
 id: 03
 title: React Flow diagram with automatic layout
-status: done
+status: implemented
 priority: high
 created: 2026-07-31
 owner: unassigned
