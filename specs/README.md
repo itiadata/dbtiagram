@@ -17,6 +17,7 @@ up-to-date spec in `specs/features/`.
 | 02  | Column-level foreign key edges | Done |
 | 03  | React Flow diagram with automatic layout | Done |
 | 04  | Live model.yml edits reflected without losing layout | Done |
+| 05  | Filter diagram by model.yml files and models | Draft |
 
 Status values: `draft` → `approved` → `implemented` → `done`.
 
