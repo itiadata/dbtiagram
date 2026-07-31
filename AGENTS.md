@@ -118,6 +118,9 @@ automatically; no user action is required for routine work.
   `feat:` commit that completes the feature, not a separate commit.
 - Never commit with failing tests or typecheck errors (`npm test` +
   `npm run typecheck` must be green first).
+- **Security gate:** before every commit, run the `security-review` subagent
+  against the staged + unstaged + untracked change set. A commit proceeds only
+  on `VERDICT: CLEAN`, or after the user explicitly adjudicates every finding.
 - Never amend, rebase, force-push, or open PRs without explicit user instruction.
 - Keep `.gitignore` current; never stage `node_modules/`, `dist/`, `out/`,
   `.vscode-test/`, or `*.vsix`.
@@ -128,6 +131,11 @@ automatically; no user action is required for routine work.
 
 - A single primary agent is configured in `.opencode/agent/primary.md` and is the
   default agent for all work in this repo.
+- The `security-review` subagent (`.opencode/agent/security-review.md`) is a
+  read-only pre-commit gate: it scans staged/unstaged/untracked files for
+  secrets, tokens, credentials, private keys, and `.gitignore` violations, and
+  returns a `CLEAN` / `FINDINGS` verdict. The primary agent MUST spawn it before
+  every commit (see Git & Version Control → Commit policy).
 - **Dynamic subagent rule:** If a feature or task becomes complex (e.g., requiring
   deep security audits, heavy webview UI testing, or complex dependency
   migrations), PROPOSE creating a specialized subagent to the user before setting

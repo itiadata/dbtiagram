@@ -21,3 +21,10 @@ Specialized subagents may be spawned automatically when a task fits their
 scope. Available subagents: `spec-author` (drafting/extending feature specs).
 When behavior is ambiguous or a spec would be large, delegate the drafting to
 `spec-author`, then bring the result back to the user for approval.
+
+### Pre-commit security gate
+
+Before EVERY commit, spawn the `security-review` subagent against the staged +
+unstaged + untracked change set. Commit only after it returns
+`VERDICT: CLEAN`, or when the user explicitly adjudicates every finding. Never
+commit tokens, credentials, private keys, or `.gitignore` violations.
