@@ -209,13 +209,16 @@ type Selection = { kind: 'table'; id: string } | { kind: 'column'; model: string
   sidebar survives (its card is hidden but its properties stay editable).
 - **Rename bookkeeping.** When the user commits a rename of the currently
   selected entity (model or column), the webview records
-  `{ oldRef, newRef }` in a single-entry `pendingRenameRef`, optimistically
-  moves the selection to `newRef`, and posts the edit.
-  - On `diagram:error` (edit rejected, e.g. duplicate name): revert the
-    selection to `oldRef` and clear the ref. The graph is unchanged, so
-    `oldRef` is still valid and the sidebar re-reads the old values.
-  - On `diagram:update` (edit accepted): clear the ref; the selection is
-    already at `newRef`, which now exists.
+  `{ oldRef, newRef }` in a single-entry `pendingRenameRef` and posts the
+  edit, but **leaves the selection at `oldRef`**. The old entity still exists
+  in the current graph, so the sidebar keeps showing it without an empty-state
+  flicker; the graph's next `diagram:update` is the authority on the new name.
+  - On `diagram:error` (edit rejected, e.g. duplicate name): just clear the
+    ref. The selection never moved and the graph is unchanged, so the sidebar
+    keeps reading the old values (the error banner explains the rejection).
+  - On `diagram:update` (edit accepted): move the selection to `newRef`
+    (which now exists) and clear the ref — before the reconcile pass runs, so
+    the reconcile cannot drop the renamed selection.
 
 ### 5. Inline editing (`webview-ui/TableNode.tsx`)
 

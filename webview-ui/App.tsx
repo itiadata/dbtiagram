@@ -127,9 +127,15 @@ export function App(): JSX.Element {
           setSelectedModels((current) => reconcileSelection(previousNames, modelNames, current));
           previousModelNamesRef.current = modelNames;
 
-          // Spec 06: the edit was accepted — the optimistically moved selection
-          // (if any) is now valid, so the bookkeeping ref is dropped.
-          pendingRenameRef.current = null;
+          // Spec 06: a pending rename is confirmed by this update — follow the
+          // selection to the new identity BEFORE the reconcile pass, so the
+          // reconcile (which clears vanished entities) cannot drop the renamed
+          // selection, and the sidebar switches to the new name in one render.
+          const pending = pendingRenameRef.current;
+          if (pending !== null) {
+            setSelection(pending.newRef);
+            pendingRenameRef.current = null;
+          }
 
           // Reconcile the selection against the FULL graph: a selection that is
           // merely filtered out by the sidebar survives; one whose entity truly
@@ -149,12 +155,10 @@ export function App(): JSX.Element {
         }
         case 'diagram:error': {
           setError(message.message);
-          // A rejected rename (e.g. duplicate name) reverts the optimistic
-          // selection; the graph is unchanged, so the old reference is valid.
-          if (pendingRenameRef.current !== null) {
-            setSelection(pendingRenameRef.current.oldRef);
-            pendingRenameRef.current = null;
-          }
+          // A rejected rename (e.g. duplicate name): the selection never moved
+          // — it still points at the old entity, which is unchanged in the
+          // graph — so only the bookkeeping ref is dropped.
+          pendingRenameRef.current = null;
           break;
         }
       }
@@ -259,10 +263,12 @@ export function App(): JSX.Element {
 
   /**
    * The single funnel every mutation goes through (inline editing and the
-   * details sidebar). Renames of the currently selected entity move the
-   * selection optimistically and record `pendingRenameRef` so a rejected edit
-   * (diagram:error) can revert it; an accepted edit (diagram:update) clears
-   * the ref with the selection already at its new identity.
+   * details sidebar). A rename of the currently selected entity records
+   * `pendingRenameRef` but keeps the selection on the old entity — the
+   * graph's `diagram:update` confirms the rename and moves the selection to
+   * the new identity; a rejected edit (`diagram:error`) just drops the ref,
+   * since the selection never left the (unchanged) old entity. The sidebar
+   * therefore never shows its empty state during the round trip.
    */
   const onEdit = useCallback((edit: ModelEdit): void => {
     const current = selectionRef.current;
@@ -270,9 +276,10 @@ export function App(): JSX.Element {
       if (edit.kind === 'setModelName' && current.kind === 'table' && current.id === edit.model) {
         const name = edit.name.trim();
         if (name.length > 0 && name !== current.id) {
-          const newRef: Exclude<Selection, null> = { kind: 'table', id: name };
-          pendingRenameRef.current = { oldRef: current, newRef };
-          setSelection(newRef);
+          pendingRenameRef.current = {
+            oldRef: current,
+            newRef: { kind: 'table', id: name },
+          };
         }
       } else if (
         edit.kind === 'setColumnName' &&
@@ -282,9 +289,10 @@ export function App(): JSX.Element {
       ) {
         const name = edit.name.trim();
         if (name.length > 0 && name !== current.column) {
-          const newRef: Exclude<Selection, null> = { kind: 'column', model: edit.model, column: name };
-          pendingRenameRef.current = { oldRef: current, newRef };
-          setSelection(newRef);
+          pendingRenameRef.current = {
+            oldRef: current,
+            newRef: { kind: 'column', model: edit.model, column: name },
+          };
         }
       }
     }
