@@ -2,7 +2,6 @@ import { useCallback, useEffect, useMemo, useState, type MouseEvent as ReactMous
 import {
   Background,
   Controls,
-  EdgeLabelRenderer,
   Panel,
   ReactFlow,
   ReactFlowProvider,
@@ -16,7 +15,7 @@ import {
   type NodeTypes,
 } from '@xyflow/react';
 import type { DiagramGraph } from '../src/diagram/graph';
-import { buildFlowElements, type FlowEdge, type FlowElements } from '../src/diagram/flow';
+import { buildFlowElements, type FlowElements } from '../src/diagram/flow';
 import { layoutDiagram } from '../src/diagram/layout';
 import type { MessageToExtension, MessageToWebview } from '../src/shared/protocol';
 import {
@@ -131,11 +130,6 @@ export function App(): JSX.Element {
     return byModel;
   }, [flow, activeEdgeIds, hoveredColumn]);
 
-  const hoveredEdge = useMemo<FlowEdge | null>(() => {
-    if (flow === null || hoveredEdgeId === null) return null;
-    return flow.edges.find((edge) => edge.id === hoveredEdgeId) ?? null;
-  }, [flow, hoveredEdgeId]);
-
   const onColumnHover = useCallback((model: string, column: string): void => {
     setHoveredColumn({ model, column });
   }, []);
@@ -234,7 +228,6 @@ export function App(): JSX.Element {
                 flow={flow}
                 nodes={nodes}
                 edges={edges}
-                hoveredEdge={hoveredEdge}
                 onEdgeMouseEnter={onEdgeMouseEnter}
                 onEdgeMouseLeave={onEdgeMouseLeave}
                 onAutoLayout={onAutoLayout}
@@ -251,7 +244,6 @@ interface DiagramCanvasProps {
   flow: FlowElements;
   nodes: Node[];
   edges: Edge[];
-  hoveredEdge: FlowEdge | null;
   onEdgeMouseEnter: (event: ReactMouseEvent, edge: Edge) => void;
   onEdgeMouseLeave: () => void;
   onAutoLayout: () => void;
@@ -261,7 +253,6 @@ function DiagramCanvas({
   flow,
   nodes,
   edges,
-  hoveredEdge,
   onEdgeMouseEnter,
   onEdgeMouseLeave,
   onAutoLayout,
@@ -294,18 +285,6 @@ function DiagramCanvas({
     setRfEdges((current) => applyEdgeChanges(changes, current));
   }, []);
 
-  const tooltipPosition = useMemo(() => {
-    if (hoveredEdge === null) return null;
-    const source = nodes.find((node) => node.id === hoveredEdge.source);
-    const target = nodes.find((node) => node.id === hoveredEdge.target);
-    if (source === undefined || target === undefined) return null;
-    const sx = source.position.x + (source.width ?? 0) / 2;
-    const sy = source.position.y + (source.height ?? 0) / 2;
-    const tx = target.position.x + (target.width ?? 0) / 2;
-    const ty = target.position.y + (target.height ?? 0) / 2;
-    return { x: (sx + tx) / 2, y: (sy + ty) / 2 };
-  }, [hoveredEdge, nodes]);
-
   return (
     <ReactFlow
       nodes={rfNodes}
@@ -329,18 +308,6 @@ function DiagramCanvas({
           Auto-layout
         </button>
       </Panel>
-      {hoveredEdge !== null && tooltipPosition !== null && (
-        <EdgeLabelRenderer>
-          <div
-            className="edge-tooltip"
-            style={{
-              transform: `translate(-50%, -50%) translate(${tooltipPosition.x}px, ${tooltipPosition.y}px)`,
-            }}
-          >
-            {hoveredEdge.data.title}
-          </div>
-        </EdgeLabelRenderer>
-      )}
     </ReactFlow>
   );
 }

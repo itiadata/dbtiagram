@@ -55,8 +55,8 @@ command registration, never SVG internals.
   Flow nodes (custom `table` type with per-column handles) and edges (one per
   FK column pair, `smoothstep`).
 - Migrating `webview-ui/App.tsx` from SVG to `<ReactFlow>`, with a custom
-  `TableNode` component, hover highlighting (spec 02 semantics preserved),
-  a floating edge tooltip, and an "Auto-layout" panel button.
+  `TableNode` component, hover highlighting (spec 02 semantics preserved), and
+  an "Auto-layout" panel button.
 - Replacing `.node__*` / `.edge-bundle*` CSS with React Flow themed styles.
 - Rewriting `test/unit/diagram/layout.test.ts` and adding
   `test/unit/diagram/flow.test.ts`.
@@ -72,8 +72,7 @@ command registration, never SVG internals.
 - Persisting manual node positions across sessions; only the in-session
   "Auto-layout" reset is provided.
 - Editing FK constraints through the webview UI (no new edit kinds).
-- Minimap, sub-flows, grouping, always-visible edge labels (tooltip on hover
-  only).
+- Minimap, sub-flows, grouping, always-visible edge labels.
 - Fanning out or separating overlapping FK edges: edges converging on the same
   destination handle (or sharing both endpoints) run along the same path and
   may overlap — confirmed acceptable in Manual Verify.
@@ -202,8 +201,9 @@ memoized `nodeTypes` object passed to `<ReactFlow>`.
   - Column hover highlights every edge touching that column plus the counterpart
     columns (reverse hover). Table-level edges are highlighted by edge hover
     only, matching spec 02.
-  - A floating tooltip (React Flow `<EdgeLabelRenderer>`) shows the hovered
-    edge's `data.title`.
+  - No floating tooltip is rendered on edge hover (removed in Manual Verify).
+    Each edge's `data.title` payload stays in the flow data but is not shown
+    anywhere in the UI.
 - The hovered edge (and only it) is additionally marked `animated: true`, so
   React Flow animates its dashes along the path from the source (child) model
   toward the target (parent) model — the FK visually "flows" child to parent
@@ -316,8 +316,6 @@ When the user hovers the edge from order_items.order_id to orders.order_id
 Then that edge is highlighted
 And the rows for order_items.order_id and orders.order_id are highlighted on
   their cards
-And a tooltip appears with the edge title (for example
-  "order_items.order_id -> orders.order_id")
 ```
 
 ### Hovering an edge animates its flow from child to parent
@@ -337,7 +335,7 @@ Then the animation stops and the edge returns to its normal stroke
 Given the dbt Diagram is open and shows the order_items -> orders edges
 When the user moves the mouse within a few pixels of (but not exactly on) an
   FK edge's 1.5px visible line
-Then the edge still becomes hovered (highlight, tooltip, and flow animation)
+Then the edge still becomes hovered (highlight and flow animation)
   because the invisible interaction band is 24px wide
 ```
 
@@ -381,9 +379,9 @@ And the diagram re-renders with the new column and the dagre arrangement
       correct source/target column handles.
 - [ ] FKs with empty or mismatched column arrays render as a single table-level
       edge.
-- [ ] Edge hover highlights the edge and its columns with a floating title
-      tooltip; column hover highlights connected edges and counterpart columns
-      (spec 02 semantics preserved).
+- [ ] Edge hover highlights the edge and its columns; column hover highlights
+      connected edges and counterpart columns (spec 02 semantics preserved).
+      No floating tooltip is shown on edge hover.
 - [ ] Edge hover is forgiving: an invisible `interactionWidth` band (24px)
       forms the hit area, so hovering does not require pixel-perfect accuracy
       on the 1.5px visible line.
