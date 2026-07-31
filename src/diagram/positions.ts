@@ -66,12 +66,18 @@ export function avoidOverlap(
  * - ids present in `current` keep their current `position` (manual drags and
  *   previous layout survive) and their `selected` flag, but adopt the fresh
  *   `data`/`width`/`height` from the flow node;
- * - brand-new ids take the flow (dagre) position, nudged by `avoidOverlap`
- *   against every already-kept card;
+ * - a brand-new id that is the **rename** of a vanished card (same `columns`
+ *   and `description` in its `data`) keeps the vanished card's position, so a
+ *   renamed table never snaps back to its auto-layout slot (spec 04);
+ * - other brand-new ids take the flow (dagre) position, nudged by
+ *   `avoidOverlap` against every already-kept card;
  * - ids that disappeared from the flow are dropped.
  */
 export function mergeFlowNodes(flowNodes: readonly Node[], current: readonly Node[]): Node[] {
   const currentById = new Map(current.map((node) => [node.id, node]));
+  const flowIds = new Set(flowNodes.map((node) => node.id));
+  // Cards that disappeared from the flow: candidates for rename carry-over.
+  const vanished = current.filter((node) => !flowIds.has(node.id));
   const occupied: NodeRect[] = [];
   const merged: Node[] = [];
 
@@ -91,10 +97,39 @@ export function mergeFlowNodes(flowNodes: readonly Node[], current: readonly Nod
       continue;
     }
 
-    const position = avoidOverlap(node.position, width, height, occupied);
+    // A brand-new id may be a renamed card: carry its position over instead of
+    // assigning the fresh auto-layout slot.
+    const position =
+      takeRenamedPosition(node, vanished) ?? avoidOverlap(node.position, width, height, occupied);
     occupied.push({ ...position, width, height });
     merged.push({ ...node, position });
   }
 
   return merged;
+}
+
+/**
+ * Finds a vanished card whose content (columns + description) matches `node`
+ * — the same table under a new name — and returns its position, consuming it
+ * from `pool` so two new ids never match the same vanished card. Returns null
+ * when no such card exists.
+ */
+function takeRenamedPosition(node: Node, pool: Node[]): NodePosition | null {
+  for (let i = 0; i < pool.length; i += 1) {
+    if (cardSignature(node) === cardSignature(pool[i])) {
+      const [match] = pool.splice(i, 1);
+      return { x: match.position.x, y: match.position.y };
+    }
+  }
+  return null;
+}
+
+/**
+ * Structural signature of a card's content, ignoring the name (the `id` and
+ * the `label` reflect the current name, which is exactly what a rename
+ * changes).
+ */
+function cardSignature(node: Node): string {
+  const data = (node.data ?? {}) as { columns?: unknown; description?: unknown };
+  return JSON.stringify([data.columns, data.description]);
 }

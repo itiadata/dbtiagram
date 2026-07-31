@@ -101,6 +101,41 @@ describe('mergeFlowNodes', () => {
     expect(merged.map((n) => n.id)).toEqual(['kept']);
   });
 
+  it('carries a vanished card position over to a renamed id', () => {
+    // The rename changes the id and label; columns/description stay identical.
+    const current = [
+      { ...node('orders', 300, 250), data: { label: 'orders', columns: [{ name: 'id' }] } },
+    ];
+    const flow = [
+      { ...node('orders_v2', 0, 0), data: { label: 'orders_v2', columns: [{ name: 'id' }] } },
+    ];
+    const merged = mergeFlowNodes(flow, current);
+    expect(merged[0].position).toEqual({ x: 300, y: 250 });
+  });
+
+  it('does not treat a genuinely new model as a rename', () => {
+    const current = [{ ...node('orders', 300, 250), data: { label: 'orders' } }];
+    const flow = [
+      { ...node('brand_new', 10, 20), data: { label: 'brand_new', columns: [{ name: 'x' }] } },
+    ];
+    const merged = mergeFlowNodes(flow, current);
+    expect(merged[0].position).toEqual({ x: 10, y: 20 });
+  });
+
+  it('carries each rename in a multi-rename update to its own position', () => {
+    const current = [
+      { ...node('a', 100, 100), data: { label: 'a', columns: [{ name: 'x' }] } },
+      { ...node('b', 200, 200), data: { label: 'b', columns: [{ name: 'y' }] } },
+    ];
+    const flow = [
+      { ...node('a2', 0, 0), data: { label: 'a2', columns: [{ name: 'x' }] } },
+      { ...node('b2', 0, 0), data: { label: 'b2', columns: [{ name: 'y' }] } },
+    ];
+    const merged = mergeFlowNodes(flow, current);
+    expect(merged[0].position).toEqual({ x: 100, y: 100 });
+    expect(merged[1].position).toEqual({ x: 200, y: 200 });
+  });
+
   it('handles an empty flow', () => {
     expect(mergeFlowNodes([], [node('a', 0, 0)])).toEqual([]);
   });

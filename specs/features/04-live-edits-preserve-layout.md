@@ -207,8 +207,11 @@ New pure module:
   current `position` (and `selected`) but adopt the fresh `data`/`width`/
   `height`; for **new** ids, take the flow (dagre) position nudged by
   `avoidOverlap` against every already-kept rect; ids missing from `flowNodes`
-  are dropped. React Flow's own state stays the source of truth for positions,
-  so mid-drag updates and drag-stop positions survive naturally.
+  are dropped. **A new id that is the rename of a vanished card — same
+  `columns` and `description` in its `data` — keeps the vanished card's
+  position** (so a renamed table never snaps back to its auto-layout slot).
+  React Flow's own state stays the source of truth for positions, so mid-drag
+  updates and drag-stop positions survive naturally.
 
 `webview-ui/App.tsx` / `DiagramCanvas`:
 
@@ -216,8 +219,9 @@ New pure module:
   `flow.nodes` verbatim (Auto-layout = fresh dagre); otherwise adopt
   `mergeFlowNodes(flow.nodes, rfNodes)`. `onNodesChange` continues to feed drags
   into `rfNodes`; no new drag bookkeeping is needed.
-- The fit effect runs only when: first render, the node-id set **grew**, or
-  `layoutTick` changed. Ordinary live edits do not refit.
+- The fit effect runs only when: first render, the node-id set **grew**
+  (net node count increased — a rename swaps one id for another and does not
+  refit), or `layoutTick` changed. Ordinary live edits do not refit.
 - A new `pendingErrors` banner renders above the form (styled `.banner--info`).
 
 ### 8. Tests (`test/unit/`)
@@ -231,8 +235,10 @@ New pure module:
   retention and pending-error population.
 - `diagram/positions.test.ts`: `rectsOverlap`; `avoidOverlap` pushes below an
   obstacle and stops when free; `mergeFlowNodes` keeps existing positions and
-  `selected`, refreshes `data`/`width`/`height`, drops vanished ids, and gives
-  new ids a non-overlapping slot.
+  `selected`, refreshes `data`/`width`/`height`, drops vanished ids, gives
+  new ids a non-overlapping slot, and carries a vanished card's position over
+  to a new id with identical `columns`/`description` (a rename) — including
+  distinct carry-overs for several renames in one update.
 - Existing suites (`dbt/*`, `diagram/graph`, `diagram/flow`, `diagram/layout`,
   `vscode/editorButton`, `fixture`, integration) are unchanged and must keep
   passing.
@@ -276,6 +282,16 @@ When the user adds a new model block to a model.yml file (or creates a new one)
 Then the new table appears in the diagram
 And every existing table keeps its current position
 And the view re-fits so the new table is visible
+```
+
+### A renamed table keeps its position and does not re-fit
+
+```
+Given the dbt Diagram is open and the orders card has been dragged to a custom position
+When the user renames orders to orders_v2 (inline or in the details sidebar)
+Then the card keeps its custom position
+And the viewport does not change
+And only the card title (and the FK edges pointing at it) reflect the new name
 ```
 
 ### Removing a model removes its card without re-layout
@@ -329,6 +345,8 @@ Then the diagram does not change
 - [ ] Typing in a model.yml file updates the diagram without waiting for save.
 - [ ] Manual node positions (drags) and the viewport survive every live edit and
       every webview edit; only new tables receive automatic positions.
+- [ ] Renaming a table keeps its card position and leaves the viewport alone
+      (no re-fit), including renames from inline editing or the sidebar.
 - [ ] A table added while editing never overlaps an existing table when first
       placed (nudged below its dagre slot if needed).
 - [ ] Removing a model file/model block removes its card; remaining cards keep

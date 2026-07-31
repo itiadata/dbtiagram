@@ -514,12 +514,14 @@ function DiagramCanvas({
 
   // Adopt each new diagram without disturbing the layout: existing nodes keep
   // their current position (manual drags and the previous arrangement survive),
-  // only brand-new ids receive an automatic slot, and vanished ids are dropped.
-  // Auto-layout (layoutTick bump) resets every node to the fresh dagre
-  // arrangement. The view re-fits only on the first render, when the node set
-  // grows, after Auto-layout, or after an explicit filter toggle (filterTick)
-  // — never on ordinary live edits — so pan/zoom survives typing (spec 04) and
-  // filter changes snap the remaining tables into view (spec 05).
+  // a renamed card keeps the vanished card's position (same columns/description
+  // — spec 04), only genuinely brand-new ids receive an automatic slot, and
+  // vanished ids are dropped. Auto-layout (layoutTick bump) resets every node
+  // to the fresh dagre arrangement. The view re-fits only on the first render,
+  // when the node set grows, after Auto-layout, or after an explicit filter
+  // toggle (filterTick) — never on ordinary live edits or renames — so
+  // pan/zoom survives typing (spec 04) and filter changes snap the remaining
+  // tables into view (spec 05).
   useEffect(() => {
     const reset = layoutTick !== lastTickRef.current;
     lastTickRef.current = layoutTick;
@@ -528,7 +530,10 @@ function DiagramCanvas({
     setRfNodes((current) => (reset ? flow.nodes : mergeFlowNodes(flow.nodes, current)));
 
     const ids = flow.nodes.map((node) => node.id);
-    const added = ids.filter((id) => !lastIdsRef.current.includes(id)).length > 0;
+    // Fit only when the node set actually grows (net count up); a rename swaps
+    // one id for another and must neither refit nor disturb the layout (spec
+    // 04 — the renamed card keeps its position via mergeFlowNodes).
+    const added = ids.length > lastIdsRef.current.length;
     lastIdsRef.current = ids;
     const isFirst = firstFitRef.current;
     firstFitRef.current = false;
