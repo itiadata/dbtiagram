@@ -30,10 +30,14 @@ Status values: `draft` → `approved` → `implemented` → `done`.
    failure. This is automatic and runs before every commit.
 5. **Manual Verify.** The user manually tests the feature in VS Code and reports
    adjustments. For each request the agent updates the spec first (the spec stays
-   the source of truth), then applies the matching code changes, then re-runs
-   Automatic Verify — iterating until the user is satisfied. The spec status
+   the source of truth), then applies the matching code changes. **Automatic
+   Verify is mandatory after every manual iteration**: the agent re-runs `npm
+   test` and `npm run typecheck` and resolves every failure before the next
+   iteration — and before the user can confirm the feature done. The iteration
+   loop ends only on a green tree (tests and typecheck passing). The spec status
    stays `implemented` throughout this step.
-6. **Done.** Only when the user explicitly confirms the feature is done does the
+6. **Done.** Only when the user explicitly confirms the feature is done — which
+   happens only after the final Automatic Verify pass from step 5 — does the
    agent set the spec status to `done` and update the index above.
 
 When a scenario's desired behavior is ambiguous, ask the user — never guess.
@@ -45,4 +49,5 @@ spec drafts are iterated in the working tree **without commits**; a
 `docs(spec): ... (approved)` commit is created only at approval time; the
 implementing `feat:` commit leaves the spec at `implemented`; the
 `docs(spec): mark feature XX done` commit is created only after the user
-confirms the Manual Verify step.
+confirms the Manual Verify step, which by then has passed Automatic Verify after
+every manual iteration.
