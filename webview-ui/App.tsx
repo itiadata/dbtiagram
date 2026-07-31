@@ -82,6 +82,12 @@ export function App(): JSX.Element {
   const previousFileUrisRef = useRef<string[]>([]);
   const previousModelNamesRef = useRef<string[]>([]);
 
+  // Model names are unique in dbt; dedupe in case a name ever spans files.
+  const allModelNames = useMemo(
+    () => [...new Set(modelFiles.flatMap((file) => file.models))],
+    [modelFiles],
+  );
+
   useEffect(() => {
     const listener = (event: MessageEvent<MessageToWebview>): void => {
       const message = event.data;
@@ -231,6 +237,29 @@ export function App(): JSX.Element {
     setFilterTick((tick) => tick + 1);
   }, []);
 
+  // Bulk All / None per filter level (spec 05): they operate on the full
+  // universe (every file / every model), independent of the search boxes, and
+  // behave like checkbox toggles for the refit policy.
+  const selectAllFiles = useCallback((): void => {
+    setSelectedFiles(new Set(modelFiles.map((file) => file.uri)));
+    setFilterTick((tick) => tick + 1);
+  }, [modelFiles]);
+
+  const clearFiles = useCallback((): void => {
+    setSelectedFiles(new Set());
+    setFilterTick((tick) => tick + 1);
+  }, []);
+
+  const selectAllModels = useCallback((): void => {
+    setSelectedModels(new Set(allModelNames));
+    setFilterTick((tick) => tick + 1);
+  }, [allModelNames]);
+
+  const clearModels = useCallback((): void => {
+    setSelectedModels(new Set());
+    setFilterTick((tick) => tick + 1);
+  }, []);
+
   const addColumn = (): void => {
     const column = form.column.trim();
     if (column.length === 0 || form.model.length === 0) {
@@ -263,6 +292,7 @@ export function App(): JSX.Element {
       <div className="app__body">
         <FilterSidebar
           files={modelFiles}
+          allModelNames={allModelNames}
           selectedFiles={selectedFiles}
           selectedModels={selectedModels}
           fileSearch={fileSearch}
@@ -271,6 +301,10 @@ export function App(): JSX.Element {
           onModelSearchChange={setModelSearch}
           onToggleFile={toggleFile}
           onToggleModel={toggleModel}
+          onSelectAllFiles={selectAllFiles}
+          onClearFiles={clearFiles}
+          onSelectAllModels={selectAllModels}
+          onClearModels={clearModels}
         />
 
         <div className="app__main">

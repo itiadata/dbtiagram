@@ -140,13 +140,23 @@ body {
   gap: 12px;
 }
 
-/* Full-width header button: chevron + title (+ optional count). Clicking
-   anywhere on it collapses/expands the section body. */
-.sidebar__section-toggle {
+/* Section header row: the collapse toggle (flex: 1) plus optional All / None
+   bulk buttons and the count as separate click targets (spec 05). */
+.sidebar__section-header {
   display: flex;
   align-items: center;
   gap: 6px;
-  width: 100%;
+  min-width: 0;
+}
+
+/* Full-width header button: chevron + title. Clicking it collapses/expands the
+   section body; the All / None buttons and count sit beside it. */
+.sidebar__section-toggle {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
   padding: 2px 4px;
   border: none;
   border-radius: 3px;
@@ -199,6 +209,35 @@ body {
   display: flex;
   flex-direction: column;
   gap: 6px;
+}
+
+/* All / None bulk buttons in each sub-section header (spec 05). */
+.sidebar__bulk {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  flex-shrink: 0;
+}
+
+.sidebar__bulk-button {
+  font: inherit;
+  font-size: 11px;
+  padding: 1px 4px;
+  border: none;
+  border-radius: 3px;
+  background: none;
+  color: var(--accent);
+  cursor: pointer;
+}
+
+.sidebar__bulk-button:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+}
+
+.sidebar__bulk-button:disabled {
+  color: var(--muted);
+  cursor: default;
+  opacity: 0.6;
 }
 
 .sidebar__count {

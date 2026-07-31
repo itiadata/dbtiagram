@@ -65,6 +65,11 @@ all **unchanged**.
   name-search box.
 - **Models filter**: checkbox list of every model, all checked by default, plus
   a name-search box. The file filter has **precedence** over the model filter.
+- **Bulk selection**: each sub-section header gains **All** / **None** buttons
+  that check/uncheck the whole level at once. They operate on the full universe
+  at that level (every file / every model), independent of the active search
+  box, and behave like checkbox toggles for the refit policy. Each button is
+  disabled when the level is already fully in (All) or fully out (None).
 - **VS Code-style file labels**: basename when unique; when two files share a
   basename, the shortest unique path suffix (which includes the folder) is
   shown.
@@ -87,7 +92,6 @@ all **unchanged**.
   of positions).
 - Sending the filter state back to the host — filtering is entirely webview-side
   and needs no round-trip messages.
-- "Select all / clear all" bulk actions on the checkbox lists.
 - Making the Add-column form's model field a dropdown of visible models.
 - Filtering files that have no record in the store (a file whose every parse
   failed and that has no last-good content contributes no models and is not
@@ -182,7 +186,8 @@ All functions are pure and MUST NOT import `vscode`:
 - Toggling a file/model checkbox increments `filterTick`, which flows to
   `DiagramCanvas` and triggers a re-fit (see below); `mergeFlowNodes` keeps the
   positions of still-visible tables, so only genuinely (re-)added tables get an
-  automatic slot (spec 04 machinery, unchanged).
+  automatic slot (spec 04 machinery, unchanged). The bulk **All** / **None**
+  handlers also bump `filterTick`, exactly like a checkbox toggle.
 - Header status: `${visibleGraph.nodes.length} of ${graph.nodes.length} models`
   when the visible count differs, else `${graph.nodes.length} models`.
 - When `graph !== null` but `visibleGraph.nodes.length === 0`, the canvas stays
@@ -205,13 +210,19 @@ New `FilterSidebar.tsx`:
   body (search box + list) unmounts while collapsed. Three toggles exist —
   Filter (top level, `large` styling), Model yml files, and Models — each a
   plain `useState` inside `FilterSidebar`; no filter data flows through them.
-- **Model yml files** section: header with a `checked/total` count, a search
-  input (`aria-label="Search model yml files"`, placeholder "Search files…"),
-  and a scrollable checkbox list of the files whose `label` matches the search.
-  Rows are keyed by `uri`; each row shows the `label` with the full `uri` as a
-  tooltip (`title`).
+- **Model yml files** section: header with `checked/total` count and **All** /
+  **None** buttons, a search input (`aria-label="Search model yml files"`,
+  placeholder "Search files…"), and a scrollable checkbox list of the files
+  whose `label` matches the search. Rows are keyed by `uri`; each row shows the
+  `label` with the full `uri` as a tooltip (`title`).
 - **Models** section: same shape, rows keyed by model name, search placeholder
   "Search models…".
+- **All** / **None** operate on the full universe at that level (all files /
+  all models), not the search-narrowed subset; they pass through
+  `onSelectAllFiles` / `onClearFiles` / `onSelectAllModels` / `onClearModels`
+  props from `App.tsx`, which set the corresponding selection `Set`. Each button
+  is `disabled` when its level is already fully in (All) or fully out (None);
+  both are disabled when the universe is empty.
 - Empty search results render a muted "No matches" line.
 
 ### 6. Styles (`webview-ui/styles.css`)
@@ -308,6 +319,20 @@ When the user clicks the "Filter" header
 Then both sub-sections collapse together
 ```
 
+### All / None select or clear a whole filter level
+
+```
+Given the dbt Diagram is open and the user has unchecked orders.yml
+When the user clicks "All" in the Model yml files section header
+Then every file is checked again and the diagram shows every model
+When the user clicks "None" in the Models section header
+Then every model checkbox is cleared and the diagram shows the empty state
+And the "All" button in the Models header is enabled again
+When the user types a search that narrows the file list
+And the user clicks "All" in the Model yml files header
+Then every file is checked, including ones hidden by the search
+```
+
 ### Duplicate file names are disambiguated with their folder
 
 ```
@@ -383,6 +408,10 @@ And typing in either search box does not move or refit the diagram
 - [ ] The Filter section and each sub-section collapse/expand via a chevron
       toggle in their header; a collapsed sub-section keeps its `checked/total`
       count visible, and collapse state is plain webview state.
+- [ ] Each sub-section header has **All** / **None** buttons that check or
+      clear the whole level (the full universe, independent of search), bump
+      the refit tick like a checkbox toggle, and disable when already in the
+      target state.
 - [ ] `src/shared/labels.ts` and `src/shared/filter.ts` are pure (no `vscode`
       import) and covered by sub-second Vitest unit tests.
 - [ ] `npm test` and `npm run typecheck` pass; `src/dbt/*`,

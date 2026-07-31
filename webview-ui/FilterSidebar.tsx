@@ -2,9 +2,10 @@
  * Left sidebar of the diagram webview (spec 05): a Filter section with two
  * checkbox lists — model yml files (with file precedence) and models. Both
  * lists have a search box that narrows the visible rows without changing the
- * diagram. Every section (Filter and each sub-section) collapses/expands via a
- * chevron toggle in its header; the sidebar is deliberately generic so future
- * features can add their own collapsible sections to the column.
+ * diagram, and All / None buttons that select or clear the whole level at once.
+ * Every section (Filter and each sub-section) collapses/expands via a chevron
+ * toggle in its header; the sidebar is deliberately generic so future features
+ * can add their own collapsible sections to the column.
  */
 import { useState, type ReactNode } from 'react';
 import { matchesSearch } from '../src/shared/filter';
@@ -16,6 +17,8 @@ interface CollapsibleSectionProps {
   onToggle: () => void;
   /** Optional `checked/total` label shown in the header, kept visible while collapsed. */
   count?: string;
+  /** Optional extra header controls (e.g. the All / None bulk buttons). */
+  actions?: ReactNode;
   /** Larger title styling for the top-level sections in the sidebar column. */
   large?: boolean;
   children: ReactNode;
@@ -26,24 +29,28 @@ function CollapsibleSection({
   open,
   onToggle,
   count,
+  actions,
   large,
   children,
 }: CollapsibleSectionProps): JSX.Element {
   return (
     <section className={`sidebar__section${large ? ' sidebar__section--filter' : ''}`}>
-      <button
-        type="button"
-        className="sidebar__section-toggle"
-        aria-expanded={open}
-        onClick={onToggle}
-      >
-        <span
-          className={`sidebar__chevron${open ? ' sidebar__chevron--open' : ''}`}
-          aria-hidden="true"
-        />
-        <span className="sidebar__section-title">{title}</span>
+      <div className="sidebar__section-header">
+        <button
+          type="button"
+          className="sidebar__section-toggle"
+          aria-expanded={open}
+          onClick={onToggle}
+        >
+          <span
+            className={`sidebar__chevron${open ? ' sidebar__chevron--open' : ''}`}
+            aria-hidden="true"
+          />
+          <span className="sidebar__section-title">{title}</span>
+        </button>
+        {actions !== undefined && <span className="sidebar__bulk">{actions}</span>}
         {count !== undefined && <span className="sidebar__count">{count}</span>}
-      </button>
+      </div>
       {open && <div className="sidebar__section-body">{children}</div>}
     </section>
   );
@@ -51,6 +58,7 @@ function CollapsibleSection({
 
 interface FilterSidebarProps {
   files: DiagramModelFile[];
+  allModelNames: string[];
   selectedFiles: ReadonlySet<string>;
   selectedModels: ReadonlySet<string>;
   fileSearch: string;
@@ -59,10 +67,15 @@ interface FilterSidebarProps {
   onModelSearchChange: (value: string) => void;
   onToggleFile: (uri: string, checked: boolean) => void;
   onToggleModel: (name: string, checked: boolean) => void;
+  onSelectAllFiles: () => void;
+  onClearFiles: () => void;
+  onSelectAllModels: () => void;
+  onClearModels: () => void;
 }
 
 export function FilterSidebar({
   files,
+  allModelNames,
   selectedFiles,
   selectedModels,
   fileSearch,
@@ -71,6 +84,10 @@ export function FilterSidebar({
   onModelSearchChange,
   onToggleFile,
   onToggleModel,
+  onSelectAllFiles,
+  onClearFiles,
+  onSelectAllModels,
+  onClearModels,
 }: FilterSidebarProps): JSX.Element {
   // Collapse toggles are plain webview state: they survive panel hide/reveal
   // (retainContextWhenHidden) and reset on reopen. All filter data still flows
@@ -79,8 +96,6 @@ export function FilterSidebar({
   const [filesOpen, setFilesOpen] = useState(true);
   const [modelsOpen, setModelsOpen] = useState(true);
 
-  // Model names are unique in dbt; dedupe in case a name ever spans files.
-  const allModelNames = [...new Set(files.flatMap((file) => file.models))];
   const visibleFiles = files.filter((file) => matchesSearch(file.label, fileSearch));
   const visibleModels = allModelNames.filter((name) => matchesSearch(name, modelSearch));
   const checkedFileCount = files.filter((file) => selectedFiles.has(file.uri)).length;
@@ -99,6 +114,28 @@ export function FilterSidebar({
           count={`${checkedFileCount}/${files.length}`}
           open={filesOpen}
           onToggle={() => setFilesOpen((open) => !open)}
+          actions={
+            <>
+              <button
+                type="button"
+                className="sidebar__bulk-button"
+                aria-label="Select all model yml files"
+                disabled={checkedFileCount === files.length}
+                onClick={onSelectAllFiles}
+              >
+                All
+              </button>
+              <button
+                type="button"
+                className="sidebar__bulk-button"
+                aria-label="Clear model yml files selection"
+                disabled={checkedFileCount === 0}
+                onClick={onClearFiles}
+              >
+                None
+              </button>
+            </>
+          }
         >
           <input
             className="sidebar__search"
@@ -131,6 +168,28 @@ export function FilterSidebar({
           count={`${checkedModelCount}/${allModelNames.length}`}
           open={modelsOpen}
           onToggle={() => setModelsOpen((open) => !open)}
+          actions={
+            <>
+              <button
+                type="button"
+                className="sidebar__bulk-button"
+                aria-label="Select all models"
+                disabled={checkedModelCount === allModelNames.length}
+                onClick={onSelectAllModels}
+              >
+                All
+              </button>
+              <button
+                type="button"
+                className="sidebar__bulk-button"
+                aria-label="Clear models selection"
+                disabled={checkedModelCount === 0}
+                onClick={onClearModels}
+              >
+                None
+              </button>
+            </>
+          }
         >
           <input
             className="sidebar__search"
