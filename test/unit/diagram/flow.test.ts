@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { buildDiagram } from '../../../src/diagram/graph';
 import { layoutDiagram } from '../../../src/diagram/layout';
 import {
+  EDGE_INTERACTION_WIDTH,
   TABLE_SOURCE_HANDLE,
   TABLE_TARGET_HANDLE,
   buildFlowElements,
@@ -61,6 +62,7 @@ describe('buildFlowElements', () => {
       sourceHandle: columnSourceHandle('x1'),
       targetHandle: columnTargetHandle('y1'),
       type: 'smoothstep',
+      interactionWidth: EDGE_INTERACTION_WIDTH,
       data: {
         sourceColumn: 'x1',
         targetColumn: 'y1',
@@ -72,6 +74,7 @@ describe('buildFlowElements', () => {
       target: 'b',
       sourceHandle: columnSourceHandle('x2'),
       targetHandle: columnTargetHandle('y2'),
+      interactionWidth: EDGE_INTERACTION_WIDTH,
       data: { title: 'a.x2 -> b.y2' },
     });
   });
@@ -89,6 +92,7 @@ describe('buildFlowElements', () => {
       sourceHandle: TABLE_SOURCE_HANDLE,
       targetHandle: TABLE_TARGET_HANDLE,
       type: 'smoothstep',
+      interactionWidth: EDGE_INTERACTION_WIDTH,
       data: { title: 'a -> b' },
     });
     expect(flow.edges[0].data.sourceColumn).toBeUndefined();
@@ -158,6 +162,35 @@ describe('buildFlowElements', () => {
     ]);
 
     expect(flow.edges).toHaveLength(1);
+  });
+
+  it('carries the interaction width on every column-level and table-level edge', () => {
+    const { flow } = flowFor([
+      {
+        name: 'a',
+        columns: [{ name: 'x1' }, { name: 'x2' }],
+        constraints: [
+          {
+            type: 'foreign_key',
+            columns: ['x1'],
+            to: "ref('b')",
+            toColumns: ['y1'],
+          },
+          { type: 'foreign_key', to: "ref('c')" },
+        ],
+      },
+      { name: 'b', columns: [{ name: 'y1' }] },
+      { name: 'c' },
+    ]);
+
+    expect(flow.edges.length).toBeGreaterThan(0);
+    const columnLevel = flow.edges.find((edge) => edge.data.sourceColumn !== undefined);
+    const tableLevel = flow.edges.find((edge) => edge.data.sourceColumn === undefined);
+    expect(columnLevel).toBeDefined();
+    expect(tableLevel).toBeDefined();
+    expect(columnLevel!.interactionWidth).toBe(EDGE_INTERACTION_WIDTH);
+    expect(tableLevel!.interactionWidth).toBe(EDGE_INTERACTION_WIDTH);
+    expect(EDGE_INTERACTION_WIDTH).toBe(24);
   });
 
   it('handles an empty graph', () => {

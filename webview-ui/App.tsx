@@ -102,11 +102,14 @@ export function App(): JSX.Element {
 
   const edges = useMemo<Edge[]>(() => {
     if (flow === null) return [];
+    const isHovered = (id: string): boolean => id === hoveredEdgeId;
     return flow.edges.map((edge) => ({
       ...edge,
       className: activeEdgeIds.has(edge.id) ? 'edge--active' : undefined,
+      // Only the hovered edge flows (dashes travel child -> parent, spec 03).
+      animated: isHovered(edge.id),
     }));
-  }, [flow, activeEdgeIds]);
+  }, [flow, activeEdgeIds, hoveredEdgeId]);
 
   const highlightedColumns = useMemo(() => {
     const byModel = new Map<string, Set<string>>();

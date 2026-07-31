@@ -54,6 +54,15 @@ export const TABLE_SOURCE_HANDLE = 'table:source';
 /** Handle id for incoming table-level edges (left edge, vertical center). */
 export const TABLE_TARGET_HANDLE = 'table:target';
 
+/**
+ * Width (px) of the invisible hover/click band around every edge, rendered by
+ * React Flow's `interactionWidth`. The visible stroke stays 1.5px; this band
+ * is what makes hovering forgiving instead of pixel-perfect (spec 03, Manual
+ * Verify iteration). Must match the `.react-flow__edge-interaction` notes in
+ * `webview-ui/styles.css`.
+ */
+export const EDGE_INTERACTION_WIDTH = 24;
+
 /** Maps the diagram graph + dagre layout onto React Flow nodes and edges. */
 export function buildFlowElements(graph: DiagramGraph, layout: DiagramLayout): FlowElements {
   const byId = new Map(layout.nodes.map((placement) => [placement.id, placement]));
@@ -90,6 +99,7 @@ export function buildFlowElements(graph: DiagramGraph, layout: DiagramLayout): F
           sourceHandle: columnSourceHandle(sourceColumn),
           targetHandle: columnTargetHandle(targetColumn),
           type: 'smoothstep',
+          interactionWidth: EDGE_INTERACTION_WIDTH,
           data: {
             sourceColumn,
             targetColumn,
@@ -110,6 +120,7 @@ export function buildFlowElements(graph: DiagramGraph, layout: DiagramLayout): F
         sourceHandle: TABLE_SOURCE_HANDLE,
         targetHandle: TABLE_TARGET_HANDLE,
         type: 'smoothstep',
+        interactionWidth: EDGE_INTERACTION_WIDTH,
         data: { title: `${edge.source} -> ${edge.target}` },
       },
     ];

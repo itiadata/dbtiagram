@@ -74,6 +74,9 @@ command registration, never SVG internals.
 - Editing FK constraints through the webview UI (no new edit kinds).
 - Minimap, sub-flows, grouping, always-visible edge labels (tooltip on hover
   only).
+- Fanning out or separating overlapping FK edges: edges converging on the same
+  destination handle (or sharing both endpoints) run along the same path and
+  may overlap — confirmed acceptable in Manual Verify.
 - Running layout in the extension host (layout stays in the webview, computed
   from the unchanged `diagram:update` payload).
 
@@ -154,6 +157,15 @@ data: { label, description, columns } }` where `columns` is the
   `title` matches spec 02's format (column edges: `order_items.order_id ->
   orders.order_id`; table-level: `order_items -> orders`). The column names
   feed the hover-highlight logic.
+- Every edge also carries `interactionWidth: EDGE_INTERACTION_WIDTH` (exported
+  constant, value 24). React Flow renders an invisible stroke along the edge
+  path at this width; it is the edge's hover/click hit area, so the mouse does
+  not have to sit exactly on the 1.5px visible line (see Manual Verify note
+  below — the previous CSS shrank this band to 1.5px).
+- Edges are **not** fanned out or separated: when several FK edges converge on
+  the same target handle or share both endpoints they run along the same path
+  and may overlap. Confirmed acceptable during Manual Verify (the "except when
+  they arrive" case from the user); no edge-bundle geometry is computed.
 
 ### 4. Custom node (`webview-ui/TableNode.tsx`)
 
@@ -192,6 +204,13 @@ memoized `nodeTypes` object passed to `<ReactFlow>`.
     only, matching spec 02.
   - A floating tooltip (React Flow `<EdgeLabelRenderer>`) shows the hovered
     edge's `data.title`.
+- The hovered edge (and only it) is additionally marked `animated: true`, so
+  React Flow animates its dashes along the path from the source (child) model
+  toward the target (parent) model — the FK visually "flows" child to parent
+  while hovered. `animated` resets to `false` on leave.
+- Edge hover uses the invisible `interactionWidth` band (24px) as the hit area;
+  the visible stroke stays 1.5px wide. This is what makes hovering forgiving
+  instead of pixel-perfect.
 - React Flow's free-license attribution badge stays visible
   (`hideAttribution: false`).
 - Nodes are draggable (React Flow default); the "Auto-layout" button re-runs
@@ -202,10 +221,27 @@ memoized `nodeTypes` object passed to `<ReactFlow>`.
 
 Replace `.node__*` and `.edge-bundle*` rules with HTML equivalents: `.table-node`
 card (background `var(--card)`, border `var(--border)`, rounded), `.table-node__row`
-(hover cursor; accent-tinted highlight class), `.react-flow__edge path`
-(stroke `var(--accent)`, width 1.5; hovered width 3.5, `var(--accent-hover)`),
-and background/attribution colors following the existing light/dark theme
-variables.
+(hover cursor; accent-tinted highlight class), `.react-flow__edge .react-flow__edge-path`
+(stroke `var(--accent)`, width 1.5; `.edge--active` width 3.5,
+`var(--accent-hover)`), and background/attribution colors following the
+existing light/dark theme variables.
+
+**Interaction band (root-cause fix from Manual Verify):** the visible-line
+rules must be scoped to `.react-flow__edge-path` and must **not** match
+`.react-flow__edge-interaction` (React Flow's invisible hit path). Previously
+`.react-flow__edge path { stroke-width: 1.5 }` matched every path in the edge
+group and collapsed the invisible hover band to 1.5px, forcing pixel-perfect
+hovering. The band is restored with:
+
+```
+.react-flow__edge-interaction {
+  stroke: transparent;   /* keeps the band painted (pointer-events: visibleStroke) */
+}
+```
+
+`stroke-width` on the band is driven by the edge's `interactionWidth` prop
+(24) set in `src/diagram/flow.ts`; this rule only guarantees the stroke is
+painted so the band is hit-testable.
 
 ### 7. Tests (`test/unit/`)
 
@@ -223,6 +259,8 @@ variables.
   - Edge ids unique across multiple FKs; table-level edge ids carry `[k]`.
   - Flow nodes carry position/width/height from the layout and label/columns
     from the graph.
+  - Every edge (column-level and table-level) carries
+    `interactionWidth: EDGE_INTERACTION_WIDTH` (24).
 - `dbt/*`, `diagram/graph.test.ts`, `fixture.test.ts`, and the integration
   suite: unchanged (they do not reference layout internals).
 
@@ -282,6 +320,27 @@ And a tooltip appears with the edge title (for example
   "order_items.order_id -> orders.order_id")
 ```
 
+### Hovering an edge animates its flow from child to parent
+
+```
+Given the dbt Diagram is open and shows the order_items -> orders edges
+When the user hovers the edge from order_items.order_id to orders.order_id
+Then that edge's dashes animate along the path, flowing from the child model
+  (order_items) toward the parent model (orders)
+When the user stops hovering the edge
+Then the animation stops and the edge returns to its normal stroke
+```
+
+### Hovering an edge is forgiving near the line
+
+```
+Given the dbt Diagram is open and shows the order_items -> orders edges
+When the user moves the mouse within a few pixels of (but not exactly on) an
+  FK edge's 1.5px visible line
+Then the edge still becomes hovered (highlight, tooltip, and flow animation)
+  because the invisible interaction band is 24px wide
+```
+
 ### Hovering a column highlights its connected edges
 
 ```
@@ -325,6 +384,13 @@ And the diagram re-renders with the new column and the dagre arrangement
 - [ ] Edge hover highlights the edge and its columns with a floating title
       tooltip; column hover highlights connected edges and counterpart columns
       (spec 02 semantics preserved).
+- [ ] Edge hover is forgiving: an invisible `interactionWidth` band (24px)
+      forms the hit area, so hovering does not require pixel-perfect accuracy
+      on the 1.5px visible line.
+- [ ] The hovered edge is `animated`, its dashes flowing from the child model
+      toward the parent model; the animation stops on mouse leave.
+- [ ] Overlapping FK edges (shared destination handle or shared endpoints) are
+      accepted as-is; no fan-out or edge-separation geometry is introduced.
 - [ ] Pan, zoom, and node drag work out of the box; the "Auto-layout" button
       restores the dagre arrangement.
 - [ ] `src/diagram/layout.ts` and `src/diagram/flow.ts` are pure (no `vscode`

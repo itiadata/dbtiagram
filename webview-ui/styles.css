@@ -160,14 +160,30 @@ body {
 
 /* ---- Edges ---- */
 
-.react-flow__edge path {
+/*
+ * Visible-stroke styles are scoped to `.react-flow__edge-path` on purpose.
+ * React Flow renders a second, invisible path per edge
+ * (`.react-flow__edge-interaction`) whose width is the edge's
+ * `interactionWidth` (24px, see EDGE_INTERACTION_WIDTH in
+ * src/diagram/flow.ts) and which forms the hover/click hit band. A generic
+ * `.react-flow__edge path { stroke-width: 1.5 }` selector previously matched
+ * that band too, collapsing it to 1.5px and forcing pixel-perfect hovering
+ * (spec 03, Manual Verify iteration).
+ */
+.react-flow__edge .react-flow__edge-path {
   stroke: var(--accent);
   stroke-width: 1.5;
 }
 
-.react-flow__edge.edge--active path {
+.react-flow__edge.edge--active .react-flow__edge-path {
   stroke: var(--accent-hover);
   stroke-width: 3.5;
+}
+
+/* Keep the invisible interaction band painted so it stays hit-testable under
+ * pointer-events: visibleStroke. Its width is driven by interactionWidth. */
+.react-flow__edge-interaction {
+  stroke: transparent;
 }
 
 .edge-tooltip {
