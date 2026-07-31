@@ -16,6 +16,7 @@ up-to-date spec in `specs/features/`.
 | 01  | Open dbt Diagram from the editor title bar | Done |
 | 02  | Column-level foreign key edges | Done |
 | 03  | React Flow diagram with automatic layout | Done |
+| 04  | Live model.yml edits reflected without losing layout | Approved |
 
 Status values: `draft` → `approved` → `implemented` → `done`.
 
