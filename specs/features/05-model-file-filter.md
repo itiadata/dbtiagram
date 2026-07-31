@@ -63,13 +63,21 @@ all **unchanged**.
 - **Model yml files filter**: checkbox list of every parsed model.yml file
   (each with the model names it defines), all checked by default, plus a
   name-search box.
-- **Models filter**: checkbox list of every model, all checked by default, plus
-  a name-search box. The file filter has **precedence** over the model filter.
-- **Bulk selection**: each sub-section header gains **All** / **None** buttons
-  that check/uncheck the whole level at once. They operate on the full universe
-  at that level (every file / every model), independent of the active search
-  box, and behave like checkbox toggles for the refit policy. Each button is
-  disabled when the level is already fully in (All) or fully out (None).
+- **Models filter**: checkbox list of every model **from files currently
+  checked in the Model yml files section**, all checked by default, plus a
+  name-search box. The file filter has **precedence** over the model filter.
+- **Reactive model list**: the Models section only lists models held by checked
+  files. Unchecking a file hides its models from the list **without changing
+  their checked state**; re-checking the file brings them back exactly as they
+  were. (Their diagram visibility was already governed by file precedence, so
+  this changes the model list display, not the graph.)
+- **Bulk selection**: each sub-section header gains **All** / **None** buttons.
+  File-level **All** / **None** check or clear every file (the full file
+  universe); model-level **All** / **None** check or clear every **listed**
+  model, i.e. every model from checked files, while leaving the hidden models'
+  checked state untouched. Both levels are independent of the active search
+  box and behave like checkbox toggles for the refit policy. Each button is
+  disabled when its level is already fully in (All) or fully out (None).
 - **VS Code-style file labels**: basename when unique; when two files share a
   basename, the shortest unique path suffix (which includes the folder) is
   shown.
@@ -183,11 +191,19 @@ All functions are pure and MUST NOT import `vscode`:
   `flow = buildFlowElements(visibleGraph, layoutDiagram(visibleGraph))`
   keyed on `[visibleGraph, layoutTick]`. Search boxes do **not** enter these
   memos (they only narrow the checkbox lists).
+- A memo `availableModelNames` holds the models of **checked** files (the
+  reactive universe for the Models list). The model selection itself stays a
+  set over the full universe: models of unchecked files are hidden from the
+  list but keep their checked state, so re-checking a file restores them
+  exactly (`reconcileSelection` continues to seed brand-new models as checked).
 - Toggling a file/model checkbox increments `filterTick`, which flows to
   `DiagramCanvas` and triggers a re-fit (see below); `mergeFlowNodes` keeps the
   positions of still-visible tables, so only genuinely (re-)added tables get an
   automatic slot (spec 04 machinery, unchanged). The bulk **All** / **None**
   handlers also bump `filterTick`, exactly like a checkbox toggle.
+- Bulk model handlers operate on `availableModelNames` only: **All** unions it
+  into the selection (hidden models untouched), **None** removes it (hidden
+  models untouched); the file handlers set the whole file `Set`.
 - Header status: `${visibleGraph.nodes.length} of ${graph.nodes.length} models`
   when the visible count differs, else `${graph.nodes.length} models`.
 - When `graph !== null` but `visibleGraph.nodes.length === 0`, the canvas stays
@@ -216,13 +232,14 @@ New `FilterSidebar.tsx`:
   whose `label` matches the search. Rows are keyed by `uri`; each row shows the
   `label` with the full `uri` as a tooltip (`title`).
 - **Models** section: same shape, rows keyed by model name, search placeholder
-  "Search models…".
-- **All** / **None** operate on the full universe at that level (all files /
-  all models), not the search-narrowed subset; they pass through
-  `onSelectAllFiles` / `onClearFiles` / `onSelectAllModels` / `onClearModels`
-  props from `App.tsx`, which set the corresponding selection `Set`. Each button
-  is `disabled` when its level is already fully in (All) or fully out (None);
-  both are disabled when the universe is empty.
+  "Search models…". It lists `availableModelNames` (models of checked files)
+  and shows `checked/total` over that reactive universe; when no file is
+  checked it renders a muted "No files selected" line instead of "No matches".
+- **All** / **None** pass through `onSelectAllFiles` / `onClearFiles` /
+  `onSelectAllModels` / `onClearModels` props from `App.tsx` (see the App
+  bullets above for their exact semantics). Each button is `disabled` when its
+  level is already fully in (All) or fully out (None); both are disabled when
+  the universe is empty.
 - Empty search results render a muted "No matches" line.
 
 ### 6. Styles (`webview-ui/styles.css`)
@@ -294,6 +311,17 @@ When the user unchecks the order_items model in the Models list
 Then the order_items table disappears
 And the order_items.yml file entry remains checked
 And all other models remain visible
+```
+
+### The model list reacts to the file filter
+
+```
+Given the dbt Diagram is open and the orders model is checked
+When the user unchecks orders.yml in the Model yml files list
+Then the orders model disappears from the Models list
+And the Models count no longer includes it
+When the user checks orders.yml again
+Then the orders model reappears in the Models list with its previous checked state
 ```
 
 ### Searching narrows a checkbox list without changing the diagram
@@ -412,6 +440,9 @@ And typing in either search box does not move or refit the diagram
       clear the whole level (the full universe, independent of search), bump
       the refit tick like a checkbox toggle, and disable when already in the
       target state.
+- [ ] The Models list is reactive: it lists only models from checked files;
+      unchecking a file hides its models without changing their checked state,
+      and re-checking the file restores them exactly.
 - [ ] `src/shared/labels.ts` and `src/shared/filter.ts` are pure (no `vscode`
       import) and covered by sub-second Vitest unit tests.
 - [ ] `npm test` and `npm run typecheck` pass; `src/dbt/*`,

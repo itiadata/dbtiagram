@@ -82,11 +82,18 @@ export function App(): JSX.Element {
   const previousFileUrisRef = useRef<string[]>([]);
   const previousModelNamesRef = useRef<string[]>([]);
 
-  // Model names are unique in dbt; dedupe in case a name ever spans files.
-  const allModelNames = useMemo(
-    () => [...new Set(modelFiles.flatMap((file) => file.models))],
-    [modelFiles],
-  );
+  // Models held by files that are currently checked: the Models filter only
+  // lists these (spec 05, reactive model list). Models of unchecked files are
+  // hidden from the list but keep their checked state, so re-checking a file
+  // restores them exactly (file precedence already hides them from the graph).
+  const availableModelNames = useMemo(() => {
+    const names = new Set<string>();
+    for (const file of modelFiles) {
+      if (!selectedFiles.has(file.uri)) continue;
+      for (const model of file.models) names.add(model);
+    }
+    return [...names];
+  }, [modelFiles, selectedFiles]);
 
   useEffect(() => {
     const listener = (event: MessageEvent<MessageToWebview>): void => {
@@ -237,9 +244,10 @@ export function App(): JSX.Element {
     setFilterTick((tick) => tick + 1);
   }, []);
 
-  // Bulk All / None per filter level (spec 05): they operate on the full
-  // universe (every file / every model), independent of the search boxes, and
-  // behave like checkbox toggles for the refit policy.
+  // Bulk All / None per filter level (spec 05): file handlers set the whole
+  // file Set; model handlers operate only on the listed (available) models,
+  // leaving the hidden models' checked state untouched. All of them behave
+  // like checkbox toggles for the refit policy.
   const selectAllFiles = useCallback((): void => {
     setSelectedFiles(new Set(modelFiles.map((file) => file.uri)));
     setFilterTick((tick) => tick + 1);
@@ -251,14 +259,18 @@ export function App(): JSX.Element {
   }, []);
 
   const selectAllModels = useCallback((): void => {
-    setSelectedModels(new Set(allModelNames));
+    setSelectedModels((current) => new Set([...current, ...availableModelNames]));
     setFilterTick((tick) => tick + 1);
-  }, [allModelNames]);
+  }, [availableModelNames]);
 
   const clearModels = useCallback((): void => {
-    setSelectedModels(new Set());
+    setSelectedModels((current) => {
+      const next = new Set(current);
+      for (const name of availableModelNames) next.delete(name);
+      return next;
+    });
     setFilterTick((tick) => tick + 1);
-  }, []);
+  }, [availableModelNames]);
 
   const addColumn = (): void => {
     const column = form.column.trim();
@@ -292,7 +304,7 @@ export function App(): JSX.Element {
       <div className="app__body">
         <FilterSidebar
           files={modelFiles}
-          allModelNames={allModelNames}
+          availableModelNames={availableModelNames}
           selectedFiles={selectedFiles}
           selectedModels={selectedModels}
           fileSearch={fileSearch}

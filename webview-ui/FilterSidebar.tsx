@@ -58,7 +58,8 @@ function CollapsibleSection({
 
 interface FilterSidebarProps {
   files: DiagramModelFile[];
-  allModelNames: string[];
+  /** Models of currently checked files — the reactive universe of the Models list. */
+  availableModelNames: string[];
   selectedFiles: ReadonlySet<string>;
   selectedModels: ReadonlySet<string>;
   fileSearch: string;
@@ -75,7 +76,7 @@ interface FilterSidebarProps {
 
 export function FilterSidebar({
   files,
-  allModelNames,
+  availableModelNames,
   selectedFiles,
   selectedModels,
   fileSearch,
@@ -97,9 +98,9 @@ export function FilterSidebar({
   const [modelsOpen, setModelsOpen] = useState(true);
 
   const visibleFiles = files.filter((file) => matchesSearch(file.label, fileSearch));
-  const visibleModels = allModelNames.filter((name) => matchesSearch(name, modelSearch));
+  const visibleModels = availableModelNames.filter((name) => matchesSearch(name, modelSearch));
   const checkedFileCount = files.filter((file) => selectedFiles.has(file.uri)).length;
-  const checkedModelCount = allModelNames.filter((name) => selectedModels.has(name)).length;
+  const checkedModelCount = availableModelNames.filter((name) => selectedModels.has(name)).length;
 
   return (
     <aside className="sidebar">
@@ -165,7 +166,7 @@ export function FilterSidebar({
 
         <CollapsibleSection
           title="Models"
-          count={`${checkedModelCount}/${allModelNames.length}`}
+          count={`${checkedModelCount}/${availableModelNames.length}`}
           open={modelsOpen}
           onToggle={() => setModelsOpen((open) => !open)}
           actions={
@@ -174,7 +175,7 @@ export function FilterSidebar({
                 type="button"
                 className="sidebar__bulk-button"
                 aria-label="Select all models"
-                disabled={checkedModelCount === allModelNames.length}
+                disabled={checkedModelCount === availableModelNames.length}
                 onClick={onSelectAllModels}
               >
                 All
@@ -199,6 +200,12 @@ export function FilterSidebar({
             onChange={(e) => onModelSearchChange(e.target.value)}
           />
           <ul className="sidebar__list">
+            {availableModelNames.length === 0 && (
+              <li className="sidebar__empty">No files selected</li>
+            )}
+            {availableModelNames.length > 0 && visibleModels.length === 0 && (
+              <li className="sidebar__empty">No matches</li>
+            )}
             {visibleModels.map((name) => (
               <li key={name}>
                 <label className="sidebar__item">
