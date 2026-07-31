@@ -14,6 +14,7 @@ up-to-date spec in `specs/features/`.
 | ID  | Feature | Status |
 |-----|---------|--------|
 | 01  | Open dbt Diagram from the editor title bar | Done |
+| 02  | Column-level foreign key edges | Approved |
 
 Status values: `draft` → `approved` → `implemented` → `done`.
 
