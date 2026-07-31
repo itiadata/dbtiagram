@@ -2,6 +2,10 @@ version: 2
 models:
   - name: orders
     description: One row per order
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments:
+            combination_of_columns: [order_id]
     columns:
       - name: order_id
         data_type: integer
@@ -15,5 +19,10 @@ models:
       - name: total_amount
         data_type: numeric
         description: Order total excluding tax
-    refs:
-      - customers
+    constraints:
+      - type: primary_key
+        columns: [order_id]
+      - type: foreign_key
+        columns: [customer_id]
+        to: ref('customers')
+        to_columns: [customer_id]

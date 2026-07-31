@@ -4,6 +4,7 @@
   --card: #ffffff;
   --border: #d0d0d0;
   --accent: #2563eb;
+  --accent-hover: #1e40af;
   --text: #1f1f1f;
   --muted: #6b6b6b;
   --error: #b91c1c;
@@ -112,9 +113,19 @@ body {
   font-size: 11px;
 }
 
-.edge {
+.node__column-highlight {
+  fill: color-mix(in srgb, var(--accent) 22%, transparent);
+}
+
+.edge-bundle path {
+  fill: none;
   stroke: var(--accent);
   stroke-width: 1.5;
+}
+
+.edge-bundle--hovered path {
+  stroke-width: 3.5;
+  stroke: var(--accent-hover);
 }
 
 @media (prefers-color-scheme: dark) {
@@ -124,5 +135,6 @@ body {
     --border: #4a4a4a;
     --text: #e6e6e6;
     --muted: #9b9b9b;
+    --accent-hover: #60a5fa;
   }
 }

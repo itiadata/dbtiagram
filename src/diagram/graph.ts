@@ -2,6 +2,7 @@
  * Pure graph logic: derives diagram nodes/edges from dbt model definitions.
  * MUST NOT import `vscode`.
  */
+import { parseRef } from '../dbt/refs';
 import type { ModelColumn, ModelDefinition } from '../dbt/types';
 
 export interface TableNodeColumn {
@@ -20,6 +21,10 @@ export interface TableNode {
 export interface RelationEdge {
   source: string;
   target: string;
+  /** FK columns on the source model; empty for a table-level edge. */
+  sourceColumns: string[];
+  /** FK columns on the target model; empty for a table-level edge. */
+  targetColumns: string[];
 }
 
 export interface DiagramGraph {
@@ -27,7 +32,12 @@ export interface DiagramGraph {
   edges: RelationEdge[];
 }
 
-/** Builds the diagram graph from a set of model definitions. */
+/**
+ * Builds the diagram graph from a set of model definitions.
+ *
+ * Edges are derived exclusively from `foreign_key` constraints (spec 02). The
+ * legacy `refs` key is not a relationship source and never produces edges.
+ */
 export function buildDiagram(models: ModelDefinition[]): DiagramGraph {
   const known = new Set(models.map((m) => m.name));
 
@@ -43,11 +53,30 @@ export function buildDiagram(models: ModelDefinition[]): DiagramGraph {
   }));
 
   const edges: RelationEdge[] = [];
+  const seen = new Set<string>();
+
   for (const model of models) {
-    for (const ref of model.refs ?? []) {
-      if (ref !== model.name && known.has(ref)) {
-        edges.push({ source: model.name, target: ref });
-      }
+    for (const constraint of model.constraints ?? []) {
+      if (constraint.type !== 'foreign_key') continue;
+      if (constraint.to === undefined) continue;
+      const ref = parseRef(constraint.to);
+      if (ref === null) continue;
+      const target = ref.name;
+      if (target === model.name || !known.has(target)) continue;
+
+      const edge: RelationEdge = {
+        source: model.name,
+        target,
+        sourceColumns: constraint.columns ?? [],
+        targetColumns: constraint.toColumns ?? [],
+      };
+
+      const key = `${edge.source}\u0000${edge.target}\u0000${JSON.stringify(
+        edge.sourceColumns,
+      )}\u0000${JSON.stringify(edge.targetColumns)}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      edges.push(edge);
     }
   }
 

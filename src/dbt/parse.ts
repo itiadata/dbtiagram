@@ -2,7 +2,7 @@
  * Parsing of dbt `model.yml` files. Pure logic — MUST NOT import `vscode`.
  */
 import { parse } from 'yaml';
-import type { ModelDefinition, ModelYmlFile } from './types';
+import type { ModelConstraint, ModelDefinition, ModelYmlFile } from './types';
 
 export class ModelYmlParseError extends Error {
   public readonly source: string;
@@ -63,6 +63,13 @@ function normalizeModel(raw: Record<string, unknown>, source: string): ModelDefi
   }
 
   const model: ModelDefinition = { name };
+  const modeledKeys = new Set(['name', 'description', 'config', 'columns', 'constraints', 'meta']);
+
+  const extra: Record<string, unknown> = {};
+  for (const key of Object.keys(raw)) {
+    if (!modeledKeys.has(key)) extra[key] = raw[key];
+  }
+  if (Object.keys(extra).length > 0) model.extra = extra;
 
   const description = raw.description;
   if (typeof description === 'string') model.description = description;
@@ -79,9 +86,11 @@ function normalizeModel(raw: Record<string, unknown>, source: string): ModelDefi
       .map((c) => normalizeColumn(c, source));
   }
 
-  const refs = raw.refs;
-  if (Array.isArray(refs)) {
-    model.refs = refs.filter((r): r is string => typeof r === 'string');
+  const constraints = raw.constraints;
+  if (Array.isArray(constraints)) {
+    model.constraints = constraints
+      .filter((c): c is Record<string, unknown> => isRecord(c))
+      .map((c) => normalizeConstraint(c));
   }
 
   const meta = raw.meta;
@@ -103,4 +112,57 @@ function normalizeColumn(raw: Record<string, unknown>, source: string) {
     ...(typeof raw.description === 'string' ? { description: raw.description } : {}),
     ...(Array.isArray(raw.tests) ? { tests: raw.tests.filter((t): t is string => typeof t === 'string') } : {}),
   };
+}
+
+/**
+ * Coerces a raw constraint mapping into a strict `ModelConstraint`. Known keys
+ * are mapped to their camelCase form; every other key is preserved verbatim so
+ * the round trip parse -> edit -> serialize -> parse is lossless.
+ */
+function normalizeConstraint(raw: Record<string, unknown>): ModelConstraint {
+  const constraint: ModelConstraint = {};
+  const modeledKeys = new Set([
+    'type',
+    'columns',
+    'to',
+    'to_columns',
+    'name',
+    'expression',
+    'warn_unenforced',
+    'error_if',
+  ]);
+
+  const type = raw.type;
+  if (typeof type === 'string') constraint.type = type;
+
+  const columns = raw.columns;
+  if (Array.isArray(columns)) {
+    constraint.columns = columns.filter((c): c is string => typeof c === 'string');
+  }
+
+  const to = raw.to;
+  if (typeof to === 'string') constraint.to = to;
+
+  const toColumns = raw.to_columns;
+  if (Array.isArray(toColumns)) {
+    constraint.toColumns = toColumns.filter((c): c is string => typeof c === 'string');
+  }
+
+  const name = raw.name;
+  if (typeof name === 'string') constraint.name = name;
+
+  const expression = raw.expression;
+  if (typeof expression === 'string') constraint.expression = expression;
+
+  const warnUnenforced = raw.warn_unenforced;
+  if (typeof warnUnenforced === 'boolean') constraint.warnUnenforced = warnUnenforced;
+
+  const errorIf = raw.error_if;
+  if (typeof errorIf === 'string') constraint.errorIf = errorIf;
+
+  for (const key of Object.keys(raw)) {
+    if (!modeledKeys.has(key)) constraint[key] = raw[key];
+  }
+
+  return constraint;
 }

@@ -3,6 +3,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { describe, expect, it } from 'vitest';
 import { parseModelYml } from '../../src/dbt/parse';
+import { serializeModelYml } from '../../src/dbt/serialize';
 import type { ModelDefinition } from '../../src/dbt/types';
 import { buildDiagram } from '../../src/diagram/graph';
 
@@ -36,12 +37,24 @@ describe('sample fixture (fixtures/sample-dbt)', () => {
     expect(nodeNames).toEqual(['customers', 'order_items', 'orders', 'products']);
 
     const edges = graph.edges
-      .map((edge) => `${edge.source}->${edge.target}`)
+      .map(
+        (edge) =>
+          `${edge.source}.${edge.sourceColumns.join('+')}->${edge.target}.${edge.targetColumns.join('+')}`,
+      )
       .sort();
     expect(edges).toEqual([
-      'order_items->orders',
-      'order_items->products',
-      'orders->customers',
+      'order_items.order_id+customer_id->orders.order_id+customer_id',
+      'order_items.product_id->products.product_id',
+      'orders.customer_id->customers.customer_id',
     ]);
+  });
+
+  it('round trips every fixture file losslessly', () => {
+    const files = fs.readdirSync(fixtureModelsDir).filter((file) => file.endsWith('.yml'));
+    for (const file of files) {
+      const content = fs.readFileSync(path.join(fixtureModelsDir, file), 'utf8');
+      const parsed = parseModelYml(content, file);
+      expect(parseModelYml(serializeModelYml(parsed), file)).toEqual(parsed);
+    }
   });
 });

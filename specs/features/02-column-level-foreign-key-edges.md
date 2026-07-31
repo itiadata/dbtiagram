@@ -1,7 +1,7 @@
 ---
 id: 02
 title: Column-level foreign key edges
-status: approved
+status: done
 priority: high
 created: 2026-07-31
 owner: unassigned

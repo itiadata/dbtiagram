@@ -1,5 +1,7 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import type { DiagramGraph, TableNode } from '../src/diagram/graph';
+import type { BundleSegment, EdgeBundle, NodeLayout } from '../src/diagram/layout';
+import { layoutDiagram } from '../src/diagram/layout';
 import type { MessageToExtension, MessageToWebview } from '../src/shared/protocol';
 
 const vscode = window.acquireVsCodeApi();
@@ -11,6 +13,26 @@ interface FormState {
   description: string;
 }
 
+interface ColumnRef {
+  model: string;
+  column: string;
+}
+
+/** Every column a bundle touches, on both the source and the target side. */
+function bundleColumns(bundle: EdgeBundle): ColumnRef[] {
+  return [
+    ...bundle.sourceColumns.map((column) => ({ model: bundle.source, column })),
+    ...bundle.targetColumns.map((column) => ({ model: bundle.target, column })),
+  ];
+}
+
+function segmentToPath(segment: BundleSegment): string {
+  if (segment.kind === 'line') {
+    return `M ${segment.from.x} ${segment.from.y} L ${segment.to.x} ${segment.to.y}`;
+  }
+  return `M ${segment.from.x} ${segment.from.y} C ${segment.control1.x} ${segment.control1.y}, ${segment.control2.x} ${segment.control2.y}, ${segment.to.x} ${segment.to.y}`;
+}
+
 export function App(): JSX.Element {
   const [graph, setGraph] = useState<DiagramGraph | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -20,6 +42,8 @@ export function App(): JSX.Element {
     dataType: '',
     description: '',
   });
+  const [hoveredBundleId, setHoveredBundleId] = useState<string | null>(null);
+  const [hoveredColumn, setHoveredColumn] = useState<ColumnRef | null>(null);
 
   useEffect(() => {
     const listener = (event: MessageEvent<MessageToWebview>): void => {
@@ -38,6 +62,47 @@ export function App(): JSX.Element {
     vscode.postMessage({ type: 'webview:ready' } satisfies MessageToExtension);
     return () => window.removeEventListener('message', listener);
   }, []);
+
+  const layout = useMemo(() => (graph === null ? null : layoutDiagram(graph)), [graph]);
+
+  const highlightedColumns = useMemo(() => {
+    if (layout === null) return new Set<string>();
+    const set = new Set<string>();
+    if (hoveredColumn !== null) {
+      set.add(`${hoveredColumn.model}\u0000${hoveredColumn.column}`);
+    }
+    for (const bundle of layout.bundles) {
+      const active =
+        bundle.id === hoveredBundleId ||
+        (hoveredColumn !== null &&
+          bundleColumns(bundle).some(
+            (ref) => ref.model === hoveredColumn.model && ref.column === hoveredColumn.column,
+          ));
+      if (!active) continue;
+      for (const ref of bundleColumns(bundle)) {
+        set.add(`${ref.model}\u0000${ref.column}`);
+      }
+    }
+    return set;
+  }, [layout, hoveredBundleId, hoveredColumn]);
+
+  const isBundleActive = (bundle: EdgeBundle): boolean => {
+    if (bundle.id === hoveredBundleId) return true;
+    if (hoveredColumn === null) return false;
+    return bundleColumns(bundle).some(
+      (ref) => ref.model === hoveredColumn.model && ref.column === hoveredColumn.column,
+    );
+  };
+
+  const hoverColumn = (model: string, column: string): void => {
+    setHoveredColumn({ model, column });
+  };
+
+  const unhoverColumn = (model: string, column: string): void => {
+    setHoveredColumn((current) =>
+      current?.model === model && current?.column === column ? null : current,
+    );
+  };
 
   const addColumn = (): void => {
     const column = form.column.trim();
@@ -98,72 +163,99 @@ export function App(): JSX.Element {
         </button>
       </section>
 
-      {graph === null ? (
+      {graph === null || layout === null ? (
         <p className="empty">No diagram yet.</p>
       ) : (
         <svg className="canvas" width="100%" height="100%" viewBox="0 0 1400 800" aria-label="Table diagram">
-          {graph.edges.map((edge) => {
-            const source = nodePosition(graph.nodes, edge.source);
-            const target = nodePosition(graph.nodes, edge.target);
-            if (source === null || target === null) return null;
+          {layout.bundles.map((bundle) => {
+            const active = isBundleActive(bundle);
             return (
-              <line
-                key={`${edge.source}->${edge.target}`}
-                className="edge"
-                x1={source.x}
-                y1={source.y}
-                x2={target.x}
-                y2={target.y}
-              />
+              <g
+                key={bundle.id}
+                className={`edge-bundle${active ? ' edge-bundle--hovered' : ''}`}
+                onMouseEnter={() => setHoveredBundleId(bundle.id)}
+                onMouseLeave={() =>
+                  setHoveredBundleId((current) => (current === bundle.id ? null : current))
+                }
+              >
+                <title>{bundle.title}</title>
+                {bundle.segments.map((segment, index) => (
+                  <path key={index} d={segmentToPath(segment)} />
+                ))}
+              </g>
             );
           })}
-          {graph.nodes.map((node, index) => (
-            <g key={node.id} transform={`translate(${columnPosition(index).x}, ${columnPosition(index).y})`}>
-              <NodeCard node={node} />
-            </g>
-          ))}
+          {layout.nodes.map((nodeLayout) => {
+            const node = graph.nodes.find((n) => n.id === nodeLayout.id);
+            if (node === undefined) return null;
+            return (
+              <g key={node.id} transform={`translate(${nodeLayout.x}, ${nodeLayout.y})`}>
+                <NodeCard
+                  node={node}
+                  layout={nodeLayout}
+                  highlighted={highlightedColumns}
+                  onColumnHover={hoverColumn}
+                  onColumnLeave={unhoverColumn}
+                />
+              </g>
+            );
+          })}
         </svg>
       )}
     </main>
   );
 }
 
-function NodeCard({ node }: { node: TableNode }): JSX.Element {
+interface NodeCardProps {
+  node: TableNode;
+  layout: NodeLayout;
+  highlighted: Set<string>;
+  onColumnHover: (model: string, column: string) => void;
+  onColumnLeave: (model: string, column: string) => void;
+}
+
+function NodeCard({ node, layout, highlighted, onColumnHover, onColumnLeave }: NodeCardProps): JSX.Element {
   return (
     <g className="node">
-      <rect className="node__frame" width={240} height={36 + node.columns.length * 24} rx={6} />
+      <rect className="node__frame" width={layout.width} height={layout.height} rx={6} />
       <title>{node.description ?? node.label}</title>
-      <text className="node__title" x={120} y={24} textAnchor="middle">
+      <text className="node__title" x={layout.width / 2} y={24} textAnchor="middle">
         {node.label}
       </text>
-      {node.columns.map((column, i) => (
-        <g key={column.name} transform={`translate(0, ${44 + i * 24})`}>
-          <line className="node__divider" x1={8} x2={232} />
-          <text className="node__column" x={12} y={16}>
-            {column.name}
-          </text>
-          {column.dataType !== undefined && (
-            <text className="node__type" x={228} y={16} textAnchor="end">
-              {column.dataType}
+      {node.columns.map((column, index) => {
+        const rowY = layout.columnY[index] - 12 - layout.y;
+        const isHighlighted = highlighted.has(`${node.id}\u0000${column.name}`);
+        return (
+          <g
+            key={column.name}
+            className="node__row"
+            transform={`translate(0, ${rowY})`}
+            onMouseEnter={() => onColumnHover(node.id, column.name)}
+            onMouseLeave={() => onColumnLeave(node.id, column.name)}
+          >
+            {isHighlighted && (
+              <rect
+                className="node__column-highlight"
+                x={2}
+                y={2}
+                width={layout.width - 4}
+                height={20}
+                rx={3}
+              />
+            )}
+            <line className="node__divider" x1={8} x2={layout.width - 8} />
+            <text className="node__column" x={12} y={16}>
+              {column.name}
             </text>
-          )}
-          {column.description !== undefined && (
-            <title>{column.description}</title>
-          )}
-        </g>
-      ))}
+            {column.dataType !== undefined && (
+              <text className="node__type" x={layout.width - 12} y={16} textAnchor="end">
+                {column.dataType}
+              </text>
+            )}
+            {column.description !== undefined && <title>{column.description}</title>}
+          </g>
+        );
+      })}
     </g>
   );
-}
-
-function nodePosition(nodes: TableNode[], id: string): { x: number; y: number } | null {
-  const index = nodes.findIndex((n) => n.id === id);
-  if (index === -1) return null;
-  return columnPosition(index);
-}
-
-function columnPosition(index: number): { x: number; y: number } {
-  const x = 60 + (index % 4) * 320;
-  const y = 80 + Math.floor(index / 4) * 240;
-  return { x, y };
 }
