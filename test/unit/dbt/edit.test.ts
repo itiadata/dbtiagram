@@ -49,6 +49,76 @@ describe('applyEdit', () => {
         applyEdit(models, { kind: 'setModelName', model: 'missing', name: 'x' }),
       ).toThrow(EditError);
     });
+
+    it('re-points FK constraints that reference the renamed model', () => {
+      const withFk: ModelDefinition[] = [
+        { name: 'orders' },
+        {
+          name: 'order_items',
+          constraints: [
+            { type: 'foreign_key', columns: ['order_id'], to: "ref('orders')", toColumns: ['id'] },
+          ],
+        },
+        { name: 'customers', constraints: [{ type: 'primary_key', columns: ['id'] }] },
+      ];
+      const { models: next } = applyEdit(withFk, {
+        kind: 'setModelName',
+        model: 'orders',
+        name: 'orders_v2',
+      });
+      expect(next[1].constraints?.[0].to).toBe("ref('orders_v2')");
+      // The rest of the constraint is untouched.
+      expect(next[1].constraints?.[0].columns).toEqual(['order_id']);
+      expect(next[1].constraints?.[0].toColumns).toEqual(['id']);
+      // Non-FK constraints and unrelated models keep object identity.
+      expect(next[2]).toBe(withFk[2]);
+    });
+
+    it('re-points self-referencing FK constraints', () => {
+      const withSelfFk: ModelDefinition[] = [
+        {
+          name: 'orders',
+          constraints: [
+            {
+              type: 'foreign_key',
+              columns: ['parent_id'],
+              to: "ref('orders')",
+              toColumns: ['id'],
+            },
+          ],
+        },
+      ];
+      const { models: next } = applyEdit(withSelfFk, {
+        kind: 'setModelName',
+        model: 'orders',
+        name: 'orders_v2',
+      });
+      expect(next[0].constraints?.[0].to).toBe("ref('orders_v2')");
+    });
+
+    it('re-points package-qualified refs and leaves others untouched', () => {
+      const withFks: ModelDefinition[] = [
+        { name: 'orders' },
+        {
+          name: 'audit',
+          constraints: [
+            { type: 'foreign_key', columns: ['a'], to: "ref('s_pp', 'orders')", toColumns: ['b'] },
+            { type: 'foreign_key', columns: ['c'], to: 'orders', toColumns: ['d'] },
+            { type: 'foreign_key', columns: ['e'], to: "ref('customers')", toColumns: ['f'] },
+          ],
+        },
+      ];
+      const { models: next } = applyEdit(withFks, {
+        kind: 'setModelName',
+        model: 'orders',
+        name: 'orders_v2',
+      });
+      expect(next[1].constraints?.[0].to).toBe("ref('s_pp', 'orders_v2')");
+      // Unparseable to string cannot be re-pointed.
+      expect(next[1].constraints?.[1].to).toBe('orders');
+      // Ref to a different model is untouched.
+      expect(next[1].constraints?.[2].to).toBe("ref('customers')");
+    });
   });
 
   describe('setModelDescription', () => {
@@ -134,6 +204,126 @@ describe('applyEdit', () => {
         name: 'id',
       });
       expect(next[0].columns?.[0].name).toBe('id');
+    });
+
+    it('keeps object identity when the column rename is a no-op', () => {
+      const { models: next } = applyEdit(models, {
+        kind: 'setColumnName',
+        model: 'orders',
+        column: 'id',
+        name: ' id ',
+      });
+      expect(next[0]).toBe(models[0]);
+    });
+
+    it('re-points FK to_columns that target the renamed column', () => {
+      const withFk: ModelDefinition[] = [
+        { name: 'orders', columns: [{ name: 'order_id' }] },
+        {
+          name: 'staging_orders',
+          constraints: [
+            {
+              type: 'foreign_key',
+              columns: ['order_id'],
+              to: "ref('orders')",
+              toColumns: ['order_id'],
+            },
+          ],
+        },
+      ];
+      const { models: next } = applyEdit(withFk, {
+        kind: 'setColumnName',
+        model: 'orders',
+        column: 'order_id',
+        name: 'order_key',
+      });
+      expect(next[0].columns?.map((c) => c.name)).toEqual(['order_key']);
+      expect(next[1].constraints?.[0].toColumns).toEqual(['order_key']);
+      // The other model's own (source) columns are untouched.
+      expect(next[1].constraints?.[0].columns).toEqual(['order_id']);
+    });
+
+    it('re-points FK source columns declared on the renamed model', () => {
+      const withFk: ModelDefinition[] = [
+        {
+          name: 'orders',
+          columns: [{ name: 'customer_id' }],
+          constraints: [
+            {
+              type: 'foreign_key',
+              columns: ['customer_id'],
+              to: "ref('customers')",
+              toColumns: ['id'],
+            },
+          ],
+        },
+        { name: 'customers', columns: [{ name: 'id' }] },
+      ];
+      const { models: next } = applyEdit(withFk, {
+        kind: 'setColumnName',
+        model: 'orders',
+        column: 'customer_id',
+        name: 'customer_key',
+      });
+      expect(next[0].constraints?.[0].columns).toEqual(['customer_key']);
+      expect(next[0].constraints?.[0].toColumns).toEqual(['id']);
+      // Unrelated model keeps object identity.
+      expect(next[1]).toBe(withFk[1]);
+    });
+
+    it('re-points both sides of a self-referencing FK', () => {
+      const withSelfFk: ModelDefinition[] = [
+        {
+          name: 'orders',
+          columns: [{ name: 'order_id' }],
+          constraints: [
+            {
+              type: 'foreign_key',
+              columns: ['order_id'],
+              to: "ref('orders')",
+              toColumns: ['order_id'],
+            },
+          ],
+        },
+      ];
+      const { models: next } = applyEdit(withSelfFk, {
+        kind: 'setColumnName',
+        model: 'orders',
+        column: 'order_id',
+        name: 'order_key',
+      });
+      expect(next[0].constraints?.[0].columns).toEqual(['order_key']);
+      expect(next[0].constraints?.[0].toColumns).toEqual(['order_key']);
+    });
+
+    it('leaves non-FK and unparseable-target constraints untouched on a column rename', () => {
+      const withFk: ModelDefinition[] = [
+        { name: 'orders', columns: [{ name: 'order_id' }] },
+        {
+          name: 'order_items',
+          constraints: [
+            {
+              type: 'foreign_key',
+              columns: ['order_id'],
+              to: "ref('orders')",
+              toColumns: ['order_id'],
+            },
+            { type: 'primary_key', columns: ['order_id'] },
+            { type: 'foreign_key', columns: ['x'], to: 'orders', toColumns: ['order_id'] },
+          ],
+        },
+      ];
+      const { models: next } = applyEdit(withFk, {
+        kind: 'setColumnName',
+        model: 'orders',
+        column: 'order_id',
+        name: 'order_key',
+      });
+      const constraints = next[1].constraints ?? [];
+      expect(constraints[0].toColumns).toEqual(['order_key']);
+      expect(constraints[1]).toEqual({ type: 'primary_key', columns: ['order_id'] });
+      // A to value that is not a parseable ref cannot name the target — untouched.
+      expect(constraints[2].toColumns).toEqual(['order_id']);
     });
   });
 

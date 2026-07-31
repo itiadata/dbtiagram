@@ -30,8 +30,9 @@ form is removed**. Instead:
 Every edit commits to disk through the existing `diagram:edit` pipeline
 (spec 04): the webview posts a `ModelEdit`, the pure `applyEdit` in
 `src/dbt/edit.ts` applies it to the in-memory model set, and the panel
-persists the affected `model.yml` file(s). FK (constraint) editing is
-explicitly **out of scope** — a later feature.
+persists the affected `model.yml` file(s). Editing FK constraints through
+the UI is out of scope — a later feature — but renames propagate to the
+`foreign_key` constraints that reference the renamed entity (see Scope).
 
 ## Background
 
@@ -95,12 +96,19 @@ sidebar (`webview-ui/FilterSidebar.tsx`) are **unchanged**.
 
 ### Out of scope
 
-- **FK editing** (constraints, `to` refs, `columns`/`to_columns`) — a later
-  feature, per the user. Consequently, renaming a model or column **does not
-  update** the `foreign_key` constraints that reference it: a model rename
-  makes the FK edges pointing at it drop (the `ref(...)` no longer resolves
-  to a known model); a column rename detaches the edges attached to that
-  column's handles. The constraint entries stay in the YAML untouched.
+- **FK editing** (creating/removing constraints, hand-editing `to` refs or
+  `columns`/`to_columns`) — a later feature, per the user. Constraint entries
+  are otherwise untouched by property edits. Two deliberate exceptions:
+  - a **model rename propagates to FK constraints** — every `foreign_key`
+    constraint whose `to` is a parseable `ref(...)` naming the renamed model
+    is re-pointed at the new name (in any model, self-references included),
+    so the edges survive the rename;
+  - a **column rename propagates to FK column references** — every
+    `foreign_key` constraint that references the renamed column is re-pointed
+    at the new name: its `columns` when the constraint is declared on the
+    renamed model (source side), and its `to_columns` when the constraint's
+    `to` parses to the renamed model (target side, any model, self-references
+    included).
 - **Add-column UI** (removed; returns as its own feature).
 - Editing anything other than the listed properties (version, config, meta,
   tests, constraints, model `data_tests`, etc.).
@@ -130,14 +138,27 @@ exhaustive). Behavior of the new/normalized cases:
 - `setModelName` — trim `name`; empty → `EditError('Model name must not be
   empty')`; renaming to another existing model's name → `EditError` (checked
   against the whole flat list, excluding the renamed model itself); otherwise
-  `{ ...m, name }`.
+  `{ ...m, name }` **plus an FK propagation pass**: every model (the renamed
+  one included) whose `constraints` hold a `foreign_key` entry with a `to`
+  that `parseRef` resolves to the old name gets that `to` re-pointed at the
+  new name via a new pure `renameRefTarget` in `src/dbt/refs.ts`. The rewrite
+  preserves the ref's quoting and surrounding whitespace, changes only the
+  name segment, and skips non-FK constraints and unparseable `to` strings.
+  Models whose constraints did not change keep object identity, so
+  `distributeEditedModels` rewrites only the affected files.
 - `setModelDescription` / `setColumnDescription` — **stored as typed**;
   whitespace-only → `description: undefined` (the serializer already omits
   `undefined` keys). Existing tests pass non-empty values, so they are
   unaffected.
 - `setColumnName` — trim; empty → `EditError`; renaming to another column's
   name within the same model → `EditError`; missing column → `EditError`
-  (mirroring `setColumnDescription`).
+  (mirroring `setColumnDescription`). **Plus an FK propagation pass**: every
+  `foreign_key` constraint that references the renamed column is re-pointed
+  at the new name — its `columns` when the constraint is declared on the
+  renamed model (source side), and its `to_columns` when the constraint's
+  `to` parses to the renamed model (target side, any model, self-references
+  included). Constraint entries that do not change keep object identity, so
+  `distributeEditedModels` rewrites only the affected files.
 - `setColumnDataType` — trim; whitespace-only → `dataType: undefined` (the
   `data_type` key is dropped on write-back); missing column → `EditError`.
 
@@ -373,6 +394,26 @@ And the details sidebar still shows the selected table, now named orders_v2
 And models/orders.yml contains a model named orders_v2
 ```
 
+### Renaming a model re-points foreign keys that reference it
+
+```
+Given the dbt Diagram is open and order_items has a foreign_key constraint with to: ref('orders')
+When the user renames the orders model to orders_v2 in the details sidebar
+Then order_items.yml's constraint to reads ref('orders_v2')
+And the FK edge from order_items to orders_v2 is still drawn
+And the constraint's columns and to_columns are unchanged
+```
+
+### Renaming a column re-points FK column references
+
+```
+Given the dbt Diagram is open and staging/orders has a foreign_key constraint with to: ref('orders') and to_columns: [order_id]
+When the user renames the order_id column in orders to order_key
+Then staging/orders.yml's constraint to_columns reads [order_key]
+And orders.yml's own foreign_key constraints that list order_id in their columns read order_key
+And the constraints' other entries are unchanged
+```
+
 ### Editing the model description persists; a blank description clears it
 
 ```
@@ -470,6 +511,15 @@ And the details sidebar still shows the orders table properties
       the selection on the renamed entity, revert the selection on a rejected
       edit (with an error banner), and clear the selection if the entity is
       removed externally.
+- [ ] Renaming a model re-points every `foreign_key` constraint `to` ref that
+      names it (in any model, self-references included) at the new name,
+      preserving the ref's quoting and whitespace; non-FK constraints and
+      unparseable `to` values are untouched, and only the affected files are
+      rewritten.
+- [ ] Renaming a column re-points every FK reference to it: `to_columns` in
+      constraints whose `to` targets the renamed model, and `columns` in
+      constraints declared on the renamed model (self-references included);
+      other constraint entries and unrelated constraints are untouched.
 - [ ] Selection survives being filtered out by the sidebar and is reconciled
       against the full graph on every `diagram:update`.
 - [ ] `applyEditAndPersist` writes back by position via the new pure
@@ -501,9 +551,15 @@ confirmation at approval time:
 - **(e) Selection reconcile scope.** Selection is reconciled against the full
   graph, so it survives being filtered out and is cleared only when the entity
   truly disappears (including an external delete in the YAML).
-- **(f) Renames do not update FK constraints.** A model or column rename
-  leaves `foreign_key` constraint entries untouched; edges that reference the
-  renamed entity may drop. FK editing is the later feature.
+- **(f) Renames propagate to FK constraints.** Renaming a model re-points
+  every `foreign_key` constraint (in any model, self-references included)
+  whose `to` is a parseable `ref(...)` naming the old model at the new name,
+  preserving the ref's quoting and whitespace; non-FK constraints and
+  unparseable `to` strings are untouched. Renaming a column re-points every
+  FK reference to it — `to_columns` in constraints whose `to` targets the
+  renamed model, and `columns` in constraints declared on the renamed model
+  (self-references included); unrelated constraints are untouched. (Changed
+  from "renames do not update FK constraints" per the user's request.)
 - **(g) Write-back distribution change.** `applyEditAndPersist` switches from
   name-set matching to the new index-based `distributeEditedModels` (fixes the
   rename-persistence bug and is covered by a pure unit test).
