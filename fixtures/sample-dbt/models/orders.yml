@@ -1,0 +1,19 @@
+version: 2
+models:
+  - name: orders
+    description: One row per order
+    columns:
+      - name: order_id
+        data_type: integer
+        description: Primary key
+        tests:
+          - not_null
+          - unique
+      - name: customer_id
+        data_type: integer
+        description: FK to customers
+      - name: total_amount
+        data_type: numeric
+        description: Order total excluding tax
+    refs:
+      - customers

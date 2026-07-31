@@ -1,0 +1,16 @@
+version: 2
+models:
+  - name: order_items
+    description: One row per line item in an order
+    columns:
+      - name: order_item_id
+        data_type: integer
+      - name: order_id
+        data_type: integer
+      - name: product_id
+        data_type: integer
+      - name: quantity
+        data_type: integer
+    refs:
+      - orders
+      - products

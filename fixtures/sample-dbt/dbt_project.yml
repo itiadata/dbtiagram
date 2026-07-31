@@ -1,0 +1,5 @@
+name: sample
+version: 1.0.0
+profile: sample
+model-paths:
+  - models

@@ -1,0 +1,12 @@
+version: 2
+models:
+  - name: products
+    description: One row per product
+    columns:
+      - name: product_id
+        data_type: integer
+      - name: name
+        data_type: string
+      - name: new
+        data_type: number
+        description: jeje

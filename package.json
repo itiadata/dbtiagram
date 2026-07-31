@@ -1,0 +1,96 @@
+{
+  "name": "dbtiagram",
+  "displayName": "dbt Diagram",
+  "description": "Visual, webview-based editor for dbt model.yml files. Renders an ER-style diagram of your tables and writes edits back to YAML in real time.",
+  "version": "0.0.1",
+  "publisher": "your-publisher-name",
+  "license": "UNLICENSED",
+  "private": true,
+  "engines": {
+    "vscode": "^1.90.0"
+  },
+  "categories": [
+    "Data Science",
+    "Visualization"
+  ],
+  "keywords": [
+    "dbt",
+    "data modeling",
+    "diagram",
+    "yaml"
+  ],
+  "activationEvents": [
+    "onCommand:dbtiagram.open",
+    "onStartupFinished"
+  ],
+  "main": "./dist/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "dbtiagram.open",
+        "title": "Open dbt Model Diagram",
+        "category": "dbt Diagram",
+        "icon": "$(database)"
+      }
+    ],
+    "menus": {
+      "editor/title": [
+        {
+          "command": "dbtiagram.open",
+          "group": "navigation@1",
+          "when": "dbtiagram.isModelYml"
+        }
+      ]
+    },
+    "configuration": {
+      "title": "dbt Diagram",
+      "properties": {
+        "dbtiagram.modelFileGlob": {
+          "type": "string",
+          "default": "**/models/**/*.yml",
+          "description": "Glob pattern used to discover dbt model.yml files in the workspace."
+        },
+        "dbtiagram.watchModelFiles": {
+          "type": "boolean",
+          "default": true,
+          "description": "Reload the diagram automatically when model.yml files change on disk."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "build": "node esbuild.config.mjs",
+    "watch": "node esbuild.config.mjs --watch",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "test": "npm run test:unit && npm run test:integration",
+    "test:unit": "vitest run",
+    "test:unit:watch": "vitest",
+    "test:integration": "npm run compile:test && node ./out/test/integration/runTests.js",
+    "compile:test": "tsc -p tsconfig.test.json",
+    "package": "npm run build && vsce package"
+  },
+  "dependencies": {
+    "yaml": "^2.4.2"
+  },
+  "devDependencies": {
+    "@types/mocha": "^10.0.6",
+    "@types/node": "^20.12.7",
+    "@types/react": "^18.2.79",
+    "@types/react-dom": "^18.2.25",
+    "@types/vscode": "^1.90.0",
+    "@vscode/test-electron": "^2.3.9",
+    "@vscode/vsce": "^2.26.0",
+    "esbuild": "^0.20.2",
+    "mocha": "^10.4.0",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
+    "typescript": "^5.4.5",
+    "vitest": "^1.6.0"
+  },
+  "allowScripts": {
+    "@vscode/vsce-sign@2.0.9": true,
+    "esbuild@0.20.2": true,
+    "esbuild@0.21.5": true,
+    "keytar@7.9.0": true
+  }
+}
