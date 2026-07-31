@@ -1,0 +1,15 @@
+version: 2
+models:
+  - name: staging_orders
+    description: Staging view over raw orders
+    columns:
+      - name: order_id
+        data_type: integer
+        description: Primary key
+        tests:
+          - not_null
+    constraints:
+      - type: foreign_key
+        columns: [order_id]
+        to: ref('orders')
+        to_columns: [order_id]

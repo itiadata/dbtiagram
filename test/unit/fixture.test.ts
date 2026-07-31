@@ -6,35 +6,52 @@ import { parseModelYml } from '../../src/dbt/parse';
 import { serializeModelYml } from '../../src/dbt/serialize';
 import type { ModelDefinition } from '../../src/dbt/types';
 import { buildDiagram } from '../../src/diagram/graph';
+import { disambiguateFileLabels } from '../../src/shared/labels';
 
 const fixtureModelsDir = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
   '../../fixtures/sample-dbt/models',
 );
 
+/**
+ * Every model.yml under the fixture's models tree, mirroring the extension's
+ * recursive discovery (spec 05): the tree contains two files named
+ * orders.yml — models/orders.yml and models/staging/orders.yml.
+ */
+function listModelYmlFiles(dir: string): string[] {
+  const files: string[] = [];
+  for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+    const full = path.join(dir, entry.name);
+    if (entry.isDirectory()) files.push(...listModelYmlFiles(full));
+    else if (entry.name.endsWith('.yml')) files.push(full);
+  }
+  return files;
+}
+
 function loadFixtureModels(): ModelDefinition[] {
   const models: ModelDefinition[] = [];
-  const files = fs.readdirSync(fixtureModelsDir).filter((file) => file.endsWith('.yml'));
-  for (const file of files) {
-    const content = fs.readFileSync(path.join(fixtureModelsDir, file), 'utf8');
+  for (const file of listModelYmlFiles(fixtureModelsDir)) {
+    const content = fs.readFileSync(file, 'utf8');
     models.push(...parseModelYml(content, file).models);
   }
   return models;
 }
 
+const expectedModelNames = ['customers', 'order_items', 'orders', 'products', 'staging_orders'];
+
 describe('sample fixture (fixtures/sample-dbt)', () => {
-  it('parses every model.yml file', () => {
+  it('parses every model.yml file, including nested ones', () => {
     const names = loadFixtureModels()
       .map((model) => model.name)
       .sort();
-    expect(names).toEqual(['customers', 'order_items', 'orders', 'products']);
+    expect(names).toEqual(expectedModelNames);
   });
 
   it('builds the expected diagram graph', () => {
     const graph = buildDiagram(loadFixtureModels());
 
     const nodeNames = graph.nodes.map((node) => node.id).sort();
-    expect(nodeNames).toEqual(['customers', 'order_items', 'orders', 'products']);
+    expect(nodeNames).toEqual(expectedModelNames);
 
     const edges = graph.edges
       .map(
@@ -46,13 +63,34 @@ describe('sample fixture (fixtures/sample-dbt)', () => {
       'order_items.order_id+customer_id->orders.order_id+customer_id',
       'order_items.product_id->products.product_id',
       'orders.customer_id->customers.customer_id',
+      'staging_orders.order_id->orders.order_id',
+    ]);
+  });
+
+  it('labels the two same-named model.yml files with their folder (spec 05)', () => {
+    const files = listModelYmlFiles(fixtureModelsDir);
+    const root = path.resolve(fixtureModelsDir, '..'); // fixtures/sample-dbt
+
+    const labels = disambiguateFileLabels(files, root);
+
+    const ordersFiles = files.filter((file) => path.basename(file) === 'orders.yml');
+    expect(ordersFiles).toHaveLength(2);
+
+    const labelsForOrders = ordersFiles
+      .map(
+        (file) =>
+          `${path.relative(root, file).split(path.sep).join('/')} -> ${labels.get(file)}`,
+      )
+      .sort();
+    expect(labelsForOrders).toEqual([
+      'models/orders.yml -> models/orders.yml',
+      'models/staging/orders.yml -> staging/orders.yml',
     ]);
   });
 
   it('round trips every fixture file losslessly', () => {
-    const files = fs.readdirSync(fixtureModelsDir).filter((file) => file.endsWith('.yml'));
-    for (const file of files) {
-      const content = fs.readFileSync(path.join(fixtureModelsDir, file), 'utf8');
+    for (const file of listModelYmlFiles(fixtureModelsDir)) {
+      const content = fs.readFileSync(file, 'utf8');
       const parsed = parseModelYml(content, file);
       expect(parseModelYml(serializeModelYml(parsed), file)).toEqual(parsed);
     }
