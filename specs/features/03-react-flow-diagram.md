@@ -204,10 +204,11 @@ memoized `nodeTypes` object passed to `<ReactFlow>`.
   - No floating tooltip is rendered on edge hover (removed in Manual Verify).
     Each edge's `data.title` payload stays in the flow data but is not shown
     anywhere in the UI.
-- The hovered edge (and only it) is additionally marked `animated: true`, so
-  React Flow animates its dashes along the path from the source (child) model
-  toward the target (parent) model — the FK visually "flows" child to parent
-  while hovered. `animated` resets to `false` on leave.
+- Every **active** edge (the hovered edge, or each edge touching a hovered
+  column) is additionally marked `animated: true`, so React Flow animates its
+  dashes along the path from the source (child) model toward the target
+  (parent) model — the FK visually "flows" child to parent while active.
+  `animated` resets to `false` on mouse leave.
 - Edge hover uses the invisible `interactionWidth` band (24px) as the hit area;
   the visible stroke stays 1.5px wide. This is what makes hovering forgiving
   instead of pixel-perfect.
@@ -345,6 +346,8 @@ Then the edge still becomes hovered (highlight and flow animation)
 Given the dbt Diagram is open and shows the order_items -> orders edges
 When the user hovers the order_items.customer_id row
 Then the edges touching order_items.customer_id are highlighted
+And those edges' dashes animate along their paths, flowing from the child
+  model toward the parent model
 And the counterpart column rows (orders.customer_id) are highlighted
 ```
 
@@ -385,8 +388,9 @@ And the diagram re-renders with the new column and the dagre arrangement
 - [ ] Edge hover is forgiving: an invisible `interactionWidth` band (24px)
       forms the hit area, so hovering does not require pixel-perfect accuracy
       on the 1.5px visible line.
-- [ ] The hovered edge is `animated`, its dashes flowing from the child model
-      toward the parent model; the animation stops on mouse leave.
+- [ ] Active edges are `animated`, their dashes flowing from the child model
+      toward the parent model — both for the hovered edge and for every edge
+      touching a hovered column; the animation stops on mouse leave.
 - [ ] Overlapping FK edges (shared destination handle or shared endpoints) are
       accepted as-is; no fan-out or edge-separation geometry is introduced.
 - [ ] Pan, zoom, and node drag work out of the box; the "Auto-layout" button
