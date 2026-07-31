@@ -1,15 +1,29 @@
 /**
  * Extension-host side of the webview panel: owns the webview, the in-memory
- * model set, and persistence. Handles messages from the webview.
+ * model store, and persistence. Handles webview edit messages and live
+ * model.yml changes from the workspace (spec 04).
  */
 import * as vscode from 'vscode';
 import { applyEdit } from '../dbt/edit';
 import type { ModelEdit } from '../dbt/edit';
-import type { ModelDefinition } from '../dbt/types';
+import {
+  applyFileDeleted,
+  applyFileRenamed,
+  applyTextChange,
+  createModelStore,
+  replaceModelStore,
+  upsertRecord,
+  type ModelStore,
+} from '../dbt/modelStore';
+import type { ModelDefinition, ModelYmlFile } from '../dbt/types';
 import { buildDiagram } from '../diagram/graph';
+import { matchesGlob } from '../shared/glob';
 import type { MessageToExtension, MessageToWebview } from '../shared/protocol';
-import { loadModelYmlFiles, writeModelYmlFile } from '../vscode/project';
-import type { ModelYmlRecord } from '../vscode/project';
+import { registerModelWatcher } from '../vscode/modelWatcher';
+import { loadModelYmlFiles, readFileText, writeModelYmlFile } from '../vscode/project';
+
+/** Ignore text-change echoes of our own disk writes within this window. */
+const SELF_WRITE_IGNORE_MS = 250;
 
 export class DiagramPanel {
   public static readonly viewType = 'dbtiagram.diagramPanel';
@@ -17,16 +31,31 @@ export class DiagramPanel {
 
   private readonly panel: vscode.WebviewPanel;
   private readonly disposables: vscode.Disposable[] = [];
-  private records: ModelYmlRecord[];
+  private store: ModelStore;
+  /** fsPath -> timestamp of our own disk writes, to ignore their echo. */
+  private readonly selfWrites = new Map<string, number>();
 
   private constructor(
     panel: vscode.WebviewPanel,
     private readonly extensionUri: vscode.Uri,
-    records: ModelYmlRecord[],
+    store: ModelStore,
   ) {
     this.panel = panel;
-    this.records = records;
-    this.postMessage({ type: 'diagram:update', diagram: this.diagram() });
+    this.store = store;
+    this.publish();
+
+    this.disposables.push(
+      ...registerModelWatcher({
+        getGlob: () => this.modelGlob,
+        getEnabled: () =>
+          vscode.workspace.getConfiguration('dbtiagram').get<boolean>('watchModelFiles', true),
+        onDocumentChanged: (uri, content) => this.onDocumentChanged(uri, content),
+        onFilesCreated: (uris) => void this.onFilesCreated(uris),
+        onFilesDeleted: (uris) => this.onFilesDeleted(uris),
+        onFilesRenamed: (oldUri, newUri) => void this.onFilesRenamed(oldUri, newUri),
+        onConfigurationChanged: () => void this.refresh(),
+      }),
+    );
 
     panel.webview.onDidReceiveMessage(
       (message: MessageToExtension) => {
@@ -58,34 +87,107 @@ export class DiagramPanel {
       },
     );
 
-    const { records, warnings } = await loadModelYmlFiles();
-    for (const warning of warnings) {
-      void vscode.window.showWarningMessage(`dbt Diagram: ${warning}`);
-    }
+    const result = await loadModelYmlFiles(this.modelFileGlob());
+    const store = replaceModelStore(
+      createModelStore(),
+      result.records.map((record) => ({ uri: record.uri.fsPath, file: record.file })),
+      result.failures.map((failure) => ({ uri: failure.uri.fsPath, error: failure.message })),
+    );
 
-    DiagramPanel.current = new DiagramPanel(panel, extensionUri, records);
+    DiagramPanel.current = new DiagramPanel(panel, extensionUri, store);
     panel.webview.html = DiagramPanel.current.getHtml();
   }
 
-  private diagram() {
-    const models: ModelDefinition[] = this.records.flatMap((r) => r.file.models);
-    return buildDiagram(models);
+  private static modelFileGlob(): string {
+    return vscode.workspace
+      .getConfiguration('dbtiagram')
+      .get<string>('modelFileGlob', '**/models/**/*.yml');
   }
 
-  /** Reloads model.yml files from disk and republishes the diagram. */
+  private get modelGlob(): string {
+    return DiagramPanel.modelFileGlob();
+  }
+
+  private publish(): void {
+    const models: ModelDefinition[] = this.store.records.flatMap((record) => record.file.models);
+    const pendingErrors = [...this.store.pendingErrors.entries()].map(([uri, message]) => ({
+      uri,
+      message,
+    }));
+    this.postMessage({ type: 'diagram:update', diagram: buildDiagram(models), pendingErrors });
+  }
+
+  /** Reloads every model.yml file from disk, keeping last good data for broken files. */
   public async refresh(): Promise<void> {
-    const { records, warnings } = await loadModelYmlFiles();
-    this.records = records;
-    for (const warning of warnings) {
-      void vscode.window.showWarningMessage(`dbt Diagram: ${warning}`);
+    const result = await loadModelYmlFiles(this.modelGlob);
+    this.store = replaceModelStore(
+      this.store,
+      result.records.map((record) => ({ uri: record.uri.fsPath, file: record.file })),
+      result.failures.map((failure) => ({ uri: failure.uri.fsPath, error: failure.message })),
+    );
+    this.publish();
+  }
+
+  private onDocumentChanged(uri: vscode.Uri, content: string): void {
+    const fsPath = uri.fsPath;
+    if (this.isSelfWrite(fsPath)) return;
+    this.store = applyTextChange(this.store, fsPath, content);
+    this.publish();
+  }
+
+  private async onFilesCreated(uris: vscode.Uri[]): Promise<void> {
+    for (const uri of uris) {
+      const fsPath = uri.fsPath;
+      if (this.isSelfWrite(fsPath)) continue;
+      try {
+        const content = await readFileText(uri);
+        this.store = applyTextChange(this.store, fsPath, content);
+      } catch {
+        // The file vanished between the create event and the read; the next
+        // workspace event reconciles it.
+      }
     }
-    this.postMessage({ type: 'diagram:update', diagram: this.diagram() });
+    this.publish();
+  }
+
+  private onFilesDeleted(uris: vscode.Uri[]): void {
+    for (const uri of uris) {
+      this.store = applyFileDeleted(this.store, uri.fsPath);
+    }
+    this.publish();
+  }
+
+  private async onFilesRenamed(oldUri: vscode.Uri, newUri: vscode.Uri): Promise<void> {
+    const oldPath = oldUri.fsPath;
+    const newPath = newUri.fsPath;
+    if (!matchesGlob(newPath, this.modelGlob)) {
+      this.store = applyFileDeleted(this.store, oldPath);
+      this.publish();
+      return;
+    }
+    try {
+      const content = await readFileText(newUri);
+      this.store = applyFileRenamed(this.store, oldPath, newPath, content);
+    } catch {
+      this.store = applyFileDeleted(this.store, oldPath);
+    }
+    this.publish();
+  }
+
+  /** True when a change event is the echo of one of our own disk writes. */
+  private isSelfWrite(fsPath: string): boolean {
+    const last = this.selfWrites.get(fsPath);
+    if (last === undefined) return false;
+    if (Date.now() - last < SELF_WRITE_IGNORE_MS) return true;
+    this.selfWrites.delete(fsPath);
+    return false;
   }
 
   private async onMessage(message: MessageToExtension): Promise<void> {
     switch (message.type) {
       case 'webview:ready':
-        this.postMessage({ type: 'diagram:update', diagram: this.diagram() });
+        // The initial publish may have raced the webview's message listener.
+        this.publish();
         return;
       case 'diagram:edit': {
         try {
@@ -102,19 +204,21 @@ export class DiagramPanel {
   }
 
   private async applyEditAndPersist(edit: ModelEdit): Promise<void> {
-    const all: ModelDefinition[] = this.records.flatMap((r) => r.file.models);
+    const all: ModelDefinition[] = this.store.records.flatMap((record) => record.file.models);
     const { models } = applyEdit(all, edit);
 
-    for (const record of this.records) {
-      const names = new Set(record.file.models.map((m) => m.name));
-      const edited = models.filter((m) => names.has(m.name));
+    for (const record of this.store.records) {
+      const names = new Set(record.file.models.map((model) => model.name));
+      const edited = models.filter((model) => names.has(model.name));
       if (edited.length > 0) {
-        record.file = { version: record.file.version, models: edited };
-        await writeModelYmlFile(record.uri, record.file);
+        const file: ModelYmlFile = { version: record.file.version, models: edited };
+        this.store = upsertRecord(this.store, record.uri, file);
+        await writeModelYmlFile(vscode.Uri.file(record.uri), file);
+        this.selfWrites.set(record.uri, Date.now());
       }
     }
 
-    this.postMessage({ type: 'diagram:update', diagram: buildDiagram(models) });
+    this.publish();
   }
 
   private postMessage(message: MessageToWebview): void {

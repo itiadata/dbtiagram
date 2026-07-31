@@ -17,13 +17,8 @@ export function activate(context: vscode.ExtensionContext): void {
     context.subscriptions.push(disposable);
   }
 
-  context.subscriptions.push(
-    vscode.workspace.onDidSaveTextDocument(() => {
-      if (DiagramPanel.current) {
-        void DiagramPanel.current.refresh();
-      }
-    }),
-  );
+  // Live model.yml watching (typing, save, create/delete/rename) is registered
+  // per panel by DiagramPanel (spec 04); nothing else is needed here.
 }
 
 export function deactivate(): void {

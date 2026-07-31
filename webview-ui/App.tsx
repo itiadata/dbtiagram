@@ -1,4 +1,11 @@
-import { useCallback, useEffect, useMemo, useState, type MouseEvent as ReactMouseEvent } from 'react';
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type MouseEvent as ReactMouseEvent,
+} from 'react';
 import {
   Background,
   Controls,
@@ -17,6 +24,7 @@ import {
 import type { DiagramGraph } from '../src/diagram/graph';
 import { buildFlowElements, type FlowElements } from '../src/diagram/flow';
 import { layoutDiagram } from '../src/diagram/layout';
+import { mergeFlowNodes } from '../src/diagram/positions';
 import type { MessageToExtension, MessageToWebview } from '../src/shared/protocol';
 import {
   DiagramInteractionContext,
@@ -43,6 +51,7 @@ interface ColumnRef {
 export function App(): JSX.Element {
   const [graph, setGraph] = useState<DiagramGraph | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [pendingErrors, setPendingErrors] = useState<string[]>([]);
   const [form, setForm] = useState<FormState>({
     model: '',
     column: '',
@@ -59,6 +68,7 @@ export function App(): JSX.Element {
       switch (message.type) {
         case 'diagram:update':
           setGraph(message.diagram);
+          setPendingErrors(message.pendingErrors.map((pending) => `${pending.uri}: ${pending.message}`));
           setError(null);
           break;
         case 'diagram:error':
@@ -78,8 +88,6 @@ export function App(): JSX.Element {
     if (graph === null) return null;
     return buildFlowElements(graph, layoutDiagram(graph));
   }, [graph, layoutTick]);
-
-  const nodes = useMemo<Node[]>(() => (flow === null ? [] : flow.nodes), [flow]);
 
   const activeEdgeIds = useMemo(() => {
     if (flow === null) return new Set<string>();
@@ -187,6 +195,16 @@ export function App(): JSX.Element {
       </header>
 
       {error !== null && <div className="banner banner--error">{error}</div>}
+      {pendingErrors.length > 0 && (
+        <div className="banner banner--info">
+          <strong>Waiting for valid YAML:</strong>
+          <ul className="banner__list">
+            {pendingErrors.map((entry) => (
+              <li key={entry}>{entry}</li>
+            ))}
+          </ul>
+        </div>
+      )}
 
       <section className="form">
         <input
@@ -226,8 +244,8 @@ export function App(): JSX.Element {
             <DiagramInteractionContext.Provider value={interaction}>
               <DiagramCanvas
                 flow={flow}
-                nodes={nodes}
                 edges={edges}
+                layoutTick={layoutTick}
                 onEdgeMouseEnter={onEdgeMouseEnter}
                 onEdgeMouseLeave={onEdgeMouseLeave}
                 onAutoLayout={onAutoLayout}
@@ -242,8 +260,8 @@ export function App(): JSX.Element {
 
 interface DiagramCanvasProps {
   flow: FlowElements;
-  nodes: Node[];
   edges: Edge[];
+  layoutTick: number;
   onEdgeMouseEnter: (event: ReactMouseEvent, edge: Edge) => void;
   onEdgeMouseLeave: () => void;
   onAutoLayout: () => void;
@@ -251,8 +269,8 @@ interface DiagramCanvasProps {
 
 function DiagramCanvas({
   flow,
-  nodes,
   edges,
+  layoutTick,
   onEdgeMouseEnter,
   onEdgeMouseLeave,
   onAutoLayout,
@@ -260,22 +278,35 @@ function DiagramCanvas({
   const { fitView } = useReactFlow();
   const [rfNodes, setRfNodes] = useState<Node[]>([]);
   const [rfEdges, setRfEdges] = useState<Edge[]>([]);
+  const lastTickRef = useRef(layoutTick);
+  const lastIdsRef = useRef<string[]>([]);
+  const firstFitRef = useRef(true);
 
-  // Adopt the dagre arrangement whenever the diagram or its layout changes.
-  // `nodes` is stable across hovers, so manual drags are preserved.
+  // Adopt each new diagram without disturbing the layout: existing nodes keep
+  // their current position (manual drags and the previous arrangement survive),
+  // only brand-new ids receive an automatic slot, and vanished ids are dropped.
+  // Auto-layout (layoutTick bump) resets every node to the fresh dagre
+  // arrangement. The view re-fits only on the first render, when the node set
+  // grows, or after Auto-layout — never on ordinary live edits — so pan/zoom
+  // survives typing (spec 04).
   useEffect(() => {
-    setRfNodes(nodes);
-  }, [nodes]);
+    const reset = layoutTick !== lastTickRef.current;
+    lastTickRef.current = layoutTick;
+    setRfNodes((current) => (reset ? flow.nodes : mergeFlowNodes(flow.nodes, current)));
+
+    const ids = flow.nodes.map((node) => node.id);
+    const added = ids.filter((id) => !lastIdsRef.current.includes(id)).length > 0;
+    lastIdsRef.current = ids;
+    const isFirst = firstFitRef.current;
+    firstFitRef.current = false;
+    if (isFirst || added || reset) {
+      void fitView({ padding: 0.15, maxZoom: 1 });
+    }
+  }, [flow, layoutTick, fitView]);
 
   useEffect(() => {
     setRfEdges(edges);
   }, [edges]);
-
-  // Re-fit whenever the diagram or its dagre arrangement changes (keyed on
-  // `flow`, which is stable across hover changes).
-  useEffect(() => {
-    void fitView({ padding: 0.15, maxZoom: 1 });
-  }, [fitView, flow]);
 
   const onNodesChange = useCallback((changes: NodeChange[]): void => {
     setRfNodes((current) => applyNodeChanges(changes, current));

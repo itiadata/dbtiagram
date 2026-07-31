@@ -55,6 +55,17 @@ body {
   color: var(--error);
 }
 
+.banner--info {
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+  color: var(--text);
+}
+
+.banner__list {
+  margin: 4px 0 0;
+  padding-left: 20px;
+  font-size: 12px;
+}
+
 .form {
   display: flex;
   flex-wrap: wrap;

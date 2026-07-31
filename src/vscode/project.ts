@@ -12,29 +12,47 @@ export interface ModelYmlRecord {
   file: ModelYmlFile;
 }
 
-/** Discovers and parses every model.yml file in the workspace. */
-export async function loadModelYmlFiles(glob = '**/models/**/*.yml'): Promise<{
+/** A model.yml file that failed to parse during a workspace scan. */
+export interface ModelYmlFailure {
+  uri: vscode.Uri;
+  message: string;
+}
+
+export interface ModelYmlLoadResult {
   records: ModelYmlRecord[];
-  warnings: string[];
-}> {
+  failures: ModelYmlFailure[];
+}
+
+/** Reads a workspace file as UTF-8 text. */
+export async function readFileText(uri: vscode.Uri): Promise<string> {
+  return Buffer.from(await vscode.workspace.fs.readFile(uri)).toString('utf8');
+}
+
+/**
+ * Discovers and parses every model.yml file in the workspace. Files that fail
+ * to parse are reported in `failures` (with their uri) instead of being
+ * dropped silently, so callers can keep last-good data and surface the error
+ * (spec 04).
+ */
+export async function loadModelYmlFiles(glob = '**/models/**/*.yml'): Promise<ModelYmlLoadResult> {
   const uris = await vscode.workspace.findFiles(glob, '**/node_modules/**');
   const records: ModelYmlRecord[] = [];
-  const warnings: string[] = [];
+  const failures: ModelYmlFailure[] = [];
 
   for (const uri of uris) {
     try {
-      const content = Buffer.from(await vscode.workspace.fs.readFile(uri)).toString('utf8');
+      const content = await readFileText(uri);
       records.push({ uri, file: parseModelYml(content, uri.fsPath) });
     } catch (err) {
       const message =
         err instanceof ModelYmlParseError
           ? err.message
           : `Failed to read ${uri.fsPath}: ${String(err)}`;
-      warnings.push(message);
+      failures.push({ uri, message });
     }
   }
 
-  return { records, warnings };
+  return { records, failures };
 }
 
 /** Writes a model.yml file back to disk. */
