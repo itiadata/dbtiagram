@@ -73,6 +73,7 @@
     "yaml": "^2.4.2"
   },
   "devDependencies": {
+    "@dagrejs/dagre": "^3.0.0",
     "@types/mocha": "^10.0.6",
     "@types/node": "^20.12.7",
     "@types/react": "^18.2.79",
@@ -80,6 +81,7 @@
     "@types/vscode": "^1.90.0",
     "@vscode/test-electron": "^2.3.9",
     "@vscode/vsce": "^2.26.0",
+    "@xyflow/react": "^12.11.2",
     "esbuild": "^0.20.2",
     "mocha": "^10.4.0",
     "react": "^18.2.0",

@@ -1,10 +1,33 @@
-import { useEffect, useMemo, useState } from 'react';
-import type { DiagramGraph, TableNode } from '../src/diagram/graph';
-import type { BundleSegment, EdgeBundle, NodeLayout } from '../src/diagram/layout';
+import { useCallback, useEffect, useMemo, useState, type MouseEvent as ReactMouseEvent } from 'react';
+import {
+  Background,
+  Controls,
+  EdgeLabelRenderer,
+  Panel,
+  ReactFlow,
+  ReactFlowProvider,
+  applyEdgeChanges,
+  applyNodeChanges,
+  useReactFlow,
+  type Edge,
+  type EdgeChange,
+  type Node,
+  type NodeChange,
+  type NodeTypes,
+} from '@xyflow/react';
+import type { DiagramGraph } from '../src/diagram/graph';
+import { buildFlowElements, type FlowEdge, type FlowElements } from '../src/diagram/flow';
 import { layoutDiagram } from '../src/diagram/layout';
 import type { MessageToExtension, MessageToWebview } from '../src/shared/protocol';
+import {
+  DiagramInteractionContext,
+  type DiagramInteractionContextValue,
+} from './diagram-interaction-context';
+import { TableNode } from './TableNode';
 
 const vscode = window.acquireVsCodeApi();
+
+const nodeTypes: NodeTypes = { table: TableNode };
 
 interface FormState {
   model: string;
@@ -18,21 +41,6 @@ interface ColumnRef {
   column: string;
 }
 
-/** Every column a bundle touches, on both the source and the target side. */
-function bundleColumns(bundle: EdgeBundle): ColumnRef[] {
-  return [
-    ...bundle.sourceColumns.map((column) => ({ model: bundle.source, column })),
-    ...bundle.targetColumns.map((column) => ({ model: bundle.target, column })),
-  ];
-}
-
-function segmentToPath(segment: BundleSegment): string {
-  if (segment.kind === 'line') {
-    return `M ${segment.from.x} ${segment.from.y} L ${segment.to.x} ${segment.to.y}`;
-  }
-  return `M ${segment.from.x} ${segment.from.y} C ${segment.control1.x} ${segment.control1.y}, ${segment.control2.x} ${segment.control2.y}, ${segment.to.x} ${segment.to.y}`;
-}
-
 export function App(): JSX.Element {
   const [graph, setGraph] = useState<DiagramGraph | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -42,8 +50,9 @@ export function App(): JSX.Element {
     dataType: '',
     description: '',
   });
-  const [hoveredBundleId, setHoveredBundleId] = useState<string | null>(null);
+  const [hoveredEdgeId, setHoveredEdgeId] = useState<string | null>(null);
   const [hoveredColumn, setHoveredColumn] = useState<ColumnRef | null>(null);
+  const [layoutTick, setLayoutTick] = useState(0);
 
   useEffect(() => {
     const listener = (event: MessageEvent<MessageToWebview>): void => {
@@ -63,46 +72,95 @@ export function App(): JSX.Element {
     return () => window.removeEventListener('message', listener);
   }, []);
 
-  const layout = useMemo(() => (graph === null ? null : layoutDiagram(graph)), [graph]);
+  // The layout library re-runs when the graph changes or the user clicks
+  // Auto-layout; hover changes only re-derive highlights below, so node
+  // positions (and manual drags) stay stable across hovers.
+  const flow = useMemo<FlowElements | null>(() => {
+    if (graph === null) return null;
+    return buildFlowElements(graph, layoutDiagram(graph));
+  }, [graph, layoutTick]);
 
-  const highlightedColumns = useMemo(() => {
-    if (layout === null) return new Set<string>();
+  const nodes = useMemo<Node[]>(() => (flow === null ? [] : flow.nodes), [flow]);
+
+  const activeEdgeIds = useMemo(() => {
+    if (flow === null) return new Set<string>();
     const set = new Set<string>();
+    if (hoveredEdgeId !== null) set.add(hoveredEdgeId);
     if (hoveredColumn !== null) {
-      set.add(`${hoveredColumn.model}\u0000${hoveredColumn.column}`);
-    }
-    for (const bundle of layout.bundles) {
-      const active =
-        bundle.id === hoveredBundleId ||
-        (hoveredColumn !== null &&
-          bundleColumns(bundle).some(
-            (ref) => ref.model === hoveredColumn.model && ref.column === hoveredColumn.column,
-          ));
-      if (!active) continue;
-      for (const ref of bundleColumns(bundle)) {
-        set.add(`${ref.model}\u0000${ref.column}`);
+      for (const edge of flow.edges) {
+        if (edge.data.sourceColumn === undefined) continue;
+        const touches =
+          (edge.source === hoveredColumn.model &&
+            edge.data.sourceColumn === hoveredColumn.column) ||
+          (edge.target === hoveredColumn.model &&
+            edge.data.targetColumn === hoveredColumn.column);
+        if (touches) set.add(edge.id);
       }
     }
     return set;
-  }, [layout, hoveredBundleId, hoveredColumn]);
+  }, [flow, hoveredEdgeId, hoveredColumn]);
 
-  const isBundleActive = (bundle: EdgeBundle): boolean => {
-    if (bundle.id === hoveredBundleId) return true;
-    if (hoveredColumn === null) return false;
-    return bundleColumns(bundle).some(
-      (ref) => ref.model === hoveredColumn.model && ref.column === hoveredColumn.column,
-    );
-  };
+  const edges = useMemo<Edge[]>(() => {
+    if (flow === null) return [];
+    return flow.edges.map((edge) => ({
+      ...edge,
+      className: activeEdgeIds.has(edge.id) ? 'edge--active' : undefined,
+    }));
+  }, [flow, activeEdgeIds]);
 
-  const hoverColumn = (model: string, column: string): void => {
+  const highlightedColumns = useMemo(() => {
+    const byModel = new Map<string, Set<string>>();
+    if (flow === null) return byModel;
+    const add = (model: string, column: string): void => {
+      let set = byModel.get(model);
+      if (set === undefined) {
+        set = new Set();
+        byModel.set(model, set);
+      }
+      set.add(column);
+    };
+    if (hoveredColumn !== null) add(hoveredColumn.model, hoveredColumn.column);
+    for (const edge of flow.edges) {
+      if (!activeEdgeIds.has(edge.id)) continue;
+      if (edge.data.sourceColumn !== undefined) add(edge.source, edge.data.sourceColumn);
+      if (edge.data.targetColumn !== undefined) add(edge.target, edge.data.targetColumn);
+    }
+    return byModel;
+  }, [flow, activeEdgeIds, hoveredColumn]);
+
+  const hoveredEdge = useMemo<FlowEdge | null>(() => {
+    if (flow === null || hoveredEdgeId === null) return null;
+    return flow.edges.find((edge) => edge.id === hoveredEdgeId) ?? null;
+  }, [flow, hoveredEdgeId]);
+
+  const onColumnHover = useCallback((model: string, column: string): void => {
     setHoveredColumn({ model, column });
-  };
+  }, []);
 
-  const unhoverColumn = (model: string, column: string): void => {
+  const onColumnLeave = useCallback((model: string, column: string): void => {
     setHoveredColumn((current) =>
-      current?.model === model && current?.column === column ? null : current,
+      current !== null && current.model === model && current.column === column
+        ? null
+        : current,
     );
-  };
+  }, []);
+
+  const interaction: DiagramInteractionContextValue = useMemo(
+    () => ({ highlightedColumns, onColumnHover, onColumnLeave }),
+    [highlightedColumns, onColumnHover, onColumnLeave],
+  );
+
+  const onEdgeMouseEnter = useCallback((_event: ReactMouseEvent, edge: Edge): void => {
+    setHoveredEdgeId(edge.id);
+  }, []);
+
+  const onEdgeMouseLeave = useCallback((): void => {
+    setHoveredEdgeId(null);
+  }, []);
+
+  const onAutoLayout = useCallback((): void => {
+    setLayoutTick((tick) => tick + 1);
+  }, []);
 
   const addColumn = (): void => {
     const column = form.column.trim();
@@ -163,99 +221,123 @@ export function App(): JSX.Element {
         </button>
       </section>
 
-      {graph === null || layout === null ? (
+      {graph === null || flow === null ? (
         <p className="empty">No diagram yet.</p>
       ) : (
-        <svg className="canvas" width="100%" height="100%" viewBox="0 0 1400 800" aria-label="Table diagram">
-          {layout.bundles.map((bundle) => {
-            const active = isBundleActive(bundle);
-            return (
-              <g
-                key={bundle.id}
-                className={`edge-bundle${active ? ' edge-bundle--hovered' : ''}`}
-                onMouseEnter={() => setHoveredBundleId(bundle.id)}
-                onMouseLeave={() =>
-                  setHoveredBundleId((current) => (current === bundle.id ? null : current))
-                }
-              >
-                <title>{bundle.title}</title>
-                {bundle.segments.map((segment, index) => (
-                  <path key={index} d={segmentToPath(segment)} />
-                ))}
-              </g>
-            );
-          })}
-          {layout.nodes.map((nodeLayout) => {
-            const node = graph.nodes.find((n) => n.id === nodeLayout.id);
-            if (node === undefined) return null;
-            return (
-              <g key={node.id} transform={`translate(${nodeLayout.x}, ${nodeLayout.y})`}>
-                <NodeCard
-                  node={node}
-                  layout={nodeLayout}
-                  highlighted={highlightedColumns}
-                  onColumnHover={hoverColumn}
-                  onColumnLeave={unhoverColumn}
-                />
-              </g>
-            );
-          })}
-        </svg>
+        <section className="canvas">
+          <ReactFlowProvider>
+            <DiagramInteractionContext.Provider value={interaction}>
+              <DiagramCanvas
+                flow={flow}
+                nodes={nodes}
+                edges={edges}
+                hoveredEdge={hoveredEdge}
+                onEdgeMouseEnter={onEdgeMouseEnter}
+                onEdgeMouseLeave={onEdgeMouseLeave}
+                onAutoLayout={onAutoLayout}
+              />
+            </DiagramInteractionContext.Provider>
+          </ReactFlowProvider>
+        </section>
       )}
     </main>
   );
 }
 
-interface NodeCardProps {
-  node: TableNode;
-  layout: NodeLayout;
-  highlighted: Set<string>;
-  onColumnHover: (model: string, column: string) => void;
-  onColumnLeave: (model: string, column: string) => void;
+interface DiagramCanvasProps {
+  flow: FlowElements;
+  nodes: Node[];
+  edges: Edge[];
+  hoveredEdge: FlowEdge | null;
+  onEdgeMouseEnter: (event: ReactMouseEvent, edge: Edge) => void;
+  onEdgeMouseLeave: () => void;
+  onAutoLayout: () => void;
 }
 
-function NodeCard({ node, layout, highlighted, onColumnHover, onColumnLeave }: NodeCardProps): JSX.Element {
+function DiagramCanvas({
+  flow,
+  nodes,
+  edges,
+  hoveredEdge,
+  onEdgeMouseEnter,
+  onEdgeMouseLeave,
+  onAutoLayout,
+}: DiagramCanvasProps): JSX.Element {
+  const { fitView } = useReactFlow();
+  const [rfNodes, setRfNodes] = useState<Node[]>([]);
+  const [rfEdges, setRfEdges] = useState<Edge[]>([]);
+
+  // Adopt the dagre arrangement whenever the diagram or its layout changes.
+  // `nodes` is stable across hovers, so manual drags are preserved.
+  useEffect(() => {
+    setRfNodes(nodes);
+  }, [nodes]);
+
+  useEffect(() => {
+    setRfEdges(edges);
+  }, [edges]);
+
+  // Re-fit whenever the diagram or its dagre arrangement changes (keyed on
+  // `flow`, which is stable across hover changes).
+  useEffect(() => {
+    void fitView({ padding: 0.15, maxZoom: 1 });
+  }, [fitView, flow]);
+
+  const onNodesChange = useCallback((changes: NodeChange[]): void => {
+    setRfNodes((current) => applyNodeChanges(changes, current));
+  }, []);
+
+  const onEdgesChange = useCallback((changes: EdgeChange[]): void => {
+    setRfEdges((current) => applyEdgeChanges(changes, current));
+  }, []);
+
+  const tooltipPosition = useMemo(() => {
+    if (hoveredEdge === null) return null;
+    const source = nodes.find((node) => node.id === hoveredEdge.source);
+    const target = nodes.find((node) => node.id === hoveredEdge.target);
+    if (source === undefined || target === undefined) return null;
+    const sx = source.position.x + (source.width ?? 0) / 2;
+    const sy = source.position.y + (source.height ?? 0) / 2;
+    const tx = target.position.x + (target.width ?? 0) / 2;
+    const ty = target.position.y + (target.height ?? 0) / 2;
+    return { x: (sx + tx) / 2, y: (sy + ty) / 2 };
+  }, [hoveredEdge, nodes]);
+
   return (
-    <g className="node">
-      <rect className="node__frame" width={layout.width} height={layout.height} rx={6} />
-      <title>{node.description ?? node.label}</title>
-      <text className="node__title" x={layout.width / 2} y={24} textAnchor="middle">
-        {node.label}
-      </text>
-      {node.columns.map((column, index) => {
-        const rowY = layout.columnY[index] - 12 - layout.y;
-        const isHighlighted = highlighted.has(`${node.id}\u0000${column.name}`);
-        return (
-          <g
-            key={column.name}
-            className="node__row"
-            transform={`translate(0, ${rowY})`}
-            onMouseEnter={() => onColumnHover(node.id, column.name)}
-            onMouseLeave={() => onColumnLeave(node.id, column.name)}
+    <ReactFlow
+      nodes={rfNodes}
+      edges={rfEdges}
+      onNodesChange={onNodesChange}
+      onEdgesChange={onEdgesChange}
+      nodeTypes={nodeTypes}
+      fitView
+      fitViewOptions={{ padding: 0.15, maxZoom: 1 }}
+      nodesConnectable={false}
+      proOptions={{ hideAttribution: false }}
+      onEdgeMouseEnter={onEdgeMouseEnter}
+      onEdgeMouseLeave={onEdgeMouseLeave}
+      minZoom={0.1}
+      maxZoom={2}
+    >
+      <Background gap={16} size={1} />
+      <Controls />
+      <Panel position="top-right">
+        <button type="button" className="panel-button" onClick={onAutoLayout}>
+          Auto-layout
+        </button>
+      </Panel>
+      {hoveredEdge !== null && tooltipPosition !== null && (
+        <EdgeLabelRenderer>
+          <div
+            className="edge-tooltip"
+            style={{
+              transform: `translate(-50%, -50%) translate(${tooltipPosition.x}px, ${tooltipPosition.y}px)`,
+            }}
           >
-            {isHighlighted && (
-              <rect
-                className="node__column-highlight"
-                x={2}
-                y={2}
-                width={layout.width - 4}
-                height={20}
-                rx={3}
-              />
-            )}
-            <line className="node__divider" x1={8} x2={layout.width - 8} />
-            <text className="node__column" x={12} y={16}>
-              {column.name}
-            </text>
-            {column.dataType !== undefined && (
-              <text className="node__type" x={layout.width - 12} y={16} textAnchor="end">
-                {column.dataType}
-              </text>
-            )}
-            {column.description !== undefined && <title>{column.description}</title>}
-          </g>
-        );
-      })}
-    </g>
+            {hoveredEdge.data.title}
+          </div>
+        </EdgeLabelRenderer>
+      )}
+    </ReactFlow>
   );
 }
