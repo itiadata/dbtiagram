@@ -475,6 +475,13 @@ body {
   outline: none;
 }
 
+/* Title editor (spec 06): matches the header's typography and centering. */
+.table-node__inline-edit--title {
+  font-size: 13px;
+  font-weight: 600;
+  text-align: center;
+}
+
 /* ---- Edges ---- */
 
 /*

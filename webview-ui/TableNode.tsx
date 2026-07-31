@@ -26,8 +26,13 @@ import { DiagramInteractionContext } from './diagram-interaction-context';
 
 const EMPTY_COLUMNS: ReadonlySet<string> = new Set();
 
-/** Which cell of which column is being edited inline. */
-type EditingCell = { column: string; cell: 'name' | 'type' } | null;
+/**
+ * Which cell is being edited inline: the table title, or a cell of a column.
+ */
+type EditingCell =
+  | { kind: 'title' }
+  | { kind: 'column'; column: string; cell: 'name' | 'type' }
+  | null;
 
 function TableNodeComponent({ id, data }: NodeProps<FlowNode>): JSX.Element {
   const interaction = useContext(DiagramInteractionContext);
@@ -47,13 +52,32 @@ function TableNodeComponent({ id, data }: NodeProps<FlowNode>): JSX.Element {
         className={`table-node__title${selectedTable ? ' table-node__title--selected' : ''}`}
         title={data.description}
         onClick={() => interaction?.onTableSelect(id)}
+        onDoubleClick={(event) => {
+          event.stopPropagation();
+          setEditing({ kind: 'title' });
+        }}
       >
-        {data.label}
+        {editing?.kind === 'title' ? (
+          <InlineEditField
+            value={data.label}
+            titleStyle
+            onCommit={(draft) => {
+              setEditing(null);
+              const name = draft.trim();
+              if (name.length === 0) return; // blank model names revert silently
+              interaction?.onEdit({ kind: 'setModelName', model: id, name });
+            }}
+            onCancel={() => setEditing(null)}
+          />
+        ) : (
+          data.label
+        )}
       </div>
       {data.columns.map((column, index) => {
         const isHighlighted = highlighted.has(column.name);
         const isSelected = isSelectedColumn(column.name);
-        const editingCell = editing?.column === column.name ? editing.cell : null;
+        const editingCell =
+          editing?.kind === 'column' && editing.column === column.name ? editing.cell : null;
         return (
           <div
             key={column.name}
@@ -88,7 +112,7 @@ function TableNodeComponent({ id, data }: NodeProps<FlowNode>): JSX.Element {
                 className="table-node__column-name nodrag"
                 onDoubleClick={(event) => {
                   event.stopPropagation();
-                  setEditing({ column: column.name, cell: 'name' });
+                  setEditing({ kind: 'column', column: column.name, cell: 'name' });
                 }}
               >
                 {column.name}
@@ -116,7 +140,7 @@ function TableNodeComponent({ id, data }: NodeProps<FlowNode>): JSX.Element {
                 }`}
                 onDoubleClick={(event) => {
                   event.stopPropagation();
-                  setEditing({ column: column.name, cell: 'type' });
+                  setEditing({ kind: 'column', column: column.name, cell: 'type' });
                 }}
               >
                 {column.dataType ?? '—'}
@@ -139,6 +163,8 @@ function TableNodeComponent({ id, data }: NodeProps<FlowNode>): JSX.Element {
 interface InlineEditFieldProps {
   value: string;
   placeholder?: string;
+  /** Styles the input as a title editor (fills the header, matches its font). */
+  titleStyle?: boolean;
   onCommit: (draft: string) => void;
   onCancel: () => void;
 }
@@ -149,7 +175,13 @@ interface InlineEditFieldProps {
  * to the row's select handler. Enter/blur commit; Escape cancels (a cancelled
  * edit's trailing blur is ignored via `finishedRef`).
  */
-function InlineEditField({ value, placeholder, onCommit, onCancel }: InlineEditFieldProps): JSX.Element {
+function InlineEditField({
+  value,
+  placeholder,
+  titleStyle,
+  onCommit,
+  onCancel,
+}: InlineEditFieldProps): JSX.Element {
   const [draft, setDraft] = useState(value);
   const finishedRef = useRef(false);
 
@@ -183,7 +215,9 @@ function InlineEditField({ value, placeholder, onCommit, onCancel }: InlineEditF
 
   return (
     <input
-      className="table-node__inline-edit nodrag"
+      className={`table-node__inline-edit nodrag${
+        titleStyle ? ' table-node__inline-edit--title' : ''
+      }`}
       value={draft}
       placeholder={placeholder}
       autoFocus

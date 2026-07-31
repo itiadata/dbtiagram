@@ -16,9 +16,9 @@ As a dbt developer, I want to edit model and column properties directly on the
 diagram instead of jumping back and forth to the YAML. The current **Add-column
 form is removed**. Instead:
 
-- **Inline editing on the table cards:** double-clicking a column's **name**
-  (and its **data type**) turns that cell into a text input; the change commits
-  on Enter/blur and cancels on Escape.
+- **Inline editing on the table cards:** double-clicking the table **title**,
+  a column's **name**, or its **data type** turns it into a text input; the
+  change commits on Enter/blur and cancels on Escape.
 - **A right details sidebar** (mirroring the left filter sidebar's look)
   shows editable properties for whatever is selected:
   - a **table** selected by clicking its header shows its **name** and
@@ -78,10 +78,10 @@ sidebar (`webview-ui/FilterSidebar.tsx`) are **unchanged**.
   `DiagramInteractionContext` (extended, see Implementation Notes). Clicking a
   table header selects the table; clicking a column row selects the column;
   clicking empty canvas deselects.
-- **Inline editing** of column name and data type directly in `TableNode`
-  (double-click to edit; Enter/blur commits; Escape cancels). The data type
-  cell is **always rendered** (muted placeholder when absent) so a type can be
-  added by double-clicking an empty cell.
+- **Inline editing** of the table title, column name, and data type directly
+  in `TableNode` (double-click to edit; Enter/blur commits; Escape cancels).
+  The data type cell is **always rendered** (muted placeholder when absent) so
+  a type can be added by double-clicking an empty cell.
 - **Right details sidebar** (`webview-ui/DetailsSidebar.tsx`) mirroring the
   left sidebar's styling: table view (name, description) or column view (name,
   data type, description), all editable. Fields commit on blur/Enter, Escape
@@ -251,6 +251,13 @@ type Selection = { kind: 'table'; id: string } | { kind: 'column'; model: string
   - a draft `useState` seeded from the cell value and reset via an effect
     keyed on the incoming value (a `diagram:update` that changed this cell
     resets the draft; other updates leave it alone).
+- **Table title cell:** `onDoubleClick` on the header (with
+  `stopPropagation`) switches the label to the input; a single click still
+  selects the table. Commit: trimmed empty → revert silently (a model must
+  have a name); else
+  `onEdit({ kind: 'setModelName', model: id, name })` — the same edit kind
+  and selection bookkeeping as the sidebar Name field (section 4), including
+  the FK propagation on the host side.
 - **Column name cell:** `onDoubleClick` (with `stopPropagation`) switches the
   span to the input. Commit: trimmed empty → revert silently (a column must
   have a name); else
@@ -334,6 +341,18 @@ Then the name turns into a text input prefilled with "total_amount"
 When the user types "amount_total" and presses Enter
 Then the orders card shows "amount_total"
 And models/orders.yml now contains a column named amount_total
+```
+
+### Double-clicking the table title edits it inline
+
+```
+Given the dbt Diagram is open and shows the orders table
+When the user double-clicks the "orders" title
+Then the title turns into a text input prefilled with "orders"
+When the user types "orders_v2" and presses Enter
+Then the card title shows "orders_v2"
+And models/orders.yml contains a model named orders_v2
+And the FK constraints that reference orders are re-pointed at orders_v2
 ```
 
 ### Escape cancels an inline edit
@@ -493,9 +512,10 @@ And the details sidebar still shows the orders table properties
 
 - [ ] The Add-column form and its `addColumn` edit kind are removed (webview
       UI, `ModelEdit` union, `applyEdit` case, tests).
-- [ ] Double-clicking a column's name or data type cell turns it into an
-      inline input; Enter/blur commits, Escape cancels, and editing does not
-      drag the node.
+- [ ] Double-clicking the table title, a column's name, or a column's data
+      type cell turns it into an inline input; Enter/blur commits, Escape
+      cancels, a blank name reverts silently, and editing does not drag the
+      node.
 - [ ] The data type cell is always rendered (muted placeholder when absent)
       and double-clickable, so a type can be added to a typeless column.
 - [ ] Clicking a table header selects the table; clicking a column row selects
