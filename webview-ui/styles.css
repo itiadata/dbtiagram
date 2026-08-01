@@ -842,6 +842,18 @@ body {
   background: var(--accent);
 }
 
+/*
+ * Every column mounts all four handles so React Flow's cached handle bounds
+ * never go stale and an FK edge can never fail to resolve (spec 12, Manual
+ * Verify iteration). Handles no edge attaches to are simply invisible and
+ * inert, which keeps feature 09's rule: a dot appears exactly where an edge
+ * attaches and nowhere else.
+ */
+.react-flow__handle.table-node__handle--unused {
+  opacity: 0;
+  pointer-events: none;
+}
+
 .react-flow__attribution {
   color: var(--muted);
   background: transparent;

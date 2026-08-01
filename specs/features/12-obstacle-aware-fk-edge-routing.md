@@ -65,8 +65,11 @@ fully unit-testable as pure logic.
   styling.
 - `webview-ui/App.tsx` — `DiagramCanvas` calls `routeEdges` with the live node
   rects and passes each edge its route through `data`.
-- `webview-ui/styles.css` — edge stroke rules move from `.react-flow__edge-path`
-  usage to the custom edge where needed; visual appearance is unchanged.
+- `webview-ui/TableNode.tsx` — handles are **always mounted** (all four per
+  column); only their visibility is derived from `data.handles` (Manual Verify
+  iteration, section 8).
+- `webview-ui/styles.css` — a hidden-handle rule for unused handles; edge
+  stroke styling is unchanged.
 - `test/unit/diagram/routing.test.ts` (new), `test/unit/diagram/flow.test.ts`.
 
 ### Out of scope
@@ -188,6 +191,41 @@ microseconds. If a workspace ever exceeds `ROUTING_NODE_LIMIT` (200 nodes) the
 router degrades gracefully: obstacle scoring is skipped and the plain
 side-comparison route is used.
 
+### 8. Handles are always mounted (Manual Verify iteration)
+
+Manual Verify showed the reported bug is **not** in the router: for the
+shared-side case (a column that is both an FK target and an FK source, both
+edges leaving on the same side) `routeEdges` produces two distinct paths and a
+`handles` map holding both ids — yet only one line is painted.
+
+The cause is React Flow's handle resolution. React Flow resolves an edge's
+endpoint from the node's **cached handle bounds**, measured when the node is
+measured. Feature 09 mounts a column's `<Handle>` elements **conditionally**
+(only the ids present in `data.handles`), so whenever a node's handle set
+changes — exactly what happens when a second FK starts sharing a column's side
+— the newly mounted handle is missing from the cached bounds and React Flow
+**silently drops the edge that references it**. Conditional handles are a
+documented React Flow hazard; they require an explicit node-internals refresh.
+
+The fix removes the hazard instead of patching around it:
+
+- **Every column always mounts all four handles** (`source`/`target` ×
+  `left`/`right`). The handle set of a node therefore never changes, so the
+  cached bounds can never go stale and an edge can never fail to resolve.
+- **`data.handles` now only drives visibility**, not mounting: a handle whose
+  id is absent gets the `table-node__handle--unused` class
+  (`opacity: 0; pointer-events: none`), so the visual rule of feature 09 —
+  a dot appears exactly where an edge attaches and nowhere else — is unchanged.
+- The shared-side ±`HANDLE_SHARED_SIDE_OFFSET_PX` dot offset is unchanged. It
+  only shifts a handle by 5px, so even an un-refreshed frame draws the line in
+  the right place; `useUpdateNodeInternals` is still called when a node's
+  `handles` map changes so the bounds catch up on the next frame.
+
+This supersedes feature 09's Confirm at Approval (b) ("unused handles are not
+mounted at all"): the conditional mounting it chose is the direct cause of
+dropped edges. The user-visible rule it stated (dots only where an edge
+attaches) is preserved exactly.
+
 ## Scenarios
 
 ### A line between horizontally separated tables takes the direct path
@@ -234,6 +272,16 @@ When the user drags a third card onto that line
 Then the line re-routes around the dragged card while it is being dragged
 ```
 
+### Both FKs of a shared column are drawn when they leave on the same side
+
+```
+Given the dbt Diagram is open and products.product_id is the target of order_items.product_id and the source of an FK to customers.customer_id
+And both counterparts sit on the same side of products, so both lines leave product_id on that side
+Then both lines are drawn (neither is dropped)
+And both dots are visible, separated vertically on the row
+And this still holds while any of the three cards is dragged
+```
+
 ### Hover, virtual and interaction behavior are unchanged
 
 ```
@@ -272,6 +320,11 @@ And no error is shown
       `interactionWidth` hover band, the hover class, `animated`, and the
       dashed virtual stroke; it falls back to a straight path when no route is
       present.
+- [ ] Every column always mounts all four handles; `data.handles` drives only
+      their **visibility** (`table-node__handle--unused`), so React Flow can
+      never fail to resolve an edge endpoint and an edge is never dropped —
+      in particular both FKs of a column that is source **and** target on the
+      same side are drawn, with their two dots vertically separated.
 - [ ] Feature 09 behavior that must not regress: dots only at real endpoints,
       shared-side vertical dot separation, no table-level handles, zero-pair FK
       drafts, hover highlighting, edge double-click.

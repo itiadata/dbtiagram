@@ -1,13 +1,15 @@
 /**
  * Custom React Flow node that renders a dbt model as a table card.
  *
- * Each column row can carry a target Handle on its left edge and/or a source
- * Handle on its right edge so FK edges attach to the exact columns. Spec 09
- * merged: only handles that an edge actually uses are mounted, each at its
- * dynamically chosen side (`data.handles`: handle id -> side), so a dot
- * appears exactly where an FK edge attaches and nowhere else — unrelated
- * columns and edge-free cards show no dots at all. Table-level handles are
- * gone (FK edges are column-pair-only).
+ * Each column row carries a target and a source Handle on both its left and
+ * right edge so FK edges attach to the exact columns. Spec 12 (Manual Verify
+ * iteration): all four are ALWAYS mounted — React Flow caches handle bounds
+ * per node measurement, so conditionally mounting a handle makes it
+ * unresolvable and its edge is dropped. `data.handles` (handle id -> side)
+ * decides only which of them is VISIBLE, so a dot still appears exactly where
+ * an FK edge attaches and nowhere else — unrelated columns and edge-free cards
+ * show no dots at all. Table-level handles are gone (FK edges are
+ * column-pair-only).
  *
  * Since spec 06 the cards are interactive: clicking the header selects the
  * table, clicking a row selects the column, and double-clicking a column's
@@ -16,7 +18,7 @@
  * placeholder when absent) so a type can be added to a typeless column.
  */
 import { memo, useContext, useEffect, useRef, useState, type KeyboardEvent } from 'react';
-import { Handle, Position, type NodeProps } from '@xyflow/react';
+import { Handle, Position, useUpdateNodeInternals, type NodeProps } from '@xyflow/react';
 import {
   HANDLE_SHARED_SIDE_OFFSET_PX,
   columnSourceHandle,
@@ -57,22 +59,35 @@ function TableNodeComponent({ id, data }: NodeProps<FlowNode>): JSX.Element {
     selectedColumnRef.column === column;
 
   // Spec 09 merged: the handles this node's edges actually use (id -> side).
-  // A Handle renders only when its id is present, at the recorded side.
+  // Spec 12 (Manual Verify iteration): ALL four handles per column are always
+  // mounted — React Flow caches a node's handle bounds when it measures the
+  // node, so conditionally mounting a handle leaves those bounds stale and the
+  // edge referencing the new handle is silently DROPPED (the "only one of two
+  // FK lines is drawn" bug). `data.handles` therefore drives only visibility.
   const usedHandles = data.handles;
+  const updateNodeInternals = useUpdateNodeInternals();
+  // The handle set never changes, but the shared-side dot offset moves a
+  // handle by 5px; refresh the cached bounds when the map changes so React
+  // Flow's endpoint coordinates catch up on the next frame.
+  const handlesKey = usedHandles === undefined ? '' : Object.keys(usedHandles).sort().join('|');
+  useEffect(() => {
+    updateNodeInternals(id);
+  }, [id, handlesKey, updateNodeInternals]);
 
   const renderHandle = (
     column: string,
     side: HandleSide,
     type: 'source' | 'target',
-  ): JSX.Element | null => {
+  ): JSX.Element => {
     const handleId = type === 'source' ? columnSourceHandle(column, side) : columnTargetHandle(column, side);
-    if (usedHandles?.[handleId] === undefined) return null;
+    const used = usedHandles?.[handleId] !== undefined;
     const position = side === 'right' ? Position.Right : Position.Left;
     // A column that is both an FK source and an FK target on the SAME side
     // would mount both dots at the exact same point — one edge would hide the
     // other. Separate the two dots vertically (target above center, source
     // below) so both stay visible (spec 09 Manual Verify iteration).
     const shared =
+      used &&
       usedHandles !== undefined &&
       sharesSideWithOppositeHandle(usedHandles, column, type, side);
     const style = shared
@@ -83,7 +98,16 @@ function TableNodeComponent({ id, data }: NodeProps<FlowNode>): JSX.Element {
               : `calc(50% - ${HANDLE_SHARED_SIDE_OFFSET_PX}px)`,
         }
       : undefined;
-    return <Handle id={handleId} type={type} position={position} style={style} />;
+    return (
+      <Handle
+        key={handleId}
+        id={handleId}
+        type={type}
+        position={position}
+        className={used ? undefined : 'table-node__handle--unused'}
+        style={style}
+      />
+    );
   };
 
   return (
