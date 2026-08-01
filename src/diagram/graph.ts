@@ -26,9 +26,9 @@ export interface TableNode {
 export interface RelationEdge {
   source: string;
   target: string;
-  /** FK columns on the source model; empty for a table-level edge. */
+  /** FK columns on the source model (equal-length, non-empty pair with `targetColumns`). */
   sourceColumns: string[];
-  /** FK columns on the target model; empty for a table-level edge. */
+  /** FK columns on the target model (equal-length, non-empty pair with `sourceColumns`). */
   targetColumns: string[];
   /** True when the FK is virtual (meta-stored) — drawn dashed (spec 08). */
   virtual: boolean;
@@ -116,11 +116,18 @@ export function buildDiagram(models: ModelDefinition[]): DiagramGraph {
     const target = ref.name;
     if (target === source || !known.has(target)) return;
 
+    // Spec 09 (merged): FK edges need at least one column pair of equal length
+    // — an FK with empty or unequal-length arrays draws no edge (it stays an
+    // editable draft in the sidebar, feature 10). Table-level edges are gone.
+    const sourceColumns = constraint.columns ?? [];
+    const targetColumns = constraint.toColumns ?? [];
+    if (sourceColumns.length === 0 || sourceColumns.length !== targetColumns.length) return;
+
     const edge: RelationEdge = {
       source,
       target,
-      sourceColumns: constraint.columns ?? [],
-      targetColumns: constraint.toColumns ?? [],
+      sourceColumns,
+      targetColumns,
       virtual,
     };
 

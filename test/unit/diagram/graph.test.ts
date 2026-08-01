@@ -240,6 +240,83 @@ describe('buildDiagram', () => {
     });
   });
 
+  describe('column-pair FK edges (spec 09 merged)', () => {
+    it('draws no edge for a real FK with empty column arrays, but keeps its descriptor', () => {
+      const graph = buildDiagram([
+        {
+          name: 'products',
+          columns: [{ name: 'product_id' }],
+          constraints: [{ type: 'foreign_key', columns: [], to: "ref('customers')", toColumns: [] }],
+        },
+        { name: 'customers', columns: [{ name: 'customer_id' }] },
+      ]);
+      expect(graph.edges).toEqual([]);
+      expect(graph.nodes[0].foreignKeys).toEqual([
+        { target: 'customers', to: "ref('customers')", columns: [], toColumns: [], virtual: false },
+      ]);
+    });
+
+    it('draws no edge for a virtual FK with empty column arrays, but keeps its descriptor', () => {
+      const graph = buildDiagram([
+        {
+          name: 'products',
+          columns: [{ name: 'product_id' }],
+          config: {
+            meta: {
+              dbtiagram: {
+                virtual: {
+                  foreign_keys: [{ to: "ref('customers')", columns: [], to_columns: [] }],
+                },
+              },
+            },
+          },
+        },
+        { name: 'customers', columns: [{ name: 'customer_id' }] },
+      ]);
+      expect(graph.edges).toEqual([]);
+      expect(graph.nodes[0].foreignKeys).toEqual([
+        { target: 'customers', to: "ref('customers')", columns: [], toColumns: [], virtual: true },
+      ]);
+    });
+
+    it('draws no edge when the FK arrays exist but have different lengths', () => {
+      const graph = buildDiagram([
+        {
+          name: 'a',
+          constraints: [
+            { type: 'foreign_key', columns: ['x1', 'x2'], to: "ref('b')", toColumns: ['y1'] },
+          ],
+        },
+        { name: 'b', columns: [{ name: 'y1' }] },
+      ]);
+      expect(graph.edges).toEqual([]);
+    });
+
+    it('draws no edge when one array is missing entirely', () => {
+      const graph = buildDiagram([
+        {
+          name: 'a',
+          constraints: [{ type: 'foreign_key', columns: ['x1'], to: "ref('b')" }],
+        },
+        { name: 'b', columns: [{ name: 'y1' }] },
+      ]);
+      expect(graph.edges).toEqual([]);
+    });
+
+    it('still draws an edge for a single column pair', () => {
+      const graph = buildDiagram([
+        {
+          name: 'a',
+          constraints: [{ type: 'foreign_key', columns: ['x1'], to: "ref('b')", toColumns: ['y1'] }],
+        },
+        { name: 'b', columns: [{ name: 'y1' }] },
+      ]);
+      expect(graph.edges).toEqual([
+        { source: 'a', target: 'b', sourceColumns: ['x1'], targetColumns: ['y1'], virtual: false },
+      ]);
+    });
+  });
+
   describe('virtual FK edges', () => {
     it('draws a dashed (virtual) edge from a meta-block FK', () => {
       const graph = buildDiagram([

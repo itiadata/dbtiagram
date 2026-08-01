@@ -531,6 +531,32 @@ body {
   opacity: 0.6;
 }
 
+/* Draft FK card (spec 09 merged): a webview-only FK with no pairs yet —
+   dashed border + muted tint so it reads as "under construction". */
+.fk-card--draft {
+  border-style: dashed;
+  opacity: 0.9;
+}
+
+/* The draft's target is a static label (the picker was used to create it). */
+.fk-card__target--draft {
+  font-size: 12px;
+  padding: 3px 6px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--card) 80%, transparent);
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.fk-card__draft-note {
+  margin: 0;
+  font-size: 11px;
+  color: var(--muted);
+}
+
 /* Reusable searchable picker (spec 08) */
 .search-select {
   position: relative;

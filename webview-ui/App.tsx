@@ -43,7 +43,7 @@ import {
   type DiagramInteractionContextValue,
 } from './diagram-interaction-context';
 import { FilterSidebar } from './FilterSidebar';
-import { sameFkContent } from './ForeignKeySection';
+import { sameFkContent, type DraftForeignKey } from './ForeignKeySection';
 import { TableNode } from './TableNode';
 
 const vscode = window.acquireVsCodeApi();
@@ -78,6 +78,12 @@ export function App(): JSX.Element {
   // Spec 08: the FK highlighted + scrolled into view in the details sidebar
   // after double-clicking its edge; null when nothing is focused.
   const [focusedFk, setFocusedFk] = useState<ForeignKeyDescriptor | null>(null);
+
+  // Spec 09 merged: webview-only draft FKs per model — nothing is persisted
+  // until a draft's first column pair is added (createForeignKey). Keyed by
+  // model id; each draft carries a locally unique id.
+  const [draftFks, setDraftFks] = useState<Record<string, DraftForeignKey[]>>({});
+  const draftIdCounterRef = useRef(0);
 
   // Spec 05 filtering: per-file metadata from the host, the user's checked
   // sets (everything checked by default), the two search boxes, and a tick
@@ -306,8 +312,8 @@ export function App(): JSX.Element {
 
   // Spec 08: double-clicking an FK edge selects the child table AND focuses
   // (highlights + scrolls into view) the matching FK in the Foreign keys
-  // section. Column-level edges match the descriptor whose pair equals the
-  // edge's columns; table-level edges match the descriptor with no columns.
+  // section. Every edge is column-level (spec 09 merged), so the descriptor is
+  // matched by its pair: the edge's source/target column at the same index.
   const onEdgeDoubleClick = useCallback(
     (_event: ReactMouseEvent, edge: Edge): void => {
       onTableSelect(edge.source);
@@ -329,9 +335,6 @@ export function App(): JSX.Element {
             matched = fk;
             break;
           }
-        } else if (fk.columns.length === 0 && fk.toColumns.length === 0 && fk.target === edge.target) {
-          matched = fk;
-          break;
         }
       }
       setFocusedFk(matched);
@@ -376,6 +379,82 @@ export function App(): JSX.Element {
     }
     vscode.postMessage({ type: 'diagram:edit', edit } satisfies MessageToExtension);
   }, []);
+
+  // Spec 09 merged: local draft-FK bookkeeping. Add foreign key only appends a
+  // draft (no edit posted, no file write); the first pair persists the FK via
+  // `createForeignKey`; removing the last pair of a persisted FK deletes it
+  // and keeps a draft with the same target/virtual flag.
+  const addDraft = useCallback((model: string, target: string): void => {
+    setDraftFks((current) => {
+      const draft: DraftForeignKey = {
+        draftId: `draft-${draftIdCounterRef.current}`,
+        target,
+        virtual: false,
+        columns: [],
+        toColumns: [],
+      };
+      draftIdCounterRef.current += 1;
+      return { ...current, [model]: [...(current[model] ?? []), draft] };
+    });
+  }, []);
+
+  const removeDraft = useCallback((model: string, draftId: string): void => {
+    setDraftFks((current) => {
+      const drafts = (current[model] ?? []).filter((d) => d.draftId !== draftId);
+      const next = { ...current };
+      if (drafts.length === 0) delete next[model];
+      else next[model] = drafts;
+      return next;
+    });
+  }, []);
+
+  const setDraftVirtual = useCallback(
+    (model: string, draftId: string, virtual: boolean): void => {
+      setDraftFks((current) => ({
+        ...current,
+        [model]: (current[model] ?? []).map((d) =>
+          d.draftId === draftId ? { ...d, virtual } : d,
+        ),
+      }));
+    },
+    [],
+  );
+
+  const addDraftPair = useCallback(
+    (model: string, draft: DraftForeignKey, source: string, target: string): void => {
+      onEdit({
+        kind: 'createForeignKey',
+        model,
+        target: draft.target,
+        columns: [source],
+        toColumns: [target],
+        virtual: draft.virtual,
+      });
+      removeDraft(model, draft.draftId);
+    },
+    [onEdit, removeDraft],
+  );
+
+  const removeLastPair = useCallback(
+    (model: string, fk: ForeignKeyDescriptor): void => {
+      onEdit({ kind: 'removeForeignKey', model, fk });
+      const target = fk.target;
+      if (target !== undefined) {
+        setDraftFks((current) => {
+          const draft: DraftForeignKey = {
+            draftId: `draft-${draftIdCounterRef.current}`,
+            target,
+            virtual: fk.virtual,
+            columns: [],
+            toColumns: [],
+          };
+          draftIdCounterRef.current += 1;
+          return { ...current, [model]: [...(current[model] ?? []), draft] };
+        });
+      }
+    },
+    [onEdit],
+  );
 
   const interaction: DiagramInteractionContextValue = useMemo(
     () => ({
@@ -562,7 +641,27 @@ export function App(): JSX.Element {
           entity={selectedEntity}
           nodes={graph?.nodes ?? []}
           focusedFk={focusedFk}
+          drafts={selectedEntity?.kind === 'table' ? (draftFks[selectedEntity.node.id] ?? []) : []}
           onEdit={onEdit}
+          onAddDraft={(target) => {
+            if (selectedEntity?.kind === 'table') addDraft(selectedEntity.node.id, target);
+          }}
+          onRemoveDraft={(draftId) => {
+            if (selectedEntity?.kind === 'table') removeDraft(selectedEntity.node.id, draftId);
+          }}
+          onDraftVirtualChange={(draftId, virtual) => {
+            if (selectedEntity?.kind === 'table') {
+              setDraftVirtual(selectedEntity.node.id, draftId, virtual);
+            }
+          }}
+          onDraftAddPair={(draft, source, target) => {
+            if (selectedEntity?.kind === 'table') {
+              addDraftPair(selectedEntity.node.id, draft, source, target);
+            }
+          }}
+          onRemoveLastPair={(fk) => {
+            if (selectedEntity?.kind === 'table') removeLastPair(selectedEntity.node.id, fk);
+          }}
         />
       </div>
     </main>

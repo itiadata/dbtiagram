@@ -21,7 +21,7 @@ import {
 import type { ModelEdit } from '../src/dbt/edit';
 import type { ForeignKeyDescriptor } from '../src/dbt/types';
 import type { TableNode, TableNodeColumn } from '../src/diagram/graph';
-import { ForeignKeySection } from './ForeignKeySection';
+import { ForeignKeySection, type DraftForeignKey } from './ForeignKeySection';
 import { PrimaryKeySection } from './PrimaryKeySection';
 
 /** The entity the sidebar renders: a table, or a column within its table. */
@@ -35,14 +35,27 @@ interface DetailsSidebarProps {
   nodes: TableNode[];
   /** FK focused by double-clicking its edge (spec 08); null when none. */
   focusedFk: ForeignKeyDescriptor | null;
+  /** Local draft FKs for the selected table (webview memory only, spec 09 merged). */
+  drafts: DraftForeignKey[];
   onEdit: (edit: ModelEdit) => void;
+  onAddDraft: (target: string) => void;
+  onRemoveDraft: (draftId: string) => void;
+  onDraftVirtualChange: (draftId: string, virtual: boolean) => void;
+  onDraftAddPair: (draft: DraftForeignKey, source: string, target: string) => void;
+  onRemoveLastPair: (fk: ForeignKeyDescriptor) => void;
 }
 
 export function DetailsSidebar({
   entity,
   nodes,
   focusedFk,
+  drafts,
   onEdit,
+  onAddDraft,
+  onRemoveDraft,
+  onDraftVirtualChange,
+  onDraftAddPair,
+  onRemoveLastPair,
 }: DetailsSidebarProps): JSX.Element {
   return (
     <aside className="details">
@@ -76,7 +89,13 @@ export function DetailsSidebar({
             node={entity.node}
             nodes={nodes}
             focusedFk={focusedFk}
+            drafts={drafts}
             onEdit={onEdit}
+            onAddDraft={onAddDraft}
+            onRemoveDraft={onRemoveDraft}
+            onDraftVirtualChange={onDraftVirtualChange}
+            onDraftAddPair={onDraftAddPair}
+            onRemoveLastPair={onRemoveLastPair}
           />
         </div>
       ) : (

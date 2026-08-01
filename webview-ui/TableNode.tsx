@@ -1,10 +1,13 @@
 /**
  * Custom React Flow node that renders a dbt model as a table card.
  *
- * Each column row carries a target Handle on its left edge and a source Handle
- * on its right edge so FK edges attach to the exact columns; a table-level
- * source/target handle pair sits at the card's vertical center for FKs with no
- * column mapping (spec 03).
+ * Each column row can carry a target Handle on its left edge and/or a source
+ * Handle on its right edge so FK edges attach to the exact columns. Spec 09
+ * merged: only handles that an edge actually uses are mounted, each at its
+ * dynamically chosen side (`data.handles`: handle id -> side), so a dot
+ * appears exactly where an FK edge attaches and nowhere else — unrelated
+ * columns and edge-free cards show no dots at all. Table-level handles are
+ * gone (FK edges are column-pair-only).
  *
  * Since spec 06 the cards are interactive: clicking the header selects the
  * table, clicking a row selects the column, and double-clicking a column's
@@ -15,10 +18,9 @@
 import { memo, useContext, useEffect, useRef, useState, type KeyboardEvent } from 'react';
 import { Handle, Position, type NodeProps } from '@xyflow/react';
 import {
-  TABLE_SOURCE_HANDLE,
-  TABLE_TARGET_HANDLE,
   columnSourceHandle,
   columnTargetHandle,
+  type HandleSide,
   type FlowNode,
 } from '../src/diagram/flow';
 import { HEADER_HEIGHT, ROW_HEIGHT } from '../src/diagram/layout';
@@ -51,6 +53,17 @@ function TableNodeComponent({ id, data }: NodeProps<FlowNode>): JSX.Element {
     selectedColumnRef !== null &&
     selectedColumnRef.model === id &&
     selectedColumnRef.column === column;
+
+  // Spec 09 merged: the handles this node's edges actually use (id -> side).
+  // A Handle renders only when its id is present, at the recorded side.
+  const usedHandles = data.handles;
+
+  const renderHandle = (handleId: string, type: 'source' | 'target'): JSX.Element | null => {
+    const side: HandleSide | undefined = usedHandles?.[handleId];
+    if (side === undefined) return null;
+    const position = side === 'right' ? Position.Right : Position.Left;
+    return <Handle id={handleId} type={type} position={position} />;
+  };
 
   return (
     <div className={`table-node${selectedTable ? ' table-node--selected' : ''}`}>
@@ -97,7 +110,8 @@ function TableNodeComponent({ id, data }: NodeProps<FlowNode>): JSX.Element {
             onMouseLeave={() => interaction?.onColumnLeave(id, column.name)}
             onClick={() => interaction?.onColumnSelect(id, column.name)}
           >
-            <Handle id={columnTargetHandle(column.name)} type="target" position={Position.Left} />
+            {renderHandle(columnTargetHandle(column.name, 'left'), 'target')}
+            {renderHandle(columnTargetHandle(column.name, 'right'), 'target')}
             {isPk && (
               <span
                 className={`table-node__pk-icon${
@@ -163,16 +177,11 @@ function TableNodeComponent({ id, data }: NodeProps<FlowNode>): JSX.Element {
                 {column.dataType ?? '—'}
               </span>
             )}
-            <Handle
-              id={columnSourceHandle(column.name)}
-              type="source"
-              position={Position.Right}
-            />
+            {renderHandle(columnSourceHandle(column.name, 'left'), 'source')}
+            {renderHandle(columnSourceHandle(column.name, 'right'), 'source')}
           </div>
         );
       })}
-      <Handle id={TABLE_TARGET_HANDLE} type="target" position={Position.Left} />
-      <Handle id={TABLE_SOURCE_HANDLE} type="source" position={Position.Right} />
     </div>
   );
 }

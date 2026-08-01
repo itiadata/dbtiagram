@@ -38,7 +38,14 @@ export type ModelEdit =
       toColumns: string[];
     }
   | { kind: 'setForeignKeyVirtual'; model: string; fk: ForeignKeyDescriptor; virtual: boolean }
-  | { kind: 'addForeignKey'; model: string; target: string }
+  | {
+      kind: 'createForeignKey';
+      model: string;
+      target: string;
+      columns: string[];
+      toColumns: string[];
+      virtual: boolean;
+    }
   | { kind: 'removeForeignKey'; model: string; fk: ForeignKeyDescriptor };
 
 export class EditError extends Error {}
@@ -98,23 +105,15 @@ export function applyEdit(models: ModelDefinition[], edit: ModelEdit): ApplyEdit
       return applyForeignKeyColumns(models, edit.model, edit.fk, edit.columns, edit.toColumns);
     case 'setForeignKeyVirtual':
       return mapModel(models, edit.model, (m) => setFkVirtualOnModel(m, edit.fk, edit.virtual));
-    case 'addForeignKey': {
-      if (!models.some((m) => m.name === edit.target)) {
-        throw new EditError(`No model named "${edit.target}" exists in the workspace`);
-      }
-      return mapModel(models, edit.model, (m) => ({
-        ...m,
-        constraints: [
-          ...(m.constraints ?? []),
-          {
-            type: 'foreign_key',
-            columns: [],
-            to: `ref('${edit.target}')`,
-            toColumns: [],
-          },
-        ],
-      }));
-    }
+    case 'createForeignKey':
+      return createForeignKey(
+        models,
+        edit.model,
+        edit.target,
+        edit.columns,
+        edit.toColumns,
+        edit.virtual,
+      );
     case 'removeForeignKey':
       return mapModel(models, edit.model, (m) => removeFkFromModel(m, edit.fk));
   }
@@ -673,6 +672,11 @@ function applyForeignKeyColumns(
   columns: string[],
   toColumns: string[],
 ): ApplyEditResult {
+  // Spec 09 merged: an FK needs at least one column pair — the UI removes the
+  // FK instead of emptying it, so the pure layer refuses the empty write.
+  if (columns.length === 0) {
+    throw new EditError('A foreign key needs at least one column pair');
+  }
   if (columns.length !== toColumns.length) {
     throw new EditError('Source and target column lists must have the same length');
   }
@@ -697,6 +701,75 @@ function validateColumnsExist(model: ModelDefinition, columns: string[]): void {
       throw new EditError(`Model "${model.name}" has no column named "${column}"`);
     }
   }
+}
+
+/**
+ * Applies `createForeignKey` (spec 09 merged): persists an FK atomically with
+ * its first column pair(s). Replaces the spec 08 `addForeignKey`, which wrote
+ * an empty table-level FK. Real → a `foreign_key` constraint; virtual → a meta
+ * block entry. A no-op (an identical FK already present) keeps object identity
+ * so `distributeEditedModels` skips the file.
+ */
+function createForeignKey(
+  models: ModelDefinition[],
+  modelName: string,
+  target: string,
+  columns: string[],
+  toColumns: string[],
+  virtual: boolean,
+): ApplyEditResult {
+  const model = models.find((m) => m.name === modelName);
+  if (model === undefined) throw new EditError(`No model named "${modelName}" exists in the workspace`);
+  if (!models.some((m) => m.name === target)) {
+    throw new EditError(`No model named "${target}" exists in the workspace`);
+  }
+  if (columns.length !== toColumns.length) {
+    throw new EditError('Source and target column lists must have the same length');
+  }
+  if (columns.length === 0) {
+    throw new EditError('A foreign key needs at least one column pair');
+  }
+  validateColumnsExist(model, columns);
+  const targetModel = models.find((m) => m.name === target);
+  if (targetModel === undefined) throw new EditError(`No model named "${target}" exists in the workspace`);
+  validateColumnsExist(targetModel, toColumns);
+  return mapModel(models, modelName, (m) => {
+    const to = `ref('${target}')`;
+    if (virtual) {
+      const block = readVirtualConstraints(m);
+      const existing = block.foreignKeys ?? [];
+      if (
+        existing.some(
+          (v) => v.to === to && arraysEqual(v.columns, columns) && arraysEqual(v.toColumns, toColumns),
+        )
+      ) {
+        return m;
+      }
+      return writeVirtualConstraints(m, {
+        ...block,
+        foreignKeys: [...existing, { to, columns: [...columns], toColumns: [...toColumns] }],
+      });
+    }
+    const constraints = m.constraints ?? [];
+    if (
+      constraints.some(
+        (c) =>
+          c.type === 'foreign_key' &&
+          (c.to ?? '') === to &&
+          arraysEqual(c.columns ?? [], columns) &&
+          arraysEqual(c.toColumns ?? [], toColumns),
+      )
+    ) {
+      return m;
+    }
+    return {
+      ...m,
+      constraints: [
+        ...constraints,
+        { type: 'foreign_key', columns: [...columns], to, toColumns: [...toColumns] },
+      ],
+    };
+  });
 }
 
 /** Sets an FK's source/target column arrays, identity-preserving on no change. */
@@ -741,6 +814,12 @@ function setFkVirtualOnModel(
   virtual: boolean,
 ): ModelDefinition {
   if (fk.virtual === virtual) return model;
+  // Spec 09 merged: converting a zero-pair FK would persist a zero-pair FK in
+  // the other storage — the file never holds a zero-pair FK as the result of
+  // an editor action, so the pure layer refuses (the UI disables the checkbox).
+  if (fk.columns.length === 0 && fk.toColumns.length === 0) {
+    throw new EditError('Add a column pair before changing storage');
+  }
   if (virtual) {
     // real -> virtual: remove the constraint, append the meta entry.
     const constraints = model.constraints;

@@ -1,12 +1,21 @@
 /**
- * Foreign keys section of the details sidebar table view (spec 08).
+ * Foreign keys section of the details sidebar table view (spec 08, spec 09
+ * merged).
  *
  * One card per FK descriptor (`node.foreignKeys` — real constraints first,
- * then virtual meta entries): a target model picker, a **Virtual** checkbox,
- * the source → target column pairs (each reassignable/removable), an **Add
- * pair** control, and a **Remove FK** button. **Add foreign key** searches the
- * workspace models and posts `addForeignKey`. Every change posts exactly one
- * edit through the existing `diagram:edit` funnel.
+ * then virtual meta entries), followed by one card per local draft
+ * (`drafts`): a target model picker, a **Virtual** checkbox, the source →
+ * target column pairs (each reassignable/removable), an **Add pair** control,
+ * and a **Remove FK** button.
+ *
+ * Spec 09 merged: **Add foreign key** no longer posts an edit — it appends a
+ * local draft (webview memory only). A draft card shows a marker + note and
+ * its "+ Add pair" persists the FK atomically with its first pair via
+ * `createForeignKey`. Removing the last pair of a persisted FK deletes it
+ * from the file (`removeForeignKey`) and keeps a draft card so the user can
+ * continue or abandon. The Virtual checkbox is disabled on zero-pair file FKs
+ * (the pure layer rejects converting them). Every persisted change posts
+ * exactly one edit through the existing `diagram:edit` funnel.
  *
  * The card matching `focusedFk` (by content) is highlighted and scrolled into
  * view — set by double-clicking an FK edge in the diagram.
@@ -28,18 +37,49 @@ export function sameFkContent(a: ForeignKeyDescriptor, b: ForeignKeyDescriptor):
   );
 }
 
+/**
+ * A webview-only FK under construction (spec 09 merged): nothing about it
+ * exists in model.yml until its first column pair is added.
+ */
+export interface DraftForeignKey {
+  /** Local, stable key (e.g. an incrementing counter) — never persisted. */
+  draftId: string;
+  target: string;
+  virtual: boolean;
+  /** Always empty while a draft. */
+  columns: string[];
+  /** Always empty while a draft. */
+  toColumns: string[];
+}
+
 interface ForeignKeySectionProps {
   node: TableNode;
   nodes: TableNode[];
   focusedFk: ForeignKeyDescriptor | null;
+  /** Local draft FKs for this node (webview memory only). */
+  drafts: DraftForeignKey[];
   onEdit: (edit: ModelEdit) => void;
+  /** Add foreign key pick: creates a local draft (no file write). */
+  onAddDraft: (target: string) => void;
+  onRemoveDraft: (draftId: string) => void;
+  onDraftVirtualChange: (draftId: string, virtual: boolean) => void;
+  /** Draft "+ Add pair": persists the FK with its first pair, drops the draft. */
+  onDraftAddPair: (draft: DraftForeignKey, source: string, target: string) => void;
+  /** Removing the last pair of a persisted FK: deletes it + keeps a draft. */
+  onRemoveLastPair: (fk: ForeignKeyDescriptor) => void;
 }
 
 export function ForeignKeySection({
   node,
   nodes,
   focusedFk,
+  drafts,
   onEdit,
+  onAddDraft,
+  onRemoveDraft,
+  onDraftVirtualChange,
+  onDraftAddPair,
+  onRemoveLastPair,
 }: ForeignKeySectionProps): JSX.Element {
   const modelNames = nodes.map((n) => n.id).sort();
   const foreignKeys = node.foreignKeys;
@@ -47,7 +87,9 @@ export function ForeignKeySection({
   return (
     <section className="details__sub-section">
       <h3 className="details__sub-section-title">Foreign keys</h3>
-      {foreignKeys.length === 0 && <p className="details__note">No foreign keys</p>}
+      {foreignKeys.length === 0 && drafts.length === 0 && (
+        <p className="details__note">No foreign keys</p>
+      )}
       <div className="fk-list">
         {foreignKeys.map((fk, index) => (
           <FkCard
@@ -58,6 +100,18 @@ export function ForeignKeySection({
             modelNames={modelNames}
             focused={focusedFk !== null && sameFkContent(focusedFk, fk)}
             onEdit={onEdit}
+            onRemoveLastPair={onRemoveLastPair}
+          />
+        ))}
+        {drafts.map((draft) => (
+          <DraftFkCard
+            key={draft.draftId}
+            draft={draft}
+            node={node}
+            nodes={nodes}
+            onRemove={onRemoveDraft}
+            onVirtualChange={onDraftVirtualChange}
+            onAddPair={onDraftAddPair}
           />
         ))}
       </div>
@@ -66,7 +120,7 @@ export function ForeignKeySection({
         value={null}
         placeholder="Add foreign key…"
         disabled={modelNames.length === 0}
-        onSelect={(target) => onEdit({ kind: 'addForeignKey', model: node.id, target })}
+        onSelect={onAddDraft}
       />
     </section>
   );
@@ -79,9 +133,10 @@ interface FkCardProps {
   modelNames: string[];
   focused: boolean;
   onEdit: (edit: ModelEdit) => void;
+  onRemoveLastPair: (fk: ForeignKeyDescriptor) => void;
 }
 
-function FkCard({ fk, node, nodes, modelNames, focused, onEdit }: FkCardProps): JSX.Element {
+function FkCard({ fk, node, nodes, modelNames, focused, onEdit, onRemoveLastPair }: FkCardProps): JSX.Element {
   const cardRef = useRef<HTMLDivElement>(null);
   const wasFocusedRef = useRef(false);
 
@@ -97,6 +152,11 @@ function FkCard({ fk, node, nodes, modelNames, focused, onEdit }: FkCardProps): 
   const targetNode = fk.target === undefined ? undefined : nodes.find((n) => n.id === fk.target);
   const sourceColumns = node.columns.map((c) => c.name);
   const targetColumns = (targetNode?.columns ?? []).map((c) => c.name);
+
+  // Spec 09 merged: a zero-pair file FK (legacy hand-written YAML) cannot be
+  // converted between storages — the pure layer rejects it, so the checkbox
+  // is disabled. It also renders the draft note (it is an incomplete FK).
+  const isZeroPair = fk.columns.length === 0 && fk.toColumns.length === 0;
 
   const setTarget = (target: string): void => {
     onEdit({ kind: 'setForeignKeyTarget', model: node.id, fk, target });
@@ -135,6 +195,12 @@ function FkCard({ fk, node, nodes, modelNames, focused, onEdit }: FkCardProps): 
   };
 
   const removePair = (index: number): void => {
+    if (fk.columns.length === 1) {
+      // Removing the last pair deletes the FK from the file; the webview keeps
+      // a draft card so the user can continue or abandon (spec 09 merged).
+      onRemoveLastPair(fk);
+      return;
+    }
     onEdit({
       kind: 'setForeignKeyColumns',
       model: node.id,
@@ -189,13 +255,21 @@ function FkCard({ fk, node, nodes, modelNames, focused, onEdit }: FkCardProps): 
           />
         </div>
         <label className="details__checkbox-row">
-          <input type="checkbox" checked={fk.virtual} onChange={toggleVirtual} />
+          <input
+            type="checkbox"
+            checked={fk.virtual}
+            disabled={isZeroPair}
+            onChange={toggleVirtual}
+          />
           Virtual
         </label>
         <button type="button" className="fk-card__remove" onClick={remove}>
           Remove
         </button>
       </div>
+      {isZeroPair && (
+        <p className="fk-card__draft-note">Draft — add a column pair to create this FK</p>
+      )}
       {fk.columns.map((source, index) => (
         <div key={index} className="fk-pair">
           <div className="fk-pair__select">
@@ -227,6 +301,80 @@ function FkCard({ fk, node, nodes, modelNames, focused, onEdit }: FkCardProps): 
           className="fk-card__add-pair"
           disabled={addPairDisabled}
           onClick={addPair}
+        >
+          + Add pair
+        </button>
+      )}
+    </div>
+  );
+}
+
+interface DraftFkCardProps {
+  draft: DraftForeignKey;
+  node: TableNode;
+  nodes: TableNode[];
+  onRemove: (draftId: string) => void;
+  onVirtualChange: (draftId: string, virtual: boolean) => void;
+  onAddPair: (draft: DraftForeignKey, source: string, target: string) => void;
+}
+
+function DraftFkCard({
+  draft,
+  node,
+  nodes,
+  onRemove,
+  onVirtualChange,
+  onAddPair,
+}: DraftFkCardProps): JSX.Element {
+  const targetNode = nodes.find((n) => n.id === draft.target);
+  const sourceColumns = node.columns.map((c) => c.name);
+  const targetColumns = (targetNode?.columns ?? []).map((c) => c.name);
+
+  // A draft has no pairs, so every source column is free; prefer the same
+  // column name on the target, else the first target column.
+  const nextPair = (): { source: string; target: string } | null => {
+    if (targetNode === undefined) return null;
+    const nextSource = sourceColumns[0];
+    if (nextSource === undefined) return null;
+    if (targetColumns.includes(nextSource)) return { source: nextSource, target: nextSource };
+    const nextTarget = targetColumns[0];
+    return nextTarget === undefined ? null : { source: nextSource, target: nextTarget };
+  };
+
+  const pair = nextPair();
+  const addPairDisabled = pair === null;
+
+  return (
+    <div className="fk-card fk-card--draft">
+      <div className="fk-card__header">
+        <div className="fk-card__target fk-card__target--draft" title={draft.target}>
+          {draft.target}
+        </div>
+        <label className="details__checkbox-row">
+          <input
+            type="checkbox"
+            checked={draft.virtual}
+            onChange={() => onVirtualChange(draft.draftId, !draft.virtual)}
+          />
+          Virtual
+        </label>
+        <button
+          type="button"
+          className="fk-card__remove"
+          onClick={() => onRemove(draft.draftId)}
+        >
+          Remove
+        </button>
+      </div>
+      <p className="fk-card__draft-note">Draft — add a column pair to create this FK</p>
+      {sourceColumns.length > 0 && (
+        <button
+          type="button"
+          className="fk-card__add-pair"
+          disabled={addPairDisabled}
+          onClick={() => {
+            if (pair !== null) onAddPair(draft, pair.source, pair.target);
+          }}
         >
           + Add pair
         </button>

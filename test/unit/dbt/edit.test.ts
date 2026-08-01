@@ -1196,16 +1196,43 @@ describe('applyEdit', () => {
         kind: 'setForeignKeyColumns',
         model: 'order_items',
         fk: { target: 'orders', to: "ref('orders')", columns: ['order_id'], toColumns: ['order_id'], virtual: true },
-        columns: [],
-        toColumns: [],
+        columns: ['order_id'],
+        toColumns: ['order_id'],
       });
       expect(next[0].config).toEqual({
         meta: {
           dbtiagram: {
-            virtual: { foreign_keys: [{ to: "ref('orders')", columns: [], to_columns: [] }] },
+            virtual: { foreign_keys: [{ to: "ref('orders')", columns: ['order_id'], to_columns: ['order_id'] }] },
           },
         },
       });
+    });
+
+    it('rejects emptying the pair arrays (spec 09 merged)', () => {
+      const models: ModelDefinition[] = [
+        {
+          name: 'order_items',
+          columns: [{ name: 'order_id' }],
+          constraints: [
+            {
+              type: 'foreign_key',
+              columns: ['order_id'],
+              to: "ref('orders')",
+              toColumns: ['order_id'],
+            },
+          ],
+        },
+        { name: 'orders', columns: [{ name: 'order_id' }] },
+      ];
+      expect(() =>
+        applyEdit(models, {
+          kind: 'setForeignKeyColumns',
+          model: 'order_items',
+          fk: { target: 'orders', to: "ref('orders')", columns: ['order_id'], toColumns: ['order_id'], virtual: false },
+          columns: [],
+          toColumns: [],
+        }),
+      ).toThrow(EditError);
     });
 
     it('throws when the pair arrays have different lengths', () => {
@@ -1336,26 +1363,217 @@ describe('applyEdit', () => {
         },
       ]);
     });
+
+    it('rejects converting a zero-pair real FK (spec 09 merged)', () => {
+      const models: ModelDefinition[] = [
+        {
+          name: 'products',
+          constraints: [{ type: 'foreign_key', columns: [], to: "ref('customers')", toColumns: [] }],
+        },
+      ];
+      expect(() =>
+        applyEdit(models, {
+          kind: 'setForeignKeyVirtual',
+          model: 'products',
+          fk: { target: 'customers', to: "ref('customers')", columns: [], toColumns: [], virtual: false },
+          virtual: true,
+        }),
+      ).toThrow(EditError);
+    });
+
+    it('rejects converting a zero-pair virtual FK (spec 09 merged)', () => {
+      const models: ModelDefinition[] = [
+        {
+          name: 'products',
+          config: {
+            meta: {
+              dbtiagram: {
+                virtual: { foreign_keys: [{ to: "ref('customers')", columns: [], to_columns: [] }] },
+              },
+            },
+          },
+        },
+      ];
+      expect(() =>
+        applyEdit(models, {
+          kind: 'setForeignKeyVirtual',
+          model: 'products',
+          fk: { target: 'customers', to: "ref('customers')", columns: [], toColumns: [], virtual: true },
+          virtual: false,
+        }),
+      ).toThrow(EditError);
+    });
   });
 
-  describe('addForeignKey', () => {
-    it('appends a table-level real FK to the chosen target', () => {
-      const models: ModelDefinition[] = [{ name: 'products', columns: [] }, { name: 'customers' }];
+  describe('createForeignKey', () => {
+    const models: ModelDefinition[] = [
+      {
+        name: 'products',
+        columns: [{ name: 'product_id' }, { name: 'name' }],
+      },
+      { name: 'customers', columns: [{ name: 'customer_id' }] },
+    ];
+
+    it('appends a real FK constraint with the initial column pairs', () => {
       const { models: next } = applyEdit(models, {
-        kind: 'addForeignKey',
+        kind: 'createForeignKey',
         model: 'products',
         target: 'customers',
+        columns: ['product_id'],
+        toColumns: ['customer_id'],
+        virtual: false,
       });
       expect(next[0].constraints).toEqual([
-        { type: 'foreign_key', columns: [], to: "ref('customers')", toColumns: [] },
+        { type: 'foreign_key', columns: ['product_id'], to: "ref('customers')", toColumns: ['customer_id'] },
       ]);
     });
 
-    it('throws when the target does not exist', () => {
-      const models: ModelDefinition[] = [{ name: 'products' }];
+    it('appends a virtual FK to the meta block, creating it when absent', () => {
+      const { models: next } = applyEdit(models, {
+        kind: 'createForeignKey',
+        model: 'products',
+        target: 'customers',
+        columns: ['product_id'],
+        toColumns: ['customer_id'],
+        virtual: true,
+      });
+      expect(next[0].constraints).toBeUndefined();
+      expect(next[0].config).toEqual({
+        meta: {
+          dbtiagram: {
+            virtual: {
+              foreign_keys: [{ to: "ref('customers')", columns: ['product_id'], to_columns: ['customer_id'] }],
+            },
+          },
+        },
+      });
+    });
+
+    it('appends a second virtual FK to an existing meta block', () => {
+      const withOne: ModelDefinition[] = [
+        {
+          name: 'products',
+          columns: [{ name: 'product_id' }],
+          config: {
+            meta: {
+              dbtiagram: {
+                virtual: {
+                  foreign_keys: [{ to: "ref('orders')", columns: ['product_id'], to_columns: ['order_id'] }],
+                },
+              },
+            },
+          },
+        },
+        { name: 'customers', columns: [{ name: 'customer_id' }] },
+        { name: 'orders', columns: [{ name: 'order_id' }] },
+      ];
+      const { models: next } = applyEdit(withOne, {
+        kind: 'createForeignKey',
+        model: 'products',
+        target: 'customers',
+        columns: ['product_id'],
+        toColumns: ['customer_id'],
+        virtual: true,
+      });
+      expect(next[0].config).toEqual({
+        meta: {
+          dbtiagram: {
+            virtual: {
+              foreign_keys: [
+                { to: "ref('orders')", columns: ['product_id'], to_columns: ['order_id'] },
+                { to: "ref('customers')", columns: ['product_id'], to_columns: ['customer_id'] },
+              ],
+            },
+          },
+        },
+      });
+    });
+
+    it('rejects zero column pairs', () => {
       expect(() =>
-        applyEdit(models, { kind: 'addForeignKey', model: 'products', target: 'ghost' }),
+        applyEdit(models, {
+          kind: 'createForeignKey',
+          model: 'products',
+          target: 'customers',
+          columns: [],
+          toColumns: [],
+          virtual: false,
+        }),
       ).toThrow(EditError);
+    });
+
+    it('rejects unequal pair lengths', () => {
+      expect(() =>
+        applyEdit(models, {
+          kind: 'createForeignKey',
+          model: 'products',
+          target: 'customers',
+          columns: ['product_id', 'name'],
+          toColumns: ['customer_id'],
+          virtual: false,
+        }),
+      ).toThrow(EditError);
+    });
+
+    it('rejects an unknown target model', () => {
+      expect(() =>
+        applyEdit(models, {
+          kind: 'createForeignKey',
+          model: 'products',
+          target: 'ghost',
+          columns: ['product_id'],
+          toColumns: ['customer_id'],
+          virtual: false,
+        }),
+      ).toThrow(EditError);
+    });
+
+    it('rejects a source column that does not exist on the model', () => {
+      expect(() =>
+        applyEdit(models, {
+          kind: 'createForeignKey',
+          model: 'products',
+          target: 'customers',
+          columns: ['nope'],
+          toColumns: ['customer_id'],
+          virtual: false,
+        }),
+      ).toThrow(EditError);
+    });
+
+    it('rejects a target column that does not exist on the target model', () => {
+      expect(() =>
+        applyEdit(models, {
+          kind: 'createForeignKey',
+          model: 'products',
+          target: 'customers',
+          columns: ['product_id'],
+          toColumns: ['nope'],
+          virtual: false,
+        }),
+      ).toThrow(EditError);
+    });
+
+    it('is a no-op (identity) when an identical FK already exists', () => {
+      const withFk: ModelDefinition[] = [
+        {
+          name: 'products',
+          columns: [{ name: 'product_id' }],
+          constraints: [
+            { type: 'foreign_key', columns: ['product_id'], to: "ref('customers')", toColumns: ['customer_id'] },
+          ],
+        },
+        { name: 'customers', columns: [{ name: 'customer_id' }] },
+      ];
+      const { models: next } = applyEdit(withFk, {
+        kind: 'createForeignKey',
+        model: 'products',
+        target: 'customers',
+        columns: ['product_id'],
+        toColumns: ['customer_id'],
+        virtual: false,
+      });
+      expect(next[0]).toBe(withFk[0]);
     });
   });
 

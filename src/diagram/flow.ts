@@ -4,12 +4,19 @@
  *
  * Produces the nodes/edges arrays that the webview passes straight to
  * `<ReactFlow>`. Each model becomes a custom `table` node with per-column
- * Handles; each FK constraint becomes either one `smoothstep` edge per column
- * pair (equal, non-empty column arrays) or a single table-level edge (spec 03).
+ * Handles; each FK constraint becomes one `smoothstep` edge per column pair
+ * (spec 09 merged: equal, non-empty column arrays only — table-level edges
+ * are gone). Every edge's endpoint sides are chosen dynamically from the
+ * node positions so the path is simplest, and each node's `data.handles`
+ * records exactly which handles its edges use (the webview mounts a dot for
+ * those and nothing else).
  */
 import type { Edge, Node } from '@xyflow/react';
 import type { DiagramGraph, TableNodeColumn } from './graph';
-import type { DiagramLayout } from './layout';
+import type { DiagramLayout, NodePlacement } from './layout';
+
+/** A handle's attachment side on a node's edge. */
+export type HandleSide = 'left' | 'right';
 
 /** Row data rendered by the custom `table` node. */
 export type FlowNodeData = {
@@ -20,6 +27,14 @@ export type FlowNodeData = {
   highlightedColumns?: string[];
   /** The displayed primary key (copied from the graph node) — key icons (spec 08). */
   primaryKey?: { columns: string[]; virtual: boolean };
+  /**
+   * Handle placements for the handles this node actually uses: keyed by the
+   * full handle id (e.g. `customer_id:source:right`), value the side. Only
+   * handles that an edge references appear here — the webview mounts a dot
+   * exactly for these, and nodes with no edges omit the key entirely
+   * (spec 09 merged).
+   */
+  handles?: Record<string, HandleSide>;
 };
 
 /** Node descriptor for a custom `table` node. */
@@ -43,20 +58,19 @@ export interface FlowElements {
   edges: FlowEdge[];
 }
 
-/** Handle id for an outgoing edge on the right edge of a column row. */
-export function columnSourceHandle(column: string): string {
-  return `${column}:source`;
+/**
+ * Handle id for an outgoing edge on the `side` edge of a column row. The side
+ * is part of the id so one column can hold edges in both directions without
+ * id collisions (spec 09 merged).
+ */
+export function columnSourceHandle(column: string, side: HandleSide): string {
+  return `${column}:source:${side}`;
 }
 
-/** Handle id for an incoming edge on the left edge of a column row. */
-export function columnTargetHandle(column: string): string {
-  return `${column}:target`;
+/** Handle id for an incoming edge on the `side` edge of a column row. */
+export function columnTargetHandle(column: string, side: HandleSide): string {
+  return `${column}:target:${side}`;
 }
-
-/** Handle id for outgoing table-level edges (right edge, vertical center). */
-export const TABLE_SOURCE_HANDLE = 'table:source';
-/** Handle id for incoming table-level edges (left edge, vertical center). */
-export const TABLE_TARGET_HANDLE = 'table:target';
 
 /**
  * Width (px) of the invisible hover/click band around every edge, rendered by
@@ -71,11 +85,71 @@ export const EDGE_INTERACTION_WIDTH = 24;
 export function buildFlowElements(graph: DiagramGraph, layout: DiagramLayout): FlowElements {
   const byId = new Map(layout.nodes.map((placement) => [placement.id, placement]));
 
-  const nodes: FlowNode[] = graph.nodes.map((node) => {
-    const placement = byId.get(node.id);
+  const placementOf = (id: string): NodePlacement => {
+    const placement = byId.get(id);
     if (placement === undefined) {
-      throw new Error(`buildFlowElements: no layout placement for node ${node.id}`);
+      throw new Error(`buildFlowElements: no layout placement for node ${id}`);
     }
+    return placement;
+  };
+
+  /**
+   * Horizontal center of a node's card — the dynamic-side decision compares
+   * the two centers (spec 09 merged, Confirm at Approval (a)).
+   */
+  const centerX = (id: string): number => {
+    const placement = placementOf(id);
+    return placement.x + placement.width / 2;
+  };
+
+  const usedIds = new Set<string>();
+  const edges: FlowEdge[] = [];
+
+  // Per node: handle id -> side, collected while building the edges so the
+  // mounted handle set is always exactly the set the edges reference.
+  const nodeHandles = new Map<string, Map<string, HandleSide>>();
+  const addHandle = (nodeId: string, handleId: string, side: HandleSide): void => {
+    let handles = nodeHandles.get(nodeId);
+    if (handles === undefined) {
+      handles = new Map();
+      nodeHandles.set(nodeId, handles);
+    }
+    handles.set(handleId, side);
+  };
+
+  // Only column-pair edges exist (spec 09 merged): graph edges with empty or
+  // unequal-length arrays never reach this layer.
+  for (const edge of graph.edges) {
+    const forward = centerX(edge.target) >= centerX(edge.source);
+    const sourceSide: HandleSide = forward ? 'right' : 'left';
+    const targetSide: HandleSide = forward ? 'left' : 'right';
+    edge.sourceColumns.forEach((sourceColumn, index) => {
+      const targetColumn = edge.targetColumns[index];
+      const sourceHandle = columnSourceHandle(sourceColumn, sourceSide);
+      const targetHandle = columnTargetHandle(targetColumn, targetSide);
+      addHandle(edge.source, sourceHandle, sourceSide);
+      addHandle(edge.target, targetHandle, targetSide);
+      edges.push({
+        id: uniqueId(usedIds, `${edge.source}.${sourceColumn}->${edge.target}.${targetColumn}`),
+        source: edge.source,
+        target: edge.target,
+        sourceHandle,
+        targetHandle,
+        type: 'smoothstep',
+        interactionWidth: EDGE_INTERACTION_WIDTH,
+        data: {
+          sourceColumn,
+          targetColumn,
+          title: `${edge.source}.${sourceColumn} -> ${edge.target}.${targetColumn}`,
+          ...(edge.virtual ? { virtual: true } : {}),
+        },
+      });
+    });
+  }
+
+  const nodes: FlowNode[] = graph.nodes.map((node) => {
+    const placement = placementOf(node.id);
+    const handles = nodeHandles.get(node.id);
     return {
       id: node.id,
       type: 'table',
@@ -87,52 +161,9 @@ export function buildFlowElements(graph: DiagramGraph, layout: DiagramLayout): F
         description: node.description,
         columns: node.columns,
         ...(node.primaryKey !== undefined ? { primaryKey: node.primaryKey } : {}),
+        ...(handles !== undefined ? { handles: Object.fromEntries(handles) } : {}),
       },
     };
-  });
-
-  const usedIds = new Set<string>();
-  const tableEdgeCounts = new Map<string, number>();
-  const edges: FlowEdge[] = graph.edges.flatMap((edge) => {
-    if (edge.sourceColumns.length > 0 && edge.sourceColumns.length === edge.targetColumns.length) {
-      return edge.sourceColumns.map((sourceColumn, index) => {
-        const targetColumn = edge.targetColumns[index];
-        return {
-          id: uniqueId(usedIds, `${edge.source}.${sourceColumn}->${edge.target}.${targetColumn}`),
-          source: edge.source,
-          target: edge.target,
-          sourceHandle: columnSourceHandle(sourceColumn),
-          targetHandle: columnTargetHandle(targetColumn),
-          type: 'smoothstep',
-          interactionWidth: EDGE_INTERACTION_WIDTH,
-          data: {
-            sourceColumn,
-            targetColumn,
-            title: `${edge.source}.${sourceColumn} -> ${edge.target}.${targetColumn}`,
-            ...(edge.virtual ? { virtual: true } : {}),
-          },
-        };
-      });
-    }
-
-    const pair = `${edge.source}\u0000${edge.target}`;
-    const k = tableEdgeCounts.get(pair) ?? 0;
-    tableEdgeCounts.set(pair, k + 1);
-    return [
-      {
-        id: uniqueId(usedIds, `${edge.source}->${edge.target}[${k}]`),
-        source: edge.source,
-        target: edge.target,
-        sourceHandle: TABLE_SOURCE_HANDLE,
-        targetHandle: TABLE_TARGET_HANDLE,
-        type: 'smoothstep',
-        interactionWidth: EDGE_INTERACTION_WIDTH,
-        data: {
-          title: `${edge.source} -> ${edge.target}`,
-          ...(edge.virtual ? { virtual: true } : {}),
-        },
-      },
-    ];
   });
 
   return { nodes, edges };

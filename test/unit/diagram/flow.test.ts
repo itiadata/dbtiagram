@@ -3,11 +3,10 @@ import { buildDiagram } from '../../../src/diagram/graph';
 import { layoutDiagram } from '../../../src/diagram/layout';
 import {
   EDGE_INTERACTION_WIDTH,
-  TABLE_SOURCE_HANDLE,
-  TABLE_TARGET_HANDLE,
   buildFlowElements,
   columnSourceHandle,
   columnTargetHandle,
+  type HandleSide,
 } from '../../../src/diagram/flow';
 import type { ModelDefinition } from '../../../src/dbt/types';
 
@@ -59,8 +58,8 @@ describe('buildFlowElements', () => {
     expect(flow.edges[0]).toMatchObject({
       source: 'a',
       target: 'b',
-      sourceHandle: columnSourceHandle('x1'),
-      targetHandle: columnTargetHandle('y1'),
+      sourceHandle: columnSourceHandle('x1', 'right'),
+      targetHandle: columnTargetHandle('y1', 'left'),
       type: 'smoothstep',
       interactionWidth: EDGE_INTERACTION_WIDTH,
       data: {
@@ -72,53 +71,11 @@ describe('buildFlowElements', () => {
     expect(flow.edges[1]).toMatchObject({
       source: 'a',
       target: 'b',
-      sourceHandle: columnSourceHandle('x2'),
-      targetHandle: columnTargetHandle('y2'),
+      sourceHandle: columnSourceHandle('x2', 'right'),
+      targetHandle: columnTargetHandle('y2', 'left'),
       interactionWidth: EDGE_INTERACTION_WIDTH,
       data: { title: 'a.x2 -> b.y2' },
     });
-  });
-
-  it('draws a single table-level edge for an FK with no columns', () => {
-    const { flow } = flowFor([
-      { name: 'a', constraints: [{ type: 'foreign_key', to: "ref('b')" }] },
-      { name: 'b' },
-    ]);
-
-    expect(flow.edges).toHaveLength(1);
-    expect(flow.edges[0]).toMatchObject({
-      source: 'a',
-      target: 'b',
-      sourceHandle: TABLE_SOURCE_HANDLE,
-      targetHandle: TABLE_TARGET_HANDLE,
-      type: 'smoothstep',
-      interactionWidth: EDGE_INTERACTION_WIDTH,
-      data: { title: 'a -> b' },
-    });
-    expect(flow.edges[0].data.sourceColumn).toBeUndefined();
-    expect(flow.edges[0].data.targetColumn).toBeUndefined();
-  });
-
-  it('draws a single table-level edge when column arrays have different lengths', () => {
-    const { flow } = flowFor([
-      {
-        name: 'a',
-        columns: [{ name: 'x1' }, { name: 'x2' }],
-        constraints: [
-          {
-            type: 'foreign_key',
-            columns: ['x1', 'x2'],
-            to: "ref('b')",
-            toColumns: ['y1'],
-          },
-        ],
-      },
-      { name: 'b', columns: [{ name: 'y1' }] },
-    ]);
-
-    expect(flow.edges).toHaveLength(1);
-    expect(flow.edges[0].sourceHandle).toBe(TABLE_SOURCE_HANDLE);
-    expect(flow.edges[0].targetHandle).toBe(TABLE_TARGET_HANDLE);
   });
 
   it('keeps edge ids unique even when FKs share column pairs', () => {
@@ -149,22 +106,22 @@ describe('buildFlowElements', () => {
     expect(ids).toEqual(['a.x1->b.y1', 'a.x2->b.y2', 'a.x1->b.y1[0]']);
   });
 
-  it('dedupes identical table-level FKs at the graph layer', () => {
+  it('dedupes identical FKs at the graph layer', () => {
     const { flow } = flowFor([
       {
         name: 'a',
         constraints: [
-          { type: 'foreign_key', to: "ref('b')" },
-          { type: 'foreign_key', to: "ref('b')" },
+          { type: 'foreign_key', columns: ['x'], to: "ref('b')", toColumns: ['y'] },
+          { type: 'foreign_key', columns: ['x'], to: "ref('b')", toColumns: ['y'] },
         ],
       },
-      { name: 'b' },
+      { name: 'b', columns: [{ name: 'y' }] },
     ]);
 
     expect(flow.edges).toHaveLength(1);
   });
 
-  it('carries the interaction width on every column-level and table-level edge', () => {
+  it('carries the interaction width on every edge', () => {
     const { flow } = flowFor([
       {
         name: 'a',
@@ -176,20 +133,22 @@ describe('buildFlowElements', () => {
             to: "ref('b')",
             toColumns: ['y1'],
           },
-          { type: 'foreign_key', to: "ref('c')" },
+          {
+            type: 'foreign_key',
+            columns: ['x2'],
+            to: "ref('c')",
+            toColumns: ['z1'],
+          },
         ],
       },
       { name: 'b', columns: [{ name: 'y1' }] },
-      { name: 'c' },
+      { name: 'c', columns: [{ name: 'z1' }] },
     ]);
 
     expect(flow.edges.length).toBeGreaterThan(0);
-    const columnLevel = flow.edges.find((edge) => edge.data.sourceColumn !== undefined);
-    const tableLevel = flow.edges.find((edge) => edge.data.sourceColumn === undefined);
-    expect(columnLevel).toBeDefined();
-    expect(tableLevel).toBeDefined();
-    expect(columnLevel!.interactionWidth).toBe(EDGE_INTERACTION_WIDTH);
-    expect(tableLevel!.interactionWidth).toBe(EDGE_INTERACTION_WIDTH);
+    for (const edge of flow.edges) {
+      expect(edge.interactionWidth).toBe(EDGE_INTERACTION_WIDTH);
+    }
     expect(EDGE_INTERACTION_WIDTH).toBe(24);
   });
 
@@ -251,5 +210,199 @@ describe('buildFlowElements', () => {
     ]);
     expect(flow.edges).toHaveLength(1);
     expect(flow.edges[0].data.virtual).toBeUndefined();
+  });
+});
+
+describe('used handle dots (spec 09 merged)', () => {
+  it('emits no edges and no handles for an FK with no column pairs', () => {
+    const { flow } = flowFor([
+      { name: 'a', constraints: [{ type: 'foreign_key', to: "ref('b')" }] },
+      { name: 'b' },
+    ]);
+    expect(flow.edges).toEqual([]);
+    expect(flow.nodes[0].data.handles).toBeUndefined();
+    expect(flow.nodes[1].data.handles).toBeUndefined();
+  });
+
+  it('records only a target handle for a column that is only an FK target', () => {
+    const { flow } = flowFor([
+      {
+        name: 'staging_orders',
+        columns: [{ name: 'order_id' }],
+        constraints: [
+          { type: 'foreign_key', columns: ['order_id'], to: "ref('orders')", toColumns: ['order_id'] },
+        ],
+      },
+      { name: 'orders', columns: [{ name: 'order_id' }, { name: 'total_amount' }] },
+    ]);
+    const orders = flow.nodes.find((n) => n.id === 'orders')!;
+    // orders.order_id is the target; total_amount participates in no FK.
+    expect(orders.data.handles).toEqual({
+      [columnTargetHandle('order_id', 'left')]: 'left',
+    });
+    expect(orders.data.handles![columnTargetHandle('total_amount', 'left')]).toBeUndefined();
+    expect(orders.data.handles![columnTargetHandle('total_amount', 'right')]).toBeUndefined();
+  });
+
+  it('records only a source handle for a column that is only an FK source', () => {
+    const { flow } = flowFor([
+      {
+        name: 'orders',
+        columns: [{ name: 'customer_id' }, { name: 'total_amount' }],
+        constraints: [
+          { type: 'foreign_key', columns: ['customer_id'], to: "ref('customers')", toColumns: ['customer_id'] },
+        ],
+      },
+      { name: 'customers', columns: [{ name: 'customer_id' }] },
+    ]);
+    const orders = flow.nodes.find((n) => n.id === 'orders')!;
+    expect(orders.data.handles).toEqual({
+      [columnSourceHandle('customer_id', 'right')]: 'right',
+    });
+    expect(orders.data.handles![columnTargetHandle('customer_id', 'left')]).toBeUndefined();
+  });
+
+  it('leaves an FK-unrelated column out of both handle lists', () => {
+    const { flow } = flowFor([
+      {
+        name: 'orders',
+        columns: [{ name: 'customer_id' }, { name: 'total_amount' }],
+        constraints: [
+          { type: 'foreign_key', columns: ['customer_id'], to: "ref('customers')", toColumns: ['customer_id'] },
+        ],
+      },
+      { name: 'customers', columns: [{ name: 'customer_id' }] },
+    ]);
+    const orders = flow.nodes.find((n) => n.id === 'orders')!;
+    expect(orders.data.handles![columnSourceHandle('total_amount', 'left')]).toBeUndefined();
+    expect(orders.data.handles![columnSourceHandle('total_amount', 'right')]).toBeUndefined();
+    expect(orders.data.handles![columnTargetHandle('total_amount', 'left')]).toBeUndefined();
+    expect(orders.data.handles![columnTargetHandle('total_amount', 'right')]).toBeUndefined();
+  });
+
+  it('records both a source and a target handle when a column is both', () => {
+    // Two models referencing each other on the same column name (self-refs are
+    // dropped by the graph, so the two-model form is the both-ways case).
+    const { flow } = flowFor([
+      {
+        name: 'a',
+        columns: [{ name: 'c' }],
+        constraints: [{ type: 'foreign_key', columns: ['c'], to: "ref('b')", toColumns: ['c'] }],
+      },
+      {
+        name: 'b',
+        columns: [{ name: 'c' }],
+        constraints: [{ type: 'foreign_key', columns: ['c'], to: "ref('a')", toColumns: ['c'] }],
+      },
+    ]);
+    const a = flow.nodes.find((n) => n.id === 'a')!;
+    const b = flow.nodes.find((n) => n.id === 'b')!;
+    const keys = (handles: typeof a.data.handles): string[] => Object.keys(handles ?? {});
+    // dagre places a left of b, so a's two edges attach on its right side and
+    // b's on its left: each node has exactly one source and one target handle.
+    expect(keys(a.data.handles).sort()).toEqual(
+      [columnSourceHandle('c', 'right'), columnTargetHandle('c', 'right')].sort(),
+    );
+    expect(keys(b.data.handles).sort()).toEqual(
+      [columnSourceHandle('c', 'left'), columnTargetHandle('c', 'left')].sort(),
+    );
+  });
+
+  it('omits the handles field for a node with no edges', () => {
+    const { flow } = flowFor([{ name: 'orphan', columns: [{ name: 'id' }] }]);
+    expect(flow.nodes[0].data.handles).toBeUndefined();
+  });
+
+  it('dedupes handle ids when multiple edges share a column', () => {
+    const { flow } = flowFor([
+      {
+        name: 'a',
+        columns: [{ name: 'x1' }, { name: 'x2' }],
+        constraints: [
+          {
+            type: 'foreign_key',
+            columns: ['x1', 'x2'],
+            to: "ref('b')",
+            toColumns: ['y1', 'y2'],
+          },
+          {
+            type: 'foreign_key',
+            columns: ['x1'],
+            to: "ref('b')",
+            toColumns: ['y1'],
+          },
+        ],
+      },
+      { name: 'b', columns: [{ name: 'y1' }, { name: 'y2' }] },
+    ]);
+    const a = flow.nodes.find((n) => n.id === 'a')!;
+    expect(flow.edges).toHaveLength(3);
+    expect(Object.keys(a.data.handles ?? {})).toEqual([
+      columnSourceHandle('x1', 'right'),
+      columnSourceHandle('x2', 'right'),
+    ]);
+  });
+
+  it('chooses the sides dynamically: a back-edge attaches source-left/target-right', () => {
+    // dagre ranks a before b in the cycle, so the b->a edge runs against the
+    // layout direction (target left of source) and must flip sides.
+    const { flow } = flowFor([
+      {
+        name: 'a',
+        columns: [{ name: 'c' }],
+        constraints: [{ type: 'foreign_key', columns: ['c'], to: "ref('b')", toColumns: ['c'] }],
+      },
+      {
+        name: 'b',
+        columns: [{ name: 'c' }],
+        constraints: [{ type: 'foreign_key', columns: ['c'], to: "ref('a')", toColumns: ['c'] }],
+      },
+    ]);
+    const forward = flow.edges.find((edge) => edge.source === 'a');
+    const back = flow.edges.find((edge) => edge.source === 'b');
+    expect(forward?.sourceHandle).toBe(columnSourceHandle('c', 'right'));
+    expect(forward?.targetHandle).toBe(columnTargetHandle('c', 'left'));
+    expect(back?.sourceHandle).toBe(columnSourceHandle('c', 'left'));
+    expect(back?.targetHandle).toBe(columnTargetHandle('c', 'right'));
+  });
+
+  it('every emitted handle id matches the side recorded in the node handles', () => {
+    const { flow } = flowFor([
+      {
+        name: 'order_items',
+        columns: [{ name: 'order_id' }, { name: 'customer_id' }, { name: 'product_id' }],
+        constraints: [
+          {
+            type: 'foreign_key',
+            columns: ['order_id', 'customer_id'],
+            to: "ref('orders')",
+            toColumns: ['order_id', 'customer_id'],
+          },
+          {
+            type: 'foreign_key',
+            columns: ['product_id'],
+            to: "ref('products')",
+            toColumns: ['product_id'],
+          },
+        ],
+      },
+      {
+        name: 'orders',
+        columns: [{ name: 'order_id' }, { name: 'customer_id' }],
+        constraints: [
+          { type: 'foreign_key', columns: ['customer_id'], to: "ref('customers')", toColumns: ['customer_id'] },
+        ],
+      },
+      { name: 'customers', columns: [{ name: 'customer_id' }] },
+      { name: 'products', columns: [{ name: 'product_id' }] },
+    ]);
+
+    for (const edge of flow.edges) {
+      const byNode = new Map<string, Record<string, HandleSide>>(
+        flow.nodes.map((node) => [node.id, node.data.handles ?? {}]),
+      );
+      expect(byNode.get(edge.source)?.[edge.sourceHandle ?? '']).toBeDefined();
+      expect(byNode.get(edge.target)?.[edge.targetHandle ?? '']).toBeDefined();
+    }
   });
 });
