@@ -16,6 +16,7 @@ import {
   useReactFlow,
   type Edge,
   type EdgeChange,
+  type EdgeTypes,
   type Node,
   type NodeChange,
   type NodeTypes,
@@ -24,8 +25,9 @@ import type { ModelEdit } from '../src/dbt/edit';
 import type { ForeignKeyDescriptor } from '../src/dbt/types';
 import type { DiagramGraph } from '../src/diagram/graph';
 import {
+  FK_EDGE_TYPE,
   buildFlowElements,
-  recomputeEdgeSides,
+  routeEdges,
   type FlowEdgeData,
   type FlowElements,
   type HandleSide,
@@ -44,12 +46,15 @@ import {
   type DiagramInteractionContextValue,
 } from './diagram-interaction-context';
 import { FilterSidebar } from './FilterSidebar';
+import { FkEdge } from './FkEdge';
 import { sameFkContent, type DraftForeignKey } from './ForeignKeySection';
 import { TableNode } from './TableNode';
 
 const vscode = window.acquireVsCodeApi();
 
 const nodeTypes: NodeTypes = { table: TableNode };
+// The obstacle-aware FK edge (spec 12) — it draws the routed polyline.
+const edgeTypes: EdgeTypes = { [FK_EDGE_TYPE]: FkEdge };
 
 /** What the user selected on the diagram (spec 06): a table or a column. */
 type Selection =
@@ -734,11 +739,12 @@ function DiagramCanvas({
     }
   }, [flow, layoutTick, filterTick, fitView]);
 
-  // Live edge geometry (spec 09 Manual Verify iteration): the side an edge
-  // uses — and the dot the column mounts — is re-derived from the CURRENT node
-  // positions on every drag, not frozen at the initial layout. Node rects come
-  // from React Flow's live state; recomputeEdgeSides preserves edge ids/data
-  // so hover highlighting and edge double-click keep working unchanged.
+  // Live edge geometry (spec 12): the sides an edge uses, the dot the column
+  // mounts, AND the path it takes around the other cards are all re-derived
+  // from the CURRENT node positions on every drag, not frozen at the initial
+  // layout. Node rects come from React Flow's live state; routeEdges preserves
+  // edge ids/type/data so hover highlighting and edge double-click keep
+  // working unchanged.
   const nodeRects = useMemo(
     () =>
       rfNodes.map((node) => ({
@@ -750,9 +756,20 @@ function DiagramCanvas({
       })),
     [rfNodes],
   );
+  // Column row indices come from the node data, so the router anchors each
+  // edge at the exact row it attaches to.
+  const columnIndexOf = useMemo(() => {
+    const byNode = new Map<string, Map<string, number>>(
+      rfNodes.map((node) => {
+        const columns = (node.data as { columns?: { name: string }[] }).columns ?? [];
+        return [node.id, new Map(columns.map((column, index) => [column.name, index]))];
+      }),
+    );
+    return (nodeId: string, column: string): number | undefined => byNode.get(nodeId)?.get(column);
+  }, [rfNodes]);
   const { edges: liveEdges, nodeHandles } = useMemo(
-    () => recomputeEdgeSides(flow.edges, nodeRects),
-    [flow.edges, nodeRects],
+    () => routeEdges(flow.edges, nodeRects, columnIndexOf),
+    [flow.edges, nodeRects, columnIndexOf],
   );
 
   // The nodes React Flow renders: the layout/data from `rfNodes`, with
@@ -815,6 +832,7 @@ function DiagramCanvas({
       onNodesChange={onNodesChange}
       onEdgesChange={onEdgesChange}
       nodeTypes={nodeTypes}
+      edgeTypes={edgeTypes}
       fitView
       fitViewOptions={{ padding: 0.15, maxZoom: 1 }}
       nodesConnectable={false}

@@ -4,10 +4,11 @@ import { layoutDiagram } from '../../../src/diagram/layout';
 import {
   EDGE_INTERACTION_WIDTH,
   HANDLE_SHARED_SIDE_OFFSET_PX,
+  FK_EDGE_TYPE,
   buildFlowElements,
   columnSourceHandle,
   columnTargetHandle,
-  recomputeEdgeSides,
+  routeEdges,
   sharesSideWithOppositeHandle,
   type HandleSide,
 } from '../../../src/diagram/flow';
@@ -17,6 +18,18 @@ function flowFor(models: ModelDefinition[]) {
   const graph = buildDiagram(models);
   const layout = layoutDiagram(graph);
   return { flow: buildFlowElements(graph, layout), layout };
+}
+
+/**
+ * `routeEdges` with a column lookup that anchors every edge at the card's
+ * vertical center (the row index is irrelevant to the side choice these tests
+ * assert). Spec 12: sides come out of the router, not a center comparison.
+ */
+function routeEdgesFor(
+  edges: Parameters<typeof routeEdges>[0],
+  nodeRects: Parameters<typeof routeEdges>[1],
+) {
+  return routeEdges(edges, nodeRects, () => undefined);
 }
 
 describe('buildFlowElements', () => {
@@ -63,7 +76,7 @@ describe('buildFlowElements', () => {
       target: 'b',
       sourceHandle: columnSourceHandle('x1', 'right'),
       targetHandle: columnTargetHandle('y1', 'left'),
-      type: 'smoothstep',
+      type: FK_EDGE_TYPE,
       interactionWidth: EDGE_INTERACTION_WIDTH,
       data: {
         sourceColumn: 'x1',
@@ -410,7 +423,7 @@ describe('used handle dots (spec 09 merged)', () => {
   });
 });
 
-describe('recomputeEdgeSides (live drag sides, spec 09 Manual Verify iteration)', () => {
+describe('routeEdges (live drag geometry, spec 12)', () => {
   /** A flow with one FK a.x -> b.y (dagre lays a left of b initially). */
   const pairFlow = () =>
     flowFor([
@@ -430,7 +443,7 @@ describe('recomputeEdgeSides (live drag sides, spec 09 Manual Verify iteration)'
 
   it('keeps forward sides when the target stays at/right of the source', () => {
     const flow = pairFlow();
-    const { edges: rebuilt, nodeHandles } = recomputeEdgeSides(flow.edges, rects(0, 400));
+    const { edges: rebuilt, nodeHandles } = routeEdgesFor(flow.edges, rects(0, 400));
     expect(rebuilt[0]).toMatchObject({
       source: 'a',
       target: 'b',
@@ -447,7 +460,7 @@ describe('recomputeEdgeSides (live drag sides, spec 09 Manual Verify iteration)'
 
   it('flips both endpoints and the dots when the target is dragged left of the source', () => {
     const flow = pairFlow();
-    const { edges: rebuilt, nodeHandles } = recomputeEdgeSides(flow.edges, rects(400, 0));
+    const { edges: rebuilt, nodeHandles } = routeEdgesFor(flow.edges, rects(400, 0));
     expect(rebuilt[0]).toMatchObject({
       sourceHandle: columnSourceHandle('x', 'left'),
       targetHandle: columnTargetHandle('y', 'right'),
@@ -462,10 +475,14 @@ describe('recomputeEdgeSides (live drag sides, spec 09 Manual Verify iteration)'
 
   it('preserves edge ids, data payloads, and edge type across recomputation', () => {
     const flow = pairFlow();
-    const { edges: rebuilt } = recomputeEdgeSides(flow.edges, rects(400, 0));
+    const { edges: rebuilt } = routeEdgesFor(flow.edges, rects(400, 0));
     expect(rebuilt[0].id).toBe(flow.edges[0].id);
-    expect(rebuilt[0].data).toEqual(flow.edges[0].data);
-    expect(rebuilt[0].type).toBe('smoothstep');
+    // The hover/tooltip payload survives; only the routed path is re-derived.
+    const { points: _rebuiltPoints, ...rebuiltData } = rebuilt[0].data;
+    const { points: _originalPoints, ...originalData } = flow.edges[0].data;
+    expect(rebuiltData).toEqual(originalData);
+    expect(rebuilt[0].data.points?.length).toBeGreaterThanOrEqual(2);
+    expect(rebuilt[0].type).toBe(FK_EDGE_TYPE);
     expect(rebuilt[0].interactionWidth).toBe(EDGE_INTERACTION_WIDTH);
   });
 
@@ -491,7 +508,7 @@ describe('recomputeEdgeSides (live drag sides, spec 09 Manual Verify iteration)'
       },
       { name: 'b', columns: [{ name: 'y1' }, { name: 'y2' }] },
     ]);
-    const { edges: rebuilt, nodeHandles } = recomputeEdgeSides(flow.edges, rects(400, 0));
+    const { edges: rebuilt, nodeHandles } = routeEdgesFor(flow.edges, rects(400, 0));
     expect(rebuilt).toHaveLength(3);
     for (const edge of rebuilt) {
       expect(edge.sourceHandle).toBe(columnSourceHandle(edge.data.sourceColumn!, 'left'));
@@ -506,7 +523,7 @@ describe('recomputeEdgeSides (live drag sides, spec 09 Manual Verify iteration)'
 
   it('omits nodes with no edges from the live handle map', () => {
     const { flow } = flowFor([{ name: 'orphan', columns: [{ name: 'id' }] }]);
-    const { edges: rebuilt, nodeHandles } = recomputeEdgeSides(flow.edges, [
+    const { edges: rebuilt, nodeHandles } = routeEdgesFor(flow.edges, [
       { id: 'orphan', x: 0, y: 0, width: 240, height: 68 },
     ]);
     expect(rebuilt).toEqual([]);
@@ -518,12 +535,12 @@ describe('recomputeEdgeSides (live drag sides, spec 09 Manual Verify iteration)'
     // Before React Flow has adopted any nodes (first render) or after a rename
     // (new edge endpoints, old rects) some endpoints are missing from the
     // rects; the edges must pass through untouched, never crash.
-    const { edges: rebuilt, nodeHandles } = recomputeEdgeSides(flow.edges, []);
+    const { edges: rebuilt, nodeHandles } = routeEdgesFor(flow.edges, []);
     expect(rebuilt).toEqual(flow.edges);
     expect(nodeHandles.size).toBe(0);
 
     // One endpoint missing is handled the same way.
-    const { edges: partiallyRebuilt, nodeHandles: partialHandles } = recomputeEdgeSides(
+    const { edges: partiallyRebuilt, nodeHandles: partialHandles } = routeEdgesFor(
       flow.edges,
       rects(0, 400).slice(0, 1),
     );
@@ -538,7 +555,7 @@ describe('sharesSideWithOppositeHandle (shared-side dot separation, spec 09 Manu
   // two edges must share the same side of the same column.
   const sharedHandles = () =>
     Object.fromEntries(
-      recomputeEdgeSides(
+      routeEdgesFor(
         flowFor([
           {
             name: 'order_items',
