@@ -3,13 +3,11 @@ import { buildDiagram } from '../../../src/diagram/graph';
 import { layoutDiagram } from '../../../src/diagram/layout';
 import {
   EDGE_INTERACTION_WIDTH,
-  HANDLE_SHARED_SIDE_OFFSET_PX,
   FK_EDGE_TYPE,
   buildFlowElements,
   columnSourceHandle,
   columnTargetHandle,
   routeEdges,
-  sharesSideWithOppositeHandle,
   type HandleSide,
 } from '../../../src/diagram/flow';
 import type { ModelDefinition } from '../../../src/dbt/types';
@@ -546,91 +544,5 @@ describe('routeEdges (live drag geometry, spec 12)', () => {
     );
     expect(partiallyRebuilt).toEqual(flow.edges);
     expect(partialHandles.size).toBe(0);
-  });
-});
-
-describe('sharesSideWithOppositeHandle (shared-side dot separation, spec 09 Manual Verify iteration)', () => {
-  // products.product_id is both an FK target (from order_items) and an FK
-  // source (to customers): after dragging products past both counterparts the
-  // two edges must share the same side of the same column.
-  const sharedHandles = () =>
-    Object.fromEntries(
-      routeEdgesFor(
-        flowFor([
-          {
-            name: 'order_items',
-            columns: [{ name: 'product_id' }],
-            constraints: [
-              {
-                type: 'foreign_key',
-                columns: ['product_id'],
-                to: "ref('products')",
-                toColumns: ['product_id'],
-              },
-            ],
-          },
-          {
-            name: 'products',
-            columns: [{ name: 'product_id' }],
-            config: {
-              meta: {
-                dbtiagram: {
-                  virtual: {
-                    foreign_keys: [
-                      { to: "ref('customers')", columns: ['product_id'], to_columns: ['customer_id'] },
-                    ],
-                  },
-                },
-              },
-            },
-          },
-          { name: 'customers', columns: [{ name: 'customer_id' }] },
-        ]).flow.edges,
-        // Both counterparts left of products -> both FKs attach to products'
-        // LEFT side: incoming target + outgoing source on product_id.
-        [
-          { id: 'order_items', x: 0, y: 0, width: 240, height: 68 },
-          { id: 'customers', x: 200, y: 0, width: 240, height: 68 },
-          { id: 'products', x: 600, y: 0, width: 240, height: 68 },
-        ],
-      ).nodeHandles.get('products')!,
-    );
-
-  it('reports true for both handle types when the column shares a side', () => {
-    const handles = sharedHandles();
-    expect(sharesSideWithOppositeHandle(handles, 'product_id', 'target', 'left')).toBe(true);
-    expect(sharesSideWithOppositeHandle(handles, 'product_id', 'source', 'left')).toBe(true);
-  });
-
-  it('reports false for the opposite side, which only the source uses', () => {
-    const handles = sharedHandles();
-    // products emits LEFT (to customers) and receives LEFT (from order_items);
-    // nothing uses the right side, so neither type reports a shared side there.
-    expect(sharesSideWithOppositeHandle(handles, 'product_id', 'target', 'right')).toBe(false);
-    expect(sharesSideWithOppositeHandle(handles, 'product_id', 'source', 'right')).toBe(false);
-  });
-
-  it('reports false for a column used only one way on a side', () => {
-    const handles: Record<string, HandleSide> = {
-      [columnTargetHandle('order_id', 'left')]: 'left',
-    };
-    expect(sharesSideWithOppositeHandle(handles, 'order_id', 'target', 'left')).toBe(false);
-    expect(sharesSideWithOppositeHandle(handles, 'order_id', 'source', 'left')).toBe(false);
-  });
-
-  it('reports false when the two handle types sit on opposite sides', () => {
-    const handles: Record<string, HandleSide> = {
-      [columnTargetHandle('c', 'left')]: 'left',
-      [columnSourceHandle('c', 'right')]: 'right',
-    };
-    expect(sharesSideWithOppositeHandle(handles, 'c', 'target', 'left')).toBe(false);
-    expect(sharesSideWithOppositeHandle(handles, 'c', 'source', 'right')).toBe(false);
-  });
-
-  it('exposes a 5px offset that keeps two 8px dots apart inside a 24px row', () => {
-    expect(HANDLE_SHARED_SIDE_OFFSET_PX).toBe(5);
-    const dotSpan = 8;
-    const gap = 2 * HANDLE_SHARED_SIDE_OFFSET_PX - dotSpan;
-    expect(gap).toBe(2); // 2px of clear space between the two dots
   });
 });

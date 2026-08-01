@@ -87,7 +87,8 @@ fully unit-testable as pure logic.
 
 Each candidate endpoint has an exact anchor point derived from the node rect and
 the column's row index (already known: `HEADER_HEIGHT + index * ROW_HEIGHT +
-ROW_HEIGHT / 2`), plus the shared-side vertical offset rule from feature 09:
+ROW_HEIGHT / 2`), at the row's exact vertical center (section 9 removes
+feature 09's shared-side offset):
 
 - left anchor: `(rect.x, rect.y + rowCenterY)`
 - right anchor: `(rect.x + rect.width, rect.y + rowCenterY)`
@@ -216,15 +217,36 @@ The fix removes the hazard instead of patching around it:
   id is absent gets the `table-node__handle--unused` class
   (`opacity: 0; pointer-events: none`), so the visual rule of feature 09 —
   a dot appears exactly where an edge attaches and nowhere else — is unchanged.
-- The shared-side ±`HANDLE_SHARED_SIDE_OFFSET_PX` dot offset is unchanged. It
-  only shifts a handle by 5px, so even an un-refreshed frame draws the line in
-  the right place; `useUpdateNodeInternals` is still called when a node's
-  `handles` map changes so the bounds catch up on the next frame.
+- The shared-side ±`HANDLE_SHARED_SIDE_OFFSET_PX` dot offset of feature 09 is
+  **removed** (Manual Verify iteration, section 9): edges leaving or arriving
+  on the same side of the same column now **share one dot**.
+  `useUpdateNodeInternals` is still called when a node's `handles` map changes
+  so the cached bounds catch up on the next frame.
 
 This supersedes feature 09's Confirm at Approval (b) ("unused handles are not
 mounted at all"): the conditional mounting it chose is the direct cause of
 dropped edges. The user-visible rule it stated (dots only where an edge
 attaches) is preserved exactly.
+
+### 9. One dot per column side (Manual Verify iteration)
+
+Feature 09 separated the two dots of a column that is both an FK source and an
+FK target on the same side by 5px, so that neither edge would hide the other.
+Now that both edges are reliably drawn, that separation is unwanted: the user
+wants **one blue dot per (column, side)** that all edges on that side share,
+whatever their number or direction.
+
+So:
+
+- `HANDLE_SHARED_SIDE_OFFSET_PX` and `sharesSideWithOppositeHandle` are
+  **removed** from `src/diagram/flow.ts` (with their unit tests). Nothing
+  replaces them — this is a pure deletion.
+- `TableNode` mounts every handle at the row's exact vertical center. The
+  `source` and `target` handles for the same (column, side) therefore sit at
+  the same point and read as a single dot, which is what all edges on that side
+  converge on.
+- Nothing else changes: the routes themselves are already computed per edge and
+  stay distinct.
 
 ## Scenarios
 
@@ -278,7 +300,7 @@ Then the line re-routes around the dragged card while it is being dragged
 Given the dbt Diagram is open and products.product_id is the target of order_items.product_id and the source of an FK to customers.customer_id
 And both counterparts sit on the same side of products, so both lines leave product_id on that side
 Then both lines are drawn (neither is dropped)
-And both dots are visible, separated vertically on the row
+And both lines converge on the SAME single blue dot on that side of the row
 And this still holds while any of the three cards is dragged
 ```
 
@@ -324,10 +346,13 @@ And no error is shown
       their **visibility** (`table-node__handle--unused`), so React Flow can
       never fail to resolve an edge endpoint and an edge is never dropped —
       in particular both FKs of a column that is source **and** target on the
-      same side are drawn, with their two dots vertically separated.
+      same side are drawn.
+- [ ] All edges attaching to the same (column, side) share ONE dot: the
+      shared-side vertical dot separation of feature 09
+      (`HANDLE_SHARED_SIDE_OFFSET_PX`, `sharesSideWithOppositeHandle`) is removed.
 - [ ] Feature 09 behavior that must not regress: dots only at real endpoints,
-      shared-side vertical dot separation, no table-level handles, zero-pair FK
-      drafts, hover highlighting, edge double-click.
+      no table-level handles, zero-pair FK drafts, hover highlighting, edge
+      double-click.
 - [ ] New `routing` unit tests cover: direct path, back-edge flip, stacked
       same-side, routing around one obstacle, routing around a wall of
       obstacles, no-clean-route fallback, determinism, and the node-limit

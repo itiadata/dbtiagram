@@ -8,7 +8,8 @@
  * unresolvable and its edge is dropped. `data.handles` (handle id -> side)
  * decides only which of them is VISIBLE, so a dot still appears exactly where
  * an FK edge attaches and nowhere else — unrelated columns and edge-free cards
- * show no dots at all. Table-level handles are gone (FK edges are
+ * show no dots at all. All edges attaching to the same (column, side) share
+ * one dot (spec 12, section 9). Table-level handles are gone (FK edges are
  * column-pair-only).
  *
  * Since spec 06 the cards are interactive: clicking the header selects the
@@ -20,10 +21,8 @@
 import { memo, useContext, useEffect, useRef, useState, type KeyboardEvent } from 'react';
 import { Handle, Position, useUpdateNodeInternals, type NodeProps } from '@xyflow/react';
 import {
-  HANDLE_SHARED_SIDE_OFFSET_PX,
   columnSourceHandle,
   columnTargetHandle,
-  sharesSideWithOppositeHandle,
   type HandleSide,
   type FlowNode,
 } from '../src/diagram/flow';
@@ -82,22 +81,9 @@ function TableNodeComponent({ id, data }: NodeProps<FlowNode>): JSX.Element {
     const handleId = type === 'source' ? columnSourceHandle(column, side) : columnTargetHandle(column, side);
     const used = usedHandles?.[handleId] !== undefined;
     const position = side === 'right' ? Position.Right : Position.Left;
-    // A column that is both an FK source and an FK target on the SAME side
-    // would mount both dots at the exact same point — one edge would hide the
-    // other. Separate the two dots vertically (target above center, source
-    // below) so both stay visible (spec 09 Manual Verify iteration).
-    const shared =
-      used &&
-      usedHandles !== undefined &&
-      sharesSideWithOppositeHandle(usedHandles, column, type, side);
-    const style = shared
-      ? {
-          top:
-            type === 'source'
-              ? `calc(50% + ${HANDLE_SHARED_SIDE_OFFSET_PX}px)`
-              : `calc(50% - ${HANDLE_SHARED_SIDE_OFFSET_PX}px)`,
-        }
-      : undefined;
+    // Every handle sits at the row's exact vertical center, so all edges
+    // attaching to the same (column, side) — however many, in either
+    // direction — converge on ONE shared dot (spec 12, section 9).
     return (
       <Handle
         key={handleId}
@@ -105,7 +91,6 @@ function TableNodeComponent({ id, data }: NodeProps<FlowNode>): JSX.Element {
         type={type}
         position={position}
         className={used ? undefined : 'table-node__handle--unused'}
-        style={style}
       />
     );
   };
