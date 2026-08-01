@@ -76,6 +76,35 @@ export function columnTargetHandle(column: string, side: HandleSide): string {
 }
 
 /**
+ * Vertical offset (px) applied to the two dots when a column carries both a
+ * source and a target edge on the same side. The dots would otherwise coincide
+ * at the row center and one edge would hide the other (spec 09 Manual Verify
+ * iteration). The rows are 24px tall, so ±5px keeps both 8px dots inside.
+ */
+export const HANDLE_SHARED_SIDE_OFFSET_PX = 5;
+
+/**
+ * True when a column holds BOTH handle types on the same side — a `source` dot
+ * whose column already has the `target` dot for that side, or vice versa. The
+ * webview shifts the two dots apart vertically in that case (see
+ * `HANDLE_SHARED_SIDE_OFFSET_PX`). A column used only one way, or on opposite
+ * sides, never coincides and reports false (for both types).
+ */
+export function sharesSideWithOppositeHandle(
+  handles: Record<string, HandleSide>,
+  column: string,
+  type: 'source' | 'target',
+  side: HandleSide,
+): boolean {
+  const handleId =
+    type === 'source' ? columnSourceHandle(column, side) : columnTargetHandle(column, side);
+  if (handles[handleId] !== side) return false;
+  const siblingId =
+    type === 'source' ? columnTargetHandle(column, side) : columnSourceHandle(column, side);
+  return handles[siblingId] === side;
+}
+
+/**
  * A node's current on-canvas footprint. `buildFlowElements` builds these from
  * the layout; the webview builds them from React Flow's live node state
  * (position + measured width/height) when recomputing edge sides during a

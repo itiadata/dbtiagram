@@ -18,8 +18,10 @@
 import { memo, useContext, useEffect, useRef, useState, type KeyboardEvent } from 'react';
 import { Handle, Position, type NodeProps } from '@xyflow/react';
 import {
+  HANDLE_SHARED_SIDE_OFFSET_PX,
   columnSourceHandle,
   columnTargetHandle,
+  sharesSideWithOppositeHandle,
   type HandleSide,
   type FlowNode,
 } from '../src/diagram/flow';
@@ -58,11 +60,30 @@ function TableNodeComponent({ id, data }: NodeProps<FlowNode>): JSX.Element {
   // A Handle renders only when its id is present, at the recorded side.
   const usedHandles = data.handles;
 
-  const renderHandle = (handleId: string, type: 'source' | 'target'): JSX.Element | null => {
-    const side: HandleSide | undefined = usedHandles?.[handleId];
-    if (side === undefined) return null;
+  const renderHandle = (
+    column: string,
+    side: HandleSide,
+    type: 'source' | 'target',
+  ): JSX.Element | null => {
+    const handleId = type === 'source' ? columnSourceHandle(column, side) : columnTargetHandle(column, side);
+    if (usedHandles?.[handleId] === undefined) return null;
     const position = side === 'right' ? Position.Right : Position.Left;
-    return <Handle id={handleId} type={type} position={position} />;
+    // A column that is both an FK source and an FK target on the SAME side
+    // would mount both dots at the exact same point — one edge would hide the
+    // other. Separate the two dots vertically (target above center, source
+    // below) so both stay visible (spec 09 Manual Verify iteration).
+    const shared =
+      usedHandles !== undefined &&
+      sharesSideWithOppositeHandle(usedHandles, column, type, side);
+    const style = shared
+      ? {
+          top:
+            type === 'source'
+              ? `calc(50% + ${HANDLE_SHARED_SIDE_OFFSET_PX}px)`
+              : `calc(50% - ${HANDLE_SHARED_SIDE_OFFSET_PX}px)`,
+        }
+      : undefined;
+    return <Handle id={handleId} type={type} position={position} style={style} />;
   };
 
   return (
@@ -110,8 +131,8 @@ function TableNodeComponent({ id, data }: NodeProps<FlowNode>): JSX.Element {
             onMouseLeave={() => interaction?.onColumnLeave(id, column.name)}
             onClick={() => interaction?.onColumnSelect(id, column.name)}
           >
-            {renderHandle(columnTargetHandle(column.name, 'left'), 'target')}
-            {renderHandle(columnTargetHandle(column.name, 'right'), 'target')}
+            {renderHandle(column.name, 'left', 'target')}
+            {renderHandle(column.name, 'right', 'target')}
             {isPk && (
               <span
                 className={`table-node__pk-icon${
@@ -177,8 +198,8 @@ function TableNodeComponent({ id, data }: NodeProps<FlowNode>): JSX.Element {
                 {column.dataType ?? '—'}
               </span>
             )}
-            {renderHandle(columnSourceHandle(column.name, 'left'), 'source')}
-            {renderHandle(columnSourceHandle(column.name, 'right'), 'source')}
+            {renderHandle(column.name, 'left', 'source')}
+            {renderHandle(column.name, 'right', 'source')}
           </div>
         );
       })}

@@ -27,6 +27,13 @@ the moment a card is dragged, not frozen at the last automatic layout, so the
 FK edge departs/arrives on the side of the card that actually faces its
 counterpart at all times.
 
+When a column is **both** an FK source and an FK target on the **same side**
+(e.g. `products.product_id` receives from `order_items` and departs to
+`customers`, and the user drags products so both counterparts sit on the same
+side), the two dots would coincide and one edge would hide the other — so the
+two dots separate a few pixels vertically, keeping both edges and both dots
+visible.
+
 This feature merges the former features 09 (dots only at edge endpoints) and
 10 (FKs need at least one column pair): the two were drafted separately but
 rewrite the same handle/edge machinery, and feature 10 removes the table-level
@@ -200,6 +207,18 @@ edge endpoints from mounted Handle elements — and the used set is derived from
 the exact edges in the same `buildFlowElements` pass, so they are always
 consistent.
 
+**Shared-side separation (Manual Verify iteration).** A column that is both an
+FK source and an FK target on the same side would mount a `source` and a
+`target` dot at the exact same point of the row — the dots coincide and the two
+edges (one arriving, one departing) overlap and one hides the other. The pure
+helper `sharesSideWithOppositeHandle` (in `src/diagram/flow.ts`) detects this
+(a `source` dot whose column already holds the `target` dot for the same side,
+and vice versa), and TableNode then offsets the two dots vertically by
+`HANDLE_SHARED_SIDE_OFFSET_PX` (5px: the target dot `top: calc(50% - 5px)`, the
+source dot `top: calc(50% + 5px)`) so both dots and both edges stay visible.
+The side rule itself stays horizontal-only (Confirm at Approval (a)); only the
+coinciding dots within a 24px row move apart.
+
 ### 4. Styles (`webview-ui/styles.css`)
 
 No change beyond the existing base `.react-flow__handle` dot styling: unused
@@ -302,7 +321,11 @@ unit tests instead.
   swaps both endpoints' sides and the dot map, and vice versa), preserves edge
   ids/data, and **falls back to the edge's existing sides when an endpoint is
   missing from the rects** (a transient mount/rename gap must never crash the
-  webview — the next render recomputes from the complete rect set).
+  webview — the next render recomputes from the complete rect set);
+  `sharesSideWithOppositeHandle` reports true exactly when the same column
+  holds both the source and the target dot for a side (source→target and
+  target→source), and false for a column used only one way or on opposite
+  sides.
 - `dbt/edit.test.ts` — remove the `addForeignKey` suite; add `createForeignKey`
   (real + virtual persistence, ≥1 pair validation, unequal-length rejection,
   unknown target, unknown source/target column, identity/no-op guard);
@@ -422,6 +445,16 @@ When the user drags customers back to the right of orders
 Then the edge departs orders.customer_id on the right and arrives customers.customer_id on the left again
 ```
 
+### Two FKs of the same column on the same side stay visible
+
+```
+Given the dbt Diagram is open and products.product_id is the target of order_items.product_id and the source of a virtual FK to customers.customer_id
+When the user drags products so both order_items and customers sit on the same side of products
+Then both FK edges attach to products.product_id on that side
+And the two dots separate vertically on the row (they do not sit on top of each other)
+And both edges and both dots remain visible
+```
+
 ### An FK without column pairs draws no edge and no dot
 
 ```
@@ -499,6 +532,10 @@ And no file is written
       id is in `data.handles`**, at the recorded side; unrelated columns and
       edge-free cards show no dots anywhere; used handles keep the current dot
       styling; edge geometry is unchanged apart from the side choice.
+- [ ] When a column carries both a source and a target handle on the **same
+      side**, the two dots separate vertically by `HANDLE_SHARED_SIDE_OFFSET_PX`
+      (target up, source down) so both dots and both edges stay visible;
+      `sharesSideWithOppositeHandle` drives the offset and is unit-tested.
 - [ ] `buildDiagram` draws no edge for FKs with empty or unequal-length column
       arrays; descriptors stay in `node.foreignKeys`; all other edge drop
       rules are unchanged.
