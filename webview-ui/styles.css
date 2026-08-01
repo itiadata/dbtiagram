@@ -354,6 +354,267 @@ body {
   color: var(--muted);
 }
 
+/* ---- Details sidebar: Primary key + Foreign keys sections (spec 08) ---- */
+
+.details__sub-section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+}
+
+.details__sub-section-title {
+  margin: 0;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+}
+
+.details__note {
+  margin: 0;
+  font-size: 11px;
+  color: var(--muted);
+  line-height: 1.4;
+}
+
+/* Checkbox row (Virtual toggle) */
+.details__checkbox-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+}
+
+.details__checkbox-row input {
+  margin: 0;
+  accent-color: var(--accent);
+}
+
+/* Removable PK column chips */
+.pk-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.pk-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  padding: 2px 6px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
+}
+
+.pk-chip__remove {
+  border: none;
+  background: none;
+  padding: 0 2px;
+  font-size: 11px;
+  line-height: 1;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.pk-chip__remove:hover {
+  color: var(--error);
+}
+
+/* Foreign key cards */
+.fk-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.fk-card {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 8px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--card) 70%, transparent);
+}
+
+/* The FK focused by double-clicking its edge (spec 08): accent ring + tint. */
+.fk-card--focused {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 1px var(--accent);
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
+}
+
+.fk-card__header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.fk-card__target {
+  flex: 1;
+  min-width: 0;
+}
+
+.fk-card__remove {
+  font: inherit;
+  font-size: 11px;
+  padding: 2px 6px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: none;
+  color: var(--error);
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.fk-card__remove:hover {
+  background: color-mix(in srgb, var(--error) 10%, transparent);
+}
+
+/* One source -> target column pair row */
+.fk-pair {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.fk-pair__arrow {
+  color: var(--muted);
+  font-size: 11px;
+  flex-shrink: 0;
+}
+
+.fk-pair__select {
+  flex: 1;
+  min-width: 0;
+}
+
+.fk-pair__remove {
+  border: none;
+  background: none;
+  padding: 0 2px;
+  font-size: 12px;
+  line-height: 1;
+  color: var(--muted);
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.fk-pair__remove:hover {
+  color: var(--error);
+}
+
+.fk-card__add-pair {
+  align-self: flex-start;
+  font: inherit;
+  font-size: 11px;
+  padding: 2px 6px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: none;
+  color: var(--accent);
+  cursor: pointer;
+}
+
+.fk-card__add-pair:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+}
+
+.fk-card__add-pair:disabled {
+  color: var(--muted);
+  cursor: default;
+  opacity: 0.6;
+}
+
+/* Reusable searchable picker (spec 08) */
+.search-select {
+  position: relative;
+}
+
+.search-select__button {
+  width: 100%;
+  box-sizing: border-box;
+  font: inherit;
+  font-size: 12px;
+  padding: 3px 6px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--card);
+  color: var(--text);
+  text-align: left;
+  cursor: pointer;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.search-select__button--placeholder {
+  color: var(--muted);
+}
+
+.search-select__button:hover {
+  border-color: var(--accent);
+}
+
+.search-select__input {
+  width: 100%;
+  box-sizing: border-box;
+  font: inherit;
+  font-size: 12px;
+  padding: 3px 6px;
+  border: 1px solid var(--accent);
+  border-radius: 4px 4px 0 0;
+  background: var(--card);
+  color: var(--text);
+  outline: none;
+}
+
+.search-select__menu {
+  position: absolute;
+  z-index: 20;
+  left: 0;
+  right: 0;
+  max-height: 160px;
+  overflow-y: auto;
+  border: 1px solid var(--border);
+  border-top: none;
+  border-radius: 0 0 4px 4px;
+  background: var(--card);
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);
+}
+
+.search-select__option {
+  display: block;
+  width: 100%;
+  box-sizing: border-box;
+  font: inherit;
+  font-size: 12px;
+  padding: 3px 6px;
+  border: none;
+  background: none;
+  color: var(--text);
+  text-align: left;
+  cursor: pointer;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.search-select__option:hover {
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+}
+
+.search-select__empty {
+  padding: 3px 6px;
+  font-size: 12px;
+  color: var(--muted);
+}
+
 /* Overlay shown over the (still-mounted) canvas when the filters hide every
    table (spec 05): pointer-events none so the flow stays interactive. */
 .empty-overlay {
@@ -459,6 +720,18 @@ body {
   opacity: 0.45;
 }
 
+/* PK key icon at the start of a column row (spec 08): accent-colored, real PK
+   filled, virtual PK outlined. */
+.table-node__pk-icon {
+  flex-shrink: 0;
+  display: inline-flex;
+  color: var(--accent);
+}
+
+.table-node__pk-icon--virtual {
+  color: var(--muted);
+}
+
 /* Inline cell editor (spec 06): fills the cell, inherits the row font, and
    carries `nodrag` so editing never starts a node drag. */
 .table-node__inline-edit {
@@ -513,6 +786,20 @@ body {
 .react-flow__edge.edge--active .react-flow__edge-path {
   stroke: var(--accent-hover);
   stroke-width: 3.5;
+}
+
+/* Virtual (unenforced, meta-stored) FK edges: dashed + muted, distinct from
+   enforced edges (spec 08). */
+.react-flow__edge.edge--virtual .react-flow__edge-path {
+  stroke: var(--muted);
+  stroke-width: 1.5;
+  stroke-dasharray: 5 4;
+}
+
+.react-flow__edge.edge--virtual.edge--active .react-flow__edge-path {
+  stroke: var(--accent-hover);
+  stroke-width: 3.5;
+  stroke-dasharray: 5 4;
 }
 
 /* Keep the invisible interaction band painted so it stays hit-testable under

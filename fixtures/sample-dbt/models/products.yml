@@ -2,6 +2,16 @@ version: 2
 models:
   - name: products
     description: One row per product
+    config:
+      meta:
+        dbtiagram:
+          virtual:
+            primary_key:
+              columns: [product_id]
+            foreign_keys:
+              - to: ref('customers')
+                columns: [product_id]
+                to_columns: [customer_id]
     columns:
       - name: product_id
         data_type: integer

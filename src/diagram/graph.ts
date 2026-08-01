@@ -3,7 +3,8 @@
  * MUST NOT import `vscode`.
  */
 import { parseRef } from '../dbt/refs';
-import type { ModelColumn, ModelDefinition } from '../dbt/types';
+import { readVirtualConstraints } from '../dbt/virtual';
+import type { ForeignKeyDescriptor, ModelColumn, ModelDefinition } from '../dbt/types';
 
 export interface TableNodeColumn {
   name: string;
@@ -16,6 +17,10 @@ export interface TableNode {
   label: string;
   description?: string;
   columns: TableNodeColumn[];
+  /** The displayed primary key: virtual-first (spec 08, Confirm at Approval (c)). */
+  primaryKey?: { columns: string[]; virtual: boolean };
+  /** Every declared FK — real constraints first, then virtual meta entries. */
+  foreignKeys: ForeignKeyDescriptor[];
 }
 
 export interface RelationEdge {
@@ -25,6 +30,8 @@ export interface RelationEdge {
   sourceColumns: string[];
   /** FK columns on the target model; empty for a table-level edge. */
   targetColumns: string[];
+  /** True when the FK is virtual (meta-stored) — drawn dashed (spec 08). */
+  virtual: boolean;
 }
 
 export interface DiagramGraph {
@@ -35,48 +42,107 @@ export interface DiagramGraph {
 /**
  * Builds the diagram graph from a set of model definitions.
  *
- * Edges are derived exclusively from `foreign_key` constraints (spec 02). The
- * legacy `refs` key is not a relationship source and never produces edges.
+ * Edges are derived from `foreign_key` constraints (spec 02) plus virtual FKs
+ * stored in `config.meta.dbtiagram.virtual` (spec 08). The legacy `refs` key is
+ * not a relationship source and never produces edges.
  */
 export function buildDiagram(models: ModelDefinition[]): DiagramGraph {
   const known = new Set(models.map((m) => m.name));
 
-  const nodes: TableNode[] = models.map((m) => ({
-    id: m.name,
-    label: m.name,
-    description: m.description,
-    columns: (m.columns ?? []).map((c: ModelColumn) => ({
-      name: c.name,
-      dataType: c.dataType,
-      description: c.description,
-    })),
-  }));
+  const nodes: TableNode[] = models.map((m) => {
+    const virtual = readVirtualConstraints(m);
+
+    let primaryKey: TableNode['primaryKey'];
+    if (virtual.primaryKey !== undefined) {
+      // The dbtiagram-namespaced block records what was last done in the
+      // diagram — it wins over a coexisting real constraint for display.
+      primaryKey = { columns: virtual.primaryKey.columns, virtual: true };
+    } else {
+      const constraint = (m.constraints ?? []).find((c) => c.type === 'primary_key');
+      if (constraint !== undefined) {
+        primaryKey = { columns: constraint.columns ?? [], virtual: false };
+      }
+    }
+
+    const foreignKeys: ForeignKeyDescriptor[] = [];
+    for (const constraint of m.constraints ?? []) {
+      if (constraint.type !== 'foreign_key') continue;
+      const to = constraint.to ?? '';
+      const ref = parseRef(to);
+      foreignKeys.push({
+        target: ref === null ? undefined : ref.name,
+        to,
+        columns: constraint.columns ?? [],
+        toColumns: constraint.toColumns ?? [],
+        virtual: false,
+      });
+    }
+    for (const fk of virtual.foreignKeys ?? []) {
+      const ref = parseRef(fk.to);
+      foreignKeys.push({
+        target: ref === null ? undefined : ref.name,
+        to: fk.to,
+        columns: fk.columns,
+        toColumns: fk.toColumns,
+        virtual: true,
+      });
+    }
+
+    return {
+      id: m.name,
+      label: m.name,
+      description: m.description,
+      columns: (m.columns ?? []).map((c: ModelColumn) => ({
+        name: c.name,
+        dataType: c.dataType,
+        description: c.description,
+      })),
+      ...(primaryKey !== undefined ? { primaryKey } : {}),
+      foreignKeys,
+    };
+  });
 
   const edges: RelationEdge[] = [];
   const seen = new Set<string>();
 
+  const addEdge = (
+    source: string,
+    constraint: { columns?: string[]; to?: string; toColumns?: string[] },
+    virtual: boolean,
+  ): void => {
+    if (constraint.to === undefined) return;
+    const ref = parseRef(constraint.to);
+    if (ref === null) return;
+    const target = ref.name;
+    if (target === source || !known.has(target)) return;
+
+    const edge: RelationEdge = {
+      source,
+      target,
+      sourceColumns: constraint.columns ?? [],
+      targetColumns: constraint.toColumns ?? [],
+      virtual,
+    };
+
+    // Real edges are added before virtual ones (see below), so when a real
+    // and a virtual FK describe the same mapping the first (real) wins.
+    const key = `${edge.source}\u0000${edge.target}\u0000${JSON.stringify(
+      edge.sourceColumns,
+    )}\u0000${JSON.stringify(edge.targetColumns)}`;
+    if (seen.has(key)) return;
+    seen.add(key);
+    edges.push(edge);
+  };
+
   for (const model of models) {
+    const virtual = readVirtualConstraints(model);
+    // Real constraints first so their edges dedupe ahead of virtual ones.
     for (const constraint of model.constraints ?? []) {
       if (constraint.type !== 'foreign_key') continue;
-      if (constraint.to === undefined) continue;
-      const ref = parseRef(constraint.to);
-      if (ref === null) continue;
-      const target = ref.name;
-      if (target === model.name || !known.has(target)) continue;
-
-      const edge: RelationEdge = {
-        source: model.name,
-        target,
-        sourceColumns: constraint.columns ?? [],
-        targetColumns: constraint.toColumns ?? [],
-      };
-
-      const key = `${edge.source}\u0000${edge.target}\u0000${JSON.stringify(
-        edge.sourceColumns,
-      )}\u0000${JSON.stringify(edge.targetColumns)}`;
-      if (seen.has(key)) continue;
-      seen.add(key);
-      edges.push(edge);
+      addEdge(model.name, constraint, false);
+    }
+    for (const fk of virtual.foreignKeys ?? []) {
+      addEdge(model.name, fk, true);
     }
   }
 

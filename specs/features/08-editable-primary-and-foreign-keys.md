@@ -1,7 +1,7 @@
 ---
 id: 08
 title: Editable primary keys and foreign keys
-status: approved
+status: implemented
 priority: high
 created: 2026-08-01
 owner: unassigned

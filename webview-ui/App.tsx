@@ -22,8 +22,13 @@ import {
   type NodeTypes,
 } from '@xyflow/react';
 import type { ModelEdit } from '../src/dbt/edit';
+import type { ForeignKeyDescriptor } from '../src/dbt/types';
 import type { DiagramGraph } from '../src/diagram/graph';
-import { buildFlowElements, type FlowElements } from '../src/diagram/flow';
+import {
+  buildFlowElements,
+  type FlowEdgeData,
+  type FlowElements,
+} from '../src/diagram/flow';
 import { layoutDiagram } from '../src/diagram/layout';
 import { mergeFlowNodes } from '../src/diagram/positions';
 import { computeVisibleModels, filterGraph, reconcileSelection } from '../src/shared/filter';
@@ -38,6 +43,7 @@ import {
   type DiagramInteractionContextValue,
 } from './diagram-interaction-context';
 import { FilterSidebar } from './FilterSidebar';
+import { sameFkContent } from './ForeignKeySection';
 import { TableNode } from './TableNode';
 
 const vscode = window.acquireVsCodeApi();
@@ -69,6 +75,9 @@ export function App(): JSX.Element {
   const [hoveredEdgeId, setHoveredEdgeId] = useState<string | null>(null);
   const [hoveredColumn, setHoveredColumn] = useState<ColumnRef | null>(null);
   const [layoutTick, setLayoutTick] = useState(0);
+  // Spec 08: the FK highlighted + scrolled into view in the details sidebar
+  // after double-clicking its edge; null when nothing is focused.
+  const [focusedFk, setFocusedFk] = useState<ForeignKeyDescriptor | null>(null);
 
   // Spec 05 filtering: per-file metadata from the host, the user's checked
   // sets (everything checked by default), the two search boxes, and a tick
@@ -151,6 +160,17 @@ export function App(): JSX.Element {
             if (node === undefined) return null;
             return node.columns.some((col) => col.name === current.column) ? current : null;
           });
+
+          // Spec 08: a focused FK survives a diagram update only while a
+          // descriptor matching it still exists (an edit that changed the FK
+          // clears the focus).
+          setFocusedFk((current) => {
+            if (current === null) return current;
+            const stillThere = message.diagram.nodes.some((node) =>
+              node.foreignKeys.some((fk) => sameFkContent(current, fk)),
+            );
+            return stillThere ? current : null;
+          });
           break;
         }
         case 'diagram:error': {
@@ -208,13 +228,22 @@ export function App(): JSX.Element {
 
   const edges = useMemo<Edge[]>(() => {
     if (flow === null) return [];
-    return flow.edges.map((edge) => ({
-      ...edge,
-      className: activeEdgeIds.has(edge.id) ? 'edge--active' : undefined,
-      // Every active edge flows (dashes travel child -> parent): the hovered
-      // edge, or all edges touching a hovered column (spec 03).
-      animated: activeEdgeIds.has(edge.id),
-    }));
+    return flow.edges.map((edge) => {
+      const active = activeEdgeIds.has(edge.id);
+      // Virtual FKs draw dashed (spec 08) — combined with the hover/active
+      // class so a hovered virtual edge keeps its active styling.
+      const classes = [
+        active ? 'edge--active' : null,
+        edge.data.virtual ? 'edge--virtual' : null,
+      ].filter((c): c is string => c !== null);
+      return {
+        ...edge,
+        className: classes.length > 0 ? classes.join(' ') : undefined,
+        // Every active edge flows (dashes travel child -> parent): the hovered
+        // edge, or all edges touching a hovered column (spec 03).
+        animated: active,
+      };
+    });
   }, [flow, activeEdgeIds]);
 
   const highlightedColumns = useMemo(() => {
@@ -259,6 +288,7 @@ export function App(): JSX.Element {
 
   const onPaneClick = useCallback((): void => {
     setSelection(null);
+    setFocusedFk(null);
   }, []);
 
   // Feature 07: a defined onEdgeClick is what keeps React Flow from tagging
@@ -272,6 +302,41 @@ export function App(): JSX.Element {
       onTableSelect(edge.source);
     },
     [onTableSelect],
+  );
+
+  // Spec 08: double-clicking an FK edge selects the child table AND focuses
+  // (highlights + scrolls into view) the matching FK in the Foreign keys
+  // section. Column-level edges match the descriptor whose pair equals the
+  // edge's columns; table-level edges match the descriptor with no columns.
+  const onEdgeDoubleClick = useCallback(
+    (_event: ReactMouseEvent, edge: Edge): void => {
+      onTableSelect(edge.source);
+      if (graph === null) {
+        setFocusedFk(null);
+        return;
+      }
+      const node = graph.nodes.find((n) => n.id === edge.source);
+      if (node === undefined) {
+        setFocusedFk(null);
+        return;
+      }
+      const data = edge.data as FlowEdgeData | undefined;
+      let matched: ForeignKeyDescriptor | null = null;
+      for (const fk of node.foreignKeys) {
+        if (data?.sourceColumn !== undefined && data?.targetColumn !== undefined) {
+          const index = fk.columns.indexOf(data.sourceColumn);
+          if (index !== -1 && fk.toColumns[index] === data.targetColumn) {
+            matched = fk;
+            break;
+          }
+        } else if (fk.columns.length === 0 && fk.toColumns.length === 0 && fk.target === edge.target) {
+          matched = fk;
+          break;
+        }
+      }
+      setFocusedFk(matched);
+    },
+    [graph, onTableSelect],
   );
 
   /**
@@ -482,6 +547,7 @@ export function App(): JSX.Element {
                     onEdgeMouseEnter={onEdgeMouseEnter}
                     onEdgeMouseLeave={onEdgeMouseLeave}
                     onEdgeClick={onEdgeClick}
+                    onEdgeDoubleClick={onEdgeDoubleClick}
                     onAutoLayout={onAutoLayout}
                     onPaneClick={onPaneClick}
                   />
@@ -491,7 +557,13 @@ export function App(): JSX.Element {
           )}
         </div>
 
-        <DetailsSidebar key={detailsKey} entity={selectedEntity} onEdit={onEdit} />
+        <DetailsSidebar
+          key={detailsKey}
+          entity={selectedEntity}
+          nodes={graph?.nodes ?? []}
+          focusedFk={focusedFk}
+          onEdit={onEdit}
+        />
       </div>
     </main>
   );
@@ -505,6 +577,7 @@ interface DiagramCanvasProps {
   onEdgeMouseEnter: (event: ReactMouseEvent, edge: Edge) => void;
   onEdgeMouseLeave: () => void;
   onEdgeClick: (event: ReactMouseEvent, edge: Edge) => void;
+  onEdgeDoubleClick: (event: ReactMouseEvent, edge: Edge) => void;
   onAutoLayout: () => void;
   onPaneClick: () => void;
 }
@@ -517,6 +590,7 @@ function DiagramCanvas({
   onEdgeMouseEnter,
   onEdgeMouseLeave,
   onEdgeClick,
+  onEdgeDoubleClick,
   onAutoLayout,
   onPaneClick,
 }: DiagramCanvasProps): JSX.Element {
@@ -588,6 +662,7 @@ function DiagramCanvas({
       onEdgeMouseEnter={onEdgeMouseEnter}
       onEdgeMouseLeave={onEdgeMouseLeave}
       onEdgeClick={onEdgeClick}
+      onEdgeDoubleClick={onEdgeDoubleClick}
       onPaneClick={onPaneClick}
       minZoom={0.1}
       maxZoom={2}

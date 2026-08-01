@@ -25,6 +25,7 @@ import { HEADER_HEIGHT, ROW_HEIGHT } from '../src/diagram/layout';
 import { DiagramInteractionContext } from './diagram-interaction-context';
 
 const EMPTY_COLUMNS: ReadonlySet<string> = new Set();
+const EMPTY_PK_COLUMNS: readonly string[] = [];
 
 /**
  * Which cell is being edited inline: the table title, or a cell of a column.
@@ -40,6 +41,11 @@ function TableNodeComponent({ id, data }: NodeProps<FlowNode>): JSX.Element {
   const selectedTable = interaction?.selectedTableId === id;
   const selectedColumnRef = interaction?.selectedColumnRef ?? null;
   const [editing, setEditing] = useState<EditingCell>(null);
+
+  // Spec 08: PK columns render a key icon — filled for a real PK, outlined
+  // for a virtual one (data.primaryKey is virtual-first, see graph.ts).
+  const pkColumns = data.primaryKey?.columns ?? EMPTY_PK_COLUMNS;
+  const pkVirtual = data.primaryKey?.virtual ?? false;
 
   const isSelectedColumn = (column: string): boolean =>
     selectedColumnRef !== null &&
@@ -76,6 +82,7 @@ function TableNodeComponent({ id, data }: NodeProps<FlowNode>): JSX.Element {
       {data.columns.map((column, index) => {
         const isHighlighted = highlighted.has(column.name);
         const isSelected = isSelectedColumn(column.name);
+        const isPk = pkColumns.includes(column.name);
         const editingCell =
           editing?.kind === 'column' && editing.column === column.name ? editing.cell : null;
         return (
@@ -91,6 +98,16 @@ function TableNodeComponent({ id, data }: NodeProps<FlowNode>): JSX.Element {
             onClick={() => interaction?.onColumnSelect(id, column.name)}
           >
             <Handle id={columnTargetHandle(column.name)} type="target" position={Position.Left} />
+            {isPk && (
+              <span
+                className={`table-node__pk-icon${
+                  pkVirtual ? ' table-node__pk-icon--virtual' : ''
+                }`}
+                title={pkVirtual ? 'Virtual primary key' : 'Primary key'}
+              >
+                <KeyIcon outlined={pkVirtual} />
+              </span>
+            )}
             {editingCell === 'name' ? (
               <InlineEditField
                 value={column.name}
@@ -233,3 +250,33 @@ function InlineEditField({
 }
 
 export const TableNode = memo(TableNodeComponent);
+
+/**
+ * Small inline-SVG key icon marking PK column rows (spec 08): filled for a
+ * real PK, outlined for a virtual one so the two are visually distinct. The
+ * icon inherits `currentColor` (the row's --accent tint via CSS).
+ */
+function KeyIcon({ outlined }: { outlined: boolean }): JSX.Element {
+  return (
+    <svg
+      width="10"
+      height="10"
+      viewBox="0 0 10 10"
+      aria-hidden="true"
+      className={`table-node__pk-icon-svg${
+        outlined ? ' table-node__pk-icon-svg--outlined' : ''
+      }`}
+    >
+      <circle
+        cx="2.6"
+        cy="5"
+        r="1.8"
+        fill={outlined ? 'none' : 'currentColor'}
+        stroke="currentColor"
+        strokeWidth="1"
+      />
+      <path d="M4.4 5 H9" stroke="currentColor" strokeWidth="1" fill="none" />
+      <path d="M7.6 5 V6.3 M6.6 5 V5.9" stroke="currentColor" strokeWidth="1" fill="none" />
+    </svg>
+  );
+}

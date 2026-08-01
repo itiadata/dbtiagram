@@ -27,6 +27,7 @@ function toDbtModel(model: ModelDefinition): Record<string, unknown> {
     ...(model.extra ?? {}),
     name: model.name,
     ...(model.description !== undefined ? { description: model.description } : {}),
+    ...(model.dataTests !== undefined ? { data_tests: model.dataTests } : {}),
     ...(model.config !== undefined ? { config: model.config } : {}),
     ...(model.columns !== undefined ? { columns: model.columns.map(toDbtColumn) } : {}),
     ...(model.constraints !== undefined
@@ -42,6 +43,7 @@ function toDbtColumn(column: ModelColumn): Record<string, unknown> {
     ...(column.dataType !== undefined ? { data_type: column.dataType } : {}),
     ...(column.description !== undefined ? { description: column.description } : {}),
     ...(column.tests !== undefined ? { tests: column.tests } : {}),
+    ...(column.dataTests !== undefined ? { data_tests: column.dataTests } : {}),
     ...(column.meta !== undefined ? { meta: column.meta } : {}),
   };
 }

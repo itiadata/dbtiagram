@@ -19,7 +19,10 @@ import {
   type KeyboardEvent,
 } from 'react';
 import type { ModelEdit } from '../src/dbt/edit';
+import type { ForeignKeyDescriptor } from '../src/dbt/types';
 import type { TableNode, TableNodeColumn } from '../src/diagram/graph';
+import { ForeignKeySection } from './ForeignKeySection';
+import { PrimaryKeySection } from './PrimaryKeySection';
 
 /** The entity the sidebar renders: a table, or a column within its table. */
 export type SelectedEntity =
@@ -28,10 +31,19 @@ export type SelectedEntity =
 
 interface DetailsSidebarProps {
   entity: SelectedEntity | null;
+  /** Full graph nodes, so the FK editor can list workspace models (spec 08). */
+  nodes: TableNode[];
+  /** FK focused by double-clicking its edge (spec 08); null when none. */
+  focusedFk: ForeignKeyDescriptor | null;
   onEdit: (edit: ModelEdit) => void;
 }
 
-export function DetailsSidebar({ entity, onEdit }: DetailsSidebarProps): JSX.Element {
+export function DetailsSidebar({
+  entity,
+  nodes,
+  focusedFk,
+  onEdit,
+}: DetailsSidebarProps): JSX.Element {
   return (
     <aside className="details">
       {entity === null ? (
@@ -58,6 +70,13 @@ export function DetailsSidebar({ entity, onEdit }: DetailsSidebarProps): JSX.Ele
                 description: value,
               })
             }
+          />
+          <PrimaryKeySection node={entity.node} onEdit={onEdit} />
+          <ForeignKeySection
+            node={entity.node}
+            nodes={nodes}
+            focusedFk={focusedFk}
+            onEdit={onEdit}
           />
         </div>
       ) : (

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { applyEdit, EditError } from '../../../src/dbt/edit';
-import type { ModelDefinition } from '../../../src/dbt/types';
+import type { ForeignKeyDescriptor, ModelDefinition } from '../../../src/dbt/types';
 
 const models: ModelDefinition[] = [
   { name: 'orders', columns: [{ name: 'id' }, { name: 'customer_id' }] },
@@ -403,5 +403,792 @@ describe('applyEdit', () => {
     applyEdit(models, { kind: 'setModelName', model: 'orders', name: 'orders_v2' });
     expect(models[0].name).toBe('orders');
     expect(models[0].columns).toEqual([{ name: 'id' }, { name: 'customer_id' }]);
+  });
+
+  describe('setPrimaryKey (real)', () => {
+    const target: ModelDefinition[] = [
+      {
+        name: 'products',
+        columns: [{ name: 'product_id' }, { name: 'name' }],
+      },
+    ];
+
+    it('writes all three constructs when adding a real PK', () => {
+      const { models: next } = applyEdit(target, {
+        kind: 'setPrimaryKey',
+        model: 'products',
+        columns: ['product_id'],
+        virtual: false,
+      });
+      const product = next[0];
+      expect(product.dataTests).toEqual([
+        {
+          'dbt_utils.unique_combination_of_columns': {
+            arguments: { combination_of_columns: ['product_id'] },
+          },
+        },
+      ]);
+      expect(product.constraints).toEqual([{ type: 'primary_key', columns: ['product_id'] }]);
+      expect(product.columns?.[0]).toMatchObject({ name: 'product_id', dataTests: ['not_null'] });
+      expect(product.columns?.[1]).toEqual({ name: 'name' });
+    });
+
+    it('updates the three constructs in place when the PK grows', () => {
+      const withPk: ModelDefinition[] = [
+        {
+          name: 'products',
+          columns: [{ name: 'product_id', dataTests: ['not_null'] }, { name: 'name' }],
+          dataTests: [
+            {
+              'dbt_utils.unique_combination_of_columns': {
+                arguments: { combination_of_columns: ['product_id'] },
+              },
+            },
+          ],
+          constraints: [{ type: 'primary_key', columns: ['product_id'] }],
+        },
+      ];
+      const { models: next } = applyEdit(withPk, {
+        kind: 'setPrimaryKey',
+        model: 'products',
+        columns: ['product_id', 'name'],
+        virtual: false,
+      });
+      const product = next[0];
+      expect(product.dataTests).toEqual([
+        {
+          'dbt_utils.unique_combination_of_columns': {
+            arguments: { combination_of_columns: ['product_id', 'name'] },
+          },
+        },
+      ]);
+      expect(product.constraints).toEqual([
+        { type: 'primary_key', columns: ['product_id', 'name'] },
+      ]);
+      expect(product.columns?.[0].dataTests).toEqual(['not_null']);
+      expect(product.columns?.[1].dataTests).toEqual(['not_null']);
+    });
+
+    it('moves not_null off a column that leaves the PK', () => {
+      const withPk: ModelDefinition[] = [
+        {
+          name: 'products',
+          columns: [
+            { name: 'product_id', dataTests: ['not_null'] },
+            { name: 'name', dataTests: ['not_null'] },
+          ],
+          constraints: [{ type: 'primary_key', columns: ['product_id', 'name'] }],
+        },
+      ];
+      const { models: next } = applyEdit(withPk, {
+        kind: 'setPrimaryKey',
+        model: 'products',
+        columns: ['product_id'],
+        virtual: false,
+      });
+      const product = next[0];
+      expect(product.columns?.[0].dataTests).toEqual(['not_null']);
+      expect(product.columns?.[1].dataTests).toBeUndefined();
+      expect(product.constraints).toEqual([{ type: 'primary_key', columns: ['product_id'] }]);
+    });
+
+    it('removes all three constructs when the PK is cleared, preserving other tests', () => {
+      const withPk: ModelDefinition[] = [
+        {
+          name: 'products',
+          columns: [
+            { name: 'product_id', dataTests: ['not_null', 'accepted_values: [1]'] },
+          ],
+          dataTests: [
+            { 'dbt_utils.unique_combination_of_columns': { arguments: { combination_of_columns: ['product_id'] } } },
+            'some_other_test',
+          ],
+          constraints: [{ type: 'primary_key', columns: ['product_id'] }],
+        },
+      ];
+      const { models: next } = applyEdit(withPk, {
+        kind: 'setPrimaryKey',
+        model: 'products',
+        columns: [],
+        virtual: false,
+      });
+      const product = next[0];
+      expect(product.dataTests).toEqual(['some_other_test']);
+      expect(product.constraints).toBeUndefined();
+      expect(product.columns?.[0].dataTests).toEqual(['accepted_values: [1]']);
+    });
+
+    it('never duplicates the constructs when re-adding the same PK', () => {
+      const withPk: ModelDefinition[] = [
+        {
+          name: 'products',
+          columns: [{ name: 'product_id', dataTests: ['not_null'] }],
+          dataTests: [
+            {
+              'dbt_utils.unique_combination_of_columns': {
+                arguments: { combination_of_columns: ['product_id'] },
+              },
+            },
+          ],
+          constraints: [{ type: 'primary_key', columns: ['product_id'] }],
+        },
+      ];
+      const { models: next } = applyEdit(withPk, {
+        kind: 'setPrimaryKey',
+        model: 'products',
+        columns: ['product_id'],
+        virtual: false,
+      });
+      const product = next[0];
+      expect(product.dataTests).toHaveLength(1);
+      expect(product.constraints).toHaveLength(1);
+      expect(product.columns?.[0].dataTests?.filter((t) => t === 'not_null')).toHaveLength(1);
+    });
+
+    it('preserves the unique test entry and constraint other keys', () => {
+      const withPk: ModelDefinition[] = [
+        {
+          name: 'products',
+          columns: [{ name: 'product_id' }],
+          dataTests: [
+            {
+              'dbt_utils.unique_combination_of_columns': {
+                enabled: false,
+                arguments: { combination_of_columns: ['product_id'], extra: 'keep' },
+              },
+              custom: 'sibling',
+            },
+          ],
+          constraints: [{ type: 'primary_key', columns: ['product_id'], name: 'pk_products', warn_unenforced: true }],
+        },
+      ];
+      const { models: next } = applyEdit(withPk, {
+        kind: 'setPrimaryKey',
+        model: 'products',
+        columns: ['product_id'],
+        virtual: false,
+      });
+      const product = next[0];
+      expect(product.dataTests).toEqual([
+        {
+          'dbt_utils.unique_combination_of_columns': {
+            enabled: false,
+            arguments: { combination_of_columns: ['product_id'], extra: 'keep' },
+          },
+          custom: 'sibling',
+        },
+      ]);
+      expect(product.constraints).toEqual([
+        { type: 'primary_key', columns: ['product_id'], name: 'pk_products', warn_unenforced: true },
+      ]);
+    });
+
+    it('replaces a bare-string unique test entry with the mapping form', () => {
+      const withPk: ModelDefinition[] = [
+        {
+          name: 'products',
+          columns: [{ name: 'product_id' }],
+          dataTests: ['dbt_utils.unique_combination_of_columns'],
+        },
+      ];
+      const { models: next } = applyEdit(withPk, {
+        kind: 'setPrimaryKey',
+        model: 'products',
+        columns: ['product_id'],
+        virtual: false,
+      });
+      expect(next[0].dataTests).toEqual([
+        {
+          'dbt_utils.unique_combination_of_columns': {
+            arguments: { combination_of_columns: ['product_id'] },
+          },
+        },
+      ]);
+    });
+
+    it('is a no-op (identity) when the state is unchanged', () => {
+      const withPk: ModelDefinition[] = [
+        {
+          name: 'products',
+          columns: [{ name: 'product_id', dataTests: ['not_null'] }],
+          dataTests: [
+            {
+              'dbt_utils.unique_combination_of_columns': {
+                arguments: { combination_of_columns: ['product_id'] },
+              },
+            },
+          ],
+          constraints: [{ type: 'primary_key', columns: ['product_id'] }],
+        },
+      ];
+      const { models: next } = applyEdit(withPk, {
+        kind: 'setPrimaryKey',
+        model: 'products',
+        columns: ['product_id'],
+        virtual: false,
+      });
+      expect(next[0]).toBe(withPk[0]);
+    });
+
+    it('throws when a PK column does not exist on the model', () => {
+      expect(() =>
+        applyEdit(target, {
+          kind: 'setPrimaryKey',
+          model: 'products',
+          columns: ['nope'],
+          virtual: false,
+        }),
+      ).toThrow(EditError);
+    });
+
+    it('trims and dedupes the column list', () => {
+      const withPk: ModelDefinition[] = [
+        {
+          name: 'products',
+          columns: [{ name: 'product_id' }],
+        },
+      ];
+      const { models: next } = applyEdit(withPk, {
+        kind: 'setPrimaryKey',
+        model: 'products',
+        columns: [' product_id ', 'product_id'],
+        virtual: false,
+      });
+      expect(next[0].constraints).toEqual([{ type: 'primary_key', columns: ['product_id'] }]);
+    });
+  });
+
+  describe('setPrimaryKey (virtual)', () => {
+    it('writes meta only for a virtual PK', () => {
+      const models: ModelDefinition[] = [
+        {
+          name: 'products',
+          columns: [{ name: 'product_id' }],
+        },
+      ];
+      const { models: next } = applyEdit(models, {
+        kind: 'setPrimaryKey',
+        model: 'products',
+        columns: ['product_id'],
+        virtual: true,
+      });
+      const product = next[0];
+      expect(product.config).toEqual({
+        meta: { dbtiagram: { virtual: { primary_key: { columns: ['product_id'] } } } },
+      });
+      expect(product.dataTests).toBeUndefined();
+      expect(product.constraints).toBeUndefined();
+      expect(product.columns?.[0].dataTests).toBeUndefined();
+    });
+
+    it('converts a real PK to virtual, removing the real artifacts', () => {
+      const withPk: ModelDefinition[] = [
+        {
+          name: 'products',
+          columns: [{ name: 'product_id', dataTests: ['not_null'] }],
+          dataTests: [
+            {
+              'dbt_utils.unique_combination_of_columns': {
+                arguments: { combination_of_columns: ['product_id'] },
+              },
+            },
+          ],
+          constraints: [{ type: 'primary_key', columns: ['product_id'] }],
+        },
+      ];
+      const { models: next } = applyEdit(withPk, {
+        kind: 'setPrimaryKey',
+        model: 'products',
+        columns: ['product_id'],
+        virtual: true,
+      });
+      const product = next[0];
+      expect(product.config).toEqual({
+        meta: { dbtiagram: { virtual: { primary_key: { columns: ['product_id'] } } } },
+      });
+      expect(product.dataTests).toBeUndefined();
+      expect(product.constraints).toBeUndefined();
+      expect(product.columns?.[0].dataTests).toBeUndefined();
+    });
+
+    it('converts a virtual PK back to real, clearing the meta block', () => {
+      const models: ModelDefinition[] = [
+        {
+          name: 'products',
+          columns: [{ name: 'product_id' }],
+          config: {
+            meta: { dbtiagram: { virtual: { primary_key: { columns: ['product_id'] } } } },
+          },
+        },
+      ];
+      const { models: next } = applyEdit(models, {
+        kind: 'setPrimaryKey',
+        model: 'products',
+        columns: ['product_id'],
+        virtual: false,
+      });
+      const product = next[0];
+      expect(product.config).toBeUndefined();
+      expect(product.constraints).toEqual([{ type: 'primary_key', columns: ['product_id'] }]);
+      expect(product.dataTests).toEqual([
+        {
+          'dbt_utils.unique_combination_of_columns': {
+            arguments: { combination_of_columns: ['product_id'] },
+          },
+        },
+      ]);
+      expect(product.columns?.[0].dataTests).toEqual(['not_null']);
+    });
+
+    it('clearing a virtual PK removes it from meta (empty columns)', () => {
+      const models: ModelDefinition[] = [
+        {
+          name: 'products',
+          columns: [{ name: 'product_id' }],
+          config: {
+            meta: { dbtiagram: { virtual: { primary_key: { columns: ['product_id'] } } } },
+          },
+        },
+      ];
+      const { models: next } = applyEdit(models, {
+        kind: 'setPrimaryKey',
+        model: 'products',
+        columns: [],
+        virtual: true,
+      });
+      expect(next[0].config).toBeUndefined();
+    });
+
+    it('is a no-op (identity) when the virtual state is unchanged', () => {
+      const models: ModelDefinition[] = [
+        {
+          name: 'products',
+          columns: [{ name: 'product_id' }],
+          config: {
+            meta: { dbtiagram: { virtual: { primary_key: { columns: ['product_id'] } } } },
+          },
+        },
+      ];
+      const { models: next } = applyEdit(models, {
+        kind: 'setPrimaryKey',
+        model: 'products',
+        columns: ['product_id'],
+        virtual: true,
+      });
+      expect(next[0]).toBe(models[0]);
+    });
+
+    it('the displayed (virtual) state wins over a coexisting real PK (c)', () => {
+      const both: ModelDefinition[] = [
+        {
+          name: 'products',
+          columns: [{ name: 'product_id' }],
+          config: {
+            meta: { dbtiagram: { virtual: { primary_key: { columns: ['product_id'] } } } },
+          },
+          constraints: [{ type: 'primary_key', columns: ['product_id'] }],
+        },
+      ];
+      // The UI shows the virtual state; converting it to real aligns the file.
+      const { models: next } = applyEdit(both, {
+        kind: 'setPrimaryKey',
+        model: 'products',
+        columns: ['product_id'],
+        virtual: false,
+      });
+      const product = next[0];
+      expect(product.config).toBeUndefined();
+      expect(product.constraints).toEqual([{ type: 'primary_key', columns: ['product_id'] }]);
+      expect(product.dataTests).toEqual([
+        {
+          'dbt_utils.unique_combination_of_columns': {
+            arguments: { combination_of_columns: ['product_id'] },
+          },
+        },
+      ]);
+    });
+  });
+
+  describe('setForeignKeyTarget', () => {
+    const models: ModelDefinition[] = [
+      {
+        name: 'order_items',
+        columns: [{ name: 'order_id' }, { name: 'customer_id' }],
+        constraints: [
+          {
+            type: 'foreign_key',
+            columns: ['order_id'],
+            to: "ref('orders')",
+            toColumns: ['order_id'],
+          },
+        ],
+      },
+      { name: 'orders', columns: [{ name: 'order_id' }] },
+      { name: 'customers', columns: [{ name: 'customer_id' }] },
+    ];
+
+    const fk: ForeignKeyDescriptor = {
+      target: 'orders',
+      to: "ref('orders')",
+      columns: ['order_id'],
+      toColumns: ['order_id'],
+      virtual: false,
+    };
+
+    it('rewrites a real FK target to the canonical ref', () => {
+      const { models: next } = applyEdit(models, {
+        kind: 'setForeignKeyTarget',
+        model: 'order_items',
+        fk,
+        target: 'customers',
+      });
+      expect(next[0].constraints?.[0]).toEqual({
+        type: 'foreign_key',
+        columns: ['order_id'],
+        to: "ref('customers')",
+        toColumns: ['order_id'],
+      });
+      expect(next[1]).toBe(models[1]);
+    });
+
+    it('rewrites a virtual FK target in the meta block', () => {
+      const virtual: ModelDefinition[] = [
+        {
+          name: 'order_items',
+          config: {
+            meta: {
+              dbtiagram: {
+                virtual: {
+                  foreign_keys: [
+                    { to: "ref('orders')", columns: ['order_id'], to_columns: ['order_id'] },
+                  ],
+                },
+              },
+            },
+          },
+        },
+        { name: 'orders' },
+        { name: 'customers' },
+      ];
+      const { models: next } = applyEdit(virtual, {
+        kind: 'setForeignKeyTarget',
+        model: 'order_items',
+        fk: { target: 'orders', to: "ref('orders')", columns: ['order_id'], toColumns: ['order_id'], virtual: true },
+        target: 'customers',
+      });
+      expect(next[0].config).toEqual({
+        meta: {
+          dbtiagram: {
+            virtual: {
+              foreign_keys: [
+                { to: "ref('customers')", columns: ['order_id'], to_columns: ['order_id'] },
+              ],
+            },
+          },
+        },
+      });
+    });
+
+    it('throws when the target model does not exist', () => {
+      expect(() =>
+        applyEdit(models, { kind: 'setForeignKeyTarget', model: 'order_items', fk, target: 'ghost' }),
+      ).toThrow(EditError);
+    });
+
+    it('is a no-op (identity) when the target is unchanged', () => {
+      const { models: next } = applyEdit(models, {
+        kind: 'setForeignKeyTarget',
+        model: 'order_items',
+        fk,
+        target: 'orders',
+      });
+      expect(next[0]).toBe(models[0]);
+    });
+  });
+
+  describe('setForeignKeyColumns', () => {
+    const models: ModelDefinition[] = [
+      {
+        name: 'order_items',
+        columns: [{ name: 'order_id' }, { name: 'customer_id' }, { name: 'product_id' }],
+        constraints: [
+          {
+            type: 'foreign_key',
+            columns: ['order_id'],
+            to: "ref('orders')",
+            toColumns: ['order_id'],
+          },
+        ],
+      },
+      { name: 'orders', columns: [{ name: 'order_id' }, { name: 'customer_id' }] },
+    ];
+
+    const fk: ForeignKeyDescriptor = {
+      target: 'orders',
+      to: "ref('orders')",
+      columns: ['order_id'],
+      toColumns: ['order_id'],
+      virtual: false,
+    };
+
+    it('sets the pair arrays on a real FK', () => {
+      const { models: next } = applyEdit(models, {
+        kind: 'setForeignKeyColumns',
+        model: 'order_items',
+        fk,
+        columns: ['order_id', 'customer_id'],
+        toColumns: ['order_id', 'customer_id'],
+      });
+      expect(next[0].constraints?.[0]).toEqual({
+        type: 'foreign_key',
+        columns: ['order_id', 'customer_id'],
+        to: "ref('orders')",
+        toColumns: ['order_id', 'customer_id'],
+      });
+    });
+
+    it('sets the pair arrays on a virtual FK', () => {
+      const virtual: ModelDefinition[] = [
+        {
+          name: 'order_items',
+          columns: [{ name: 'order_id' }],
+          config: {
+            meta: {
+              dbtiagram: {
+                virtual: {
+                  foreign_keys: [
+                    { to: "ref('orders')", columns: ['order_id'], to_columns: ['order_id'] },
+                  ],
+                },
+              },
+            },
+          },
+        },
+        { name: 'orders', columns: [{ name: 'order_id' }] },
+      ];
+      const { models: next } = applyEdit(virtual, {
+        kind: 'setForeignKeyColumns',
+        model: 'order_items',
+        fk: { target: 'orders', to: "ref('orders')", columns: ['order_id'], toColumns: ['order_id'], virtual: true },
+        columns: [],
+        toColumns: [],
+      });
+      expect(next[0].config).toEqual({
+        meta: {
+          dbtiagram: {
+            virtual: { foreign_keys: [{ to: "ref('orders')", columns: [], to_columns: [] }] },
+          },
+        },
+      });
+    });
+
+    it('throws when the pair arrays have different lengths', () => {
+      expect(() =>
+        applyEdit(models, {
+          kind: 'setForeignKeyColumns',
+          model: 'order_items',
+          fk,
+          columns: ['order_id'],
+          toColumns: ['order_id', 'customer_id'],
+        }),
+      ).toThrow(EditError);
+    });
+
+    it('throws when a source column does not exist', () => {
+      expect(() =>
+        applyEdit(models, {
+          kind: 'setForeignKeyColumns',
+          model: 'order_items',
+          fk,
+          columns: ['nope'],
+          toColumns: ['order_id'],
+        }),
+      ).toThrow(EditError);
+    });
+
+    it('throws when a target column does not exist on the target model', () => {
+      expect(() =>
+        applyEdit(models, {
+          kind: 'setForeignKeyColumns',
+          model: 'order_items',
+          fk,
+          columns: ['order_id'],
+          toColumns: ['nope'],
+        }),
+      ).toThrow(EditError);
+    });
+
+    it('throws when the FK target is unparseable', () => {
+      expect(() =>
+        applyEdit(models, {
+          kind: 'setForeignKeyColumns',
+          model: 'order_items',
+          fk: { target: undefined, to: 'not a ref', columns: ['order_id'], toColumns: ['order_id'], virtual: false },
+          columns: ['order_id'],
+          toColumns: ['order_id'],
+        }),
+      ).toThrow(EditError);
+    });
+
+    it('is a no-op (identity) when nothing changed', () => {
+      const { models: next } = applyEdit(models, {
+        kind: 'setForeignKeyColumns',
+        model: 'order_items',
+        fk,
+        columns: ['order_id'],
+        toColumns: ['order_id'],
+      });
+      expect(next[0]).toBe(models[0]);
+    });
+  });
+
+  describe('setForeignKeyVirtual', () => {
+    it('converts a real FK to a virtual meta entry', () => {
+      const models: ModelDefinition[] = [
+        {
+          name: 'order_items',
+          constraints: [
+            {
+              type: 'foreign_key',
+              columns: ['order_id'],
+              to: "ref('orders')",
+              toColumns: ['order_id'],
+            },
+          ],
+        },
+      ];
+      const { models: next } = applyEdit(models, {
+        kind: 'setForeignKeyVirtual',
+        model: 'order_items',
+        fk: { target: 'orders', to: "ref('orders')", columns: ['order_id'], toColumns: ['order_id'], virtual: false },
+        virtual: true,
+      });
+      expect(next[0].constraints).toBeUndefined();
+      expect(next[0].config).toEqual({
+        meta: {
+          dbtiagram: {
+            virtual: {
+              foreign_keys: [
+                { to: "ref('orders')", columns: ['order_id'], to_columns: ['order_id'] },
+              ],
+            },
+          },
+        },
+      });
+    });
+
+    it('converts a virtual FK back to a real constraint', () => {
+      const models: ModelDefinition[] = [
+        {
+          name: 'order_items',
+          config: {
+            meta: {
+              dbtiagram: {
+                virtual: {
+                  foreign_keys: [
+                    { to: "ref('orders')", columns: ['order_id'], to_columns: ['order_id'] },
+                  ],
+                },
+              },
+            },
+          },
+        },
+      ];
+      const { models: next } = applyEdit(models, {
+        kind: 'setForeignKeyVirtual',
+        model: 'order_items',
+        fk: { target: 'orders', to: "ref('orders')", columns: ['order_id'], toColumns: ['order_id'], virtual: true },
+        virtual: false,
+      });
+      expect(next[0].config).toBeUndefined();
+      expect(next[0].constraints).toEqual([
+        {
+          type: 'foreign_key',
+          columns: ['order_id'],
+          to: "ref('orders')",
+          toColumns: ['order_id'],
+        },
+      ]);
+    });
+  });
+
+  describe('addForeignKey', () => {
+    it('appends a table-level real FK to the chosen target', () => {
+      const models: ModelDefinition[] = [{ name: 'products', columns: [] }, { name: 'customers' }];
+      const { models: next } = applyEdit(models, {
+        kind: 'addForeignKey',
+        model: 'products',
+        target: 'customers',
+      });
+      expect(next[0].constraints).toEqual([
+        { type: 'foreign_key', columns: [], to: "ref('customers')", toColumns: [] },
+      ]);
+    });
+
+    it('throws when the target does not exist', () => {
+      const models: ModelDefinition[] = [{ name: 'products' }];
+      expect(() =>
+        applyEdit(models, { kind: 'addForeignKey', model: 'products', target: 'ghost' }),
+      ).toThrow(EditError);
+    });
+  });
+
+  describe('removeForeignKey', () => {
+    it('removes a matching real FK and leaves others', () => {
+      const models: ModelDefinition[] = [
+        {
+          name: 'order_items',
+          constraints: [
+            { type: 'foreign_key', columns: ['order_id'], to: "ref('orders')", toColumns: ['order_id'] },
+            { type: 'foreign_key', columns: ['product_id'], to: "ref('products')", toColumns: ['product_id'] },
+          ],
+        },
+      ];
+      const { models: next } = applyEdit(models, {
+        kind: 'removeForeignKey',
+        model: 'order_items',
+        fk: { target: 'orders', to: "ref('orders')", columns: ['order_id'], toColumns: ['order_id'], virtual: false },
+      });
+      expect(next[0].constraints).toEqual([
+        { type: 'foreign_key', columns: ['product_id'], to: "ref('products')", toColumns: ['product_id'] },
+      ]);
+    });
+
+    it('removes a matching virtual FK from the meta block', () => {
+      const models: ModelDefinition[] = [
+        {
+          name: 'order_items',
+          config: {
+            meta: {
+              dbtiagram: {
+                virtual: {
+                  foreign_keys: [
+                    { to: "ref('orders')", columns: ['order_id'], to_columns: ['order_id'] },
+                  ],
+                },
+              },
+            },
+          },
+        },
+      ];
+      const { models: next } = applyEdit(models, {
+        kind: 'removeForeignKey',
+        model: 'order_items',
+        fk: { target: 'orders', to: "ref('orders')", columns: ['order_id'], toColumns: ['order_id'], virtual: true },
+      });
+      expect(next[0].config).toBeUndefined();
+    });
+
+    it('is a no-op (identity) when nothing matches', () => {
+      const models: ModelDefinition[] = [
+        { name: 'order_items', constraints: [] },
+      ];
+      const { models: next } = applyEdit(models, {
+        kind: 'removeForeignKey',
+        model: 'order_items',
+        fk: { target: 'orders', to: "ref('orders')", columns: ['order_id'], toColumns: ['order_id'], virtual: false },
+      });
+      expect(next[0]).toBe(models[0]);
+    });
   });
 });

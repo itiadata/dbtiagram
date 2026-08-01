@@ -134,15 +134,91 @@ models:
       toColumns: ['customer_id'],
       warnUnenforced: true,
     });
-    expect(reparsed.models[0].extra).toEqual({
-      data_tests: [
-        {
-          'dbt_utils.unique_combination_of_columns': {
-            arguments: { combination_of_columns: ['order_id'] },
-          },
+    // data_tests is a modeled field now (spec 08), not a passthrough extra.
+    expect(reparsed.models[0].dataTests).toEqual([
+      {
+        'dbt_utils.unique_combination_of_columns': {
+          arguments: { combination_of_columns: ['order_id'] },
         },
-      ],
-      refs: ['customers'],
-    });
+      },
+    ]);
+    expect(reparsed.models[0].extra).toEqual({ refs: ['customers'] });
+  });
+});
+
+describe('data_tests (spec 08)', () => {
+  it('parses model-level data_tests with string and mapping entries', () => {
+    const file = parseModelYml(`
+models:
+  - name: orders
+    data_tests:
+      - not_null
+      - dbt_utils.unique_combination_of_columns:
+          arguments:
+            combination_of_columns: [order_id]
+`);
+    expect(file.models[0].dataTests).toEqual([
+      'not_null',
+      {
+        'dbt_utils.unique_combination_of_columns': {
+          arguments: { combination_of_columns: ['order_id'] },
+        },
+      },
+    ]);
+    expect(file.models[0].extra).toBeUndefined();
+  });
+
+  it('drops non-string, non-mapping data_tests entries', () => {
+    const file = parseModelYml(`
+models:
+  - name: orders
+    data_tests:
+      - not_null
+      - 42
+      - true
+      - [nested]
+`);
+    expect(file.models[0].dataTests).toEqual(['not_null']);
+  });
+
+  it('parses column-level data_tests (no longer dropped on write-back)', () => {
+    const file = parseModelYml(`
+models:
+  - name: orders
+    columns:
+      - name: order_id
+        data_tests:
+          - not_null
+`);
+    expect(file.models[0].columns?.[0].dataTests).toEqual(['not_null']);
+  });
+
+  it('round trips column-level data_tests', () => {
+    const file = parseModelYml(`
+models:
+  - name: orders
+    columns:
+      - name: order_id
+        data_tests:
+          - not_null
+`);
+    const reparsed = parseModelYml(serializeModelYml(file));
+    expect(reparsed).toEqual(file);
+    expect(reparsed.models[0].columns?.[0].dataTests).toEqual(['not_null']);
+  });
+
+  it('keeps the legacy column tests key separate from data_tests', () => {
+    const file = parseModelYml(`
+models:
+  - name: orders
+    columns:
+      - name: order_id
+        tests:
+          - unique
+        data_tests:
+          - not_null
+`);
+    expect(file.models[0].columns?.[0].tests).toEqual(['unique']);
+    expect(file.models[0].columns?.[0].dataTests).toEqual(['not_null']);
   });
 });

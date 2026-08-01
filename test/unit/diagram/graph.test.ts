@@ -39,6 +39,7 @@ describe('buildDiagram', () => {
         target: 'customers',
         sourceColumns: ['customer_id'],
         targetColumns: ['id'],
+        virtual: false,
       },
     ]);
   });
@@ -64,6 +65,7 @@ describe('buildDiagram', () => {
         target: 'orders',
         sourceColumns: ['order_id', 'customer_id'],
         targetColumns: ['order_id', 'customer_id'],
+        virtual: false,
       },
     ]);
   });
@@ -87,6 +89,7 @@ describe('buildDiagram', () => {
         target: 'customers',
         sourceColumns: ['customer_id'],
         targetColumns: ['id'],
+        virtual: false,
       },
     ]);
   });
@@ -119,7 +122,7 @@ describe('buildDiagram', () => {
       { name: 'b' },
     ]);
     expect(graph.edges).toEqual([
-      { source: 'a', target: 'b', sourceColumns: ['x'], targetColumns: ['y'] },
+      { source: 'a', target: 'b', sourceColumns: ['x'], targetColumns: ['y'], virtual: false },
     ]);
   });
 
@@ -127,5 +130,194 @@ describe('buildDiagram', () => {
     const graph = buildDiagram([]);
     expect(graph.nodes).toEqual([]);
     expect(graph.edges).toEqual([]);
+  });
+
+  describe('primaryKey', () => {
+    it('is undefined when the model declares no PK', () => {
+      const graph = buildDiagram([{ name: 'products', columns: [{ name: 'id' }] }]);
+      expect(graph.nodes[0].primaryKey).toBeUndefined();
+    });
+
+    it('reads a real primary_key constraint', () => {
+      const graph = buildDiagram([
+        {
+          name: 'orders',
+          columns: [{ name: 'order_id' }],
+          constraints: [{ type: 'primary_key', columns: ['order_id'] }],
+        },
+      ]);
+      expect(graph.nodes[0].primaryKey).toEqual({ columns: ['order_id'], virtual: false });
+    });
+
+    it('reads a virtual PK from the meta block (no real constraint)', () => {
+      const graph = buildDiagram([
+        {
+          name: 'products',
+          columns: [{ name: 'product_id' }],
+          config: {
+            meta: { dbtiagram: { virtual: { primary_key: { columns: ['product_id'] } } } },
+          },
+        },
+      ]);
+      expect(graph.nodes[0].primaryKey).toEqual({ columns: ['product_id'], virtual: true });
+    });
+
+    it('prefers the virtual (diagram-written) PK when both exist (c)', () => {
+      const graph = buildDiagram([
+        {
+          name: 'products',
+          columns: [{ name: 'product_id' }],
+          constraints: [{ type: 'primary_key', columns: ['product_id'] }],
+          config: {
+            meta: { dbtiagram: { virtual: { primary_key: { columns: ['product_id'] } } } },
+          },
+        },
+      ]);
+      expect(graph.nodes[0].primaryKey).toEqual({ columns: ['product_id'], virtual: true });
+    });
+  });
+
+  describe('foreignKeys', () => {
+    it('lists real FK descriptors in constraint order with parsed targets', () => {
+      const graph = buildDiagram([
+        {
+          name: 'order_items',
+          constraints: [
+            { type: 'foreign_key', columns: ['a'], to: "ref('orders')", toColumns: ['x'] },
+            { type: 'foreign_key', columns: ['b'], to: "ref('s_pp', 'customers')", toColumns: ['y'] },
+          ],
+        },
+        { name: 'orders' },
+        { name: 'customers' },
+      ]);
+      expect(graph.nodes[0].foreignKeys).toEqual([
+        { target: 'orders', to: "ref('orders')", columns: ['a'], toColumns: ['x'], virtual: false },
+        { target: 'customers', to: "ref('s_pp', 'customers')", columns: ['b'], toColumns: ['y'], virtual: false },
+      ]);
+    });
+
+    it('keeps unparseable to and self-references with no target and no edge', () => {
+      const graph = buildDiagram([
+        {
+          name: 'ghost',
+          constraints: [
+            { type: 'foreign_key', columns: ['a'], to: 'not a ref', toColumns: ['b'] },
+            { type: 'foreign_key', columns: ['a'], to: "ref('ghost')", toColumns: ['a'] },
+          ],
+        },
+      ]);
+      expect(graph.nodes[0].foreignKeys).toEqual([
+        { target: undefined, to: 'not a ref', columns: ['a'], toColumns: ['b'], virtual: false },
+        { target: 'ghost', to: "ref('ghost')", columns: ['a'], toColumns: ['a'], virtual: false },
+      ]);
+      expect(graph.edges).toEqual([]);
+    });
+
+    it('appends virtual FK descriptors after the real ones', () => {
+      const graph = buildDiagram([
+        {
+          name: 'order_items',
+          constraints: [
+            { type: 'foreign_key', columns: ['a'], to: "ref('orders')", toColumns: ['x'] },
+          ],
+          config: {
+            meta: {
+              dbtiagram: {
+                virtual: {
+                  foreign_keys: [{ to: "ref('customers')", columns: ['b'], to_columns: ['y'] }],
+                },
+              },
+            },
+          },
+        },
+        { name: 'orders' },
+        { name: 'customers' },
+      ]);
+      expect(graph.nodes[0].foreignKeys).toEqual([
+        { target: 'orders', to: "ref('orders')", columns: ['a'], toColumns: ['x'], virtual: false },
+        { target: 'customers', to: "ref('customers')", columns: ['b'], toColumns: ['y'], virtual: true },
+      ]);
+    });
+  });
+
+  describe('virtual FK edges', () => {
+    it('draws a dashed (virtual) edge from a meta-block FK', () => {
+      const graph = buildDiagram([
+        {
+          name: 'products',
+          columns: [{ name: 'product_id' }],
+          config: {
+            meta: {
+              dbtiagram: {
+                virtual: {
+                  foreign_keys: [{ to: "ref('customers')", columns: ['product_id'], to_columns: ['customer_id'] }],
+                },
+              },
+            },
+          },
+        },
+        { name: 'customers', columns: [{ name: 'customer_id' }] },
+      ]);
+      expect(graph.edges).toEqual([
+        {
+          source: 'products',
+          target: 'customers',
+          sourceColumns: ['product_id'],
+          targetColumns: ['customer_id'],
+          virtual: true,
+        },
+      ]);
+    });
+
+    it('drops virtual edges with unknown targets or self-refs', () => {
+      const graph = buildDiagram([
+        {
+          name: 'products',
+          config: {
+            meta: {
+              dbtiagram: {
+                virtual: {
+                  foreign_keys: [
+                    { to: "ref('ghost')", columns: ['a'], to_columns: ['b'] },
+                    { to: "ref('products')", columns: ['a'], to_columns: ['a'] },
+                  ],
+                },
+              },
+            },
+          },
+        },
+      ]);
+      expect(graph.edges).toEqual([]);
+    });
+
+    it('keeps the real edge when a real and a virtual FK describe the same mapping', () => {
+      const graph = buildDiagram([
+        {
+          name: 'products',
+          constraints: [
+            { type: 'foreign_key', columns: ['product_id'], to: "ref('customers')", toColumns: ['customer_id'] },
+          ],
+          config: {
+            meta: {
+              dbtiagram: {
+                virtual: {
+                  foreign_keys: [{ to: "ref('customers')", columns: ['product_id'], to_columns: ['customer_id'] }],
+                },
+              },
+            },
+          },
+        },
+        { name: 'customers', columns: [{ name: 'customer_id' }] },
+      ]);
+      expect(graph.edges).toEqual([
+        {
+          source: 'products',
+          target: 'customers',
+          sourceColumns: ['product_id'],
+          targetColumns: ['customer_id'],
+          virtual: false,
+        },
+      ]);
+    });
   });
 });

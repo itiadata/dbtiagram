@@ -198,4 +198,58 @@ describe('buildFlowElements', () => {
     expect(flow.nodes).toEqual([]);
     expect(flow.edges).toEqual([]);
   });
+
+  it('copies primaryKey from the graph node onto the flow node data', () => {
+    const { flow } = flowFor([
+      {
+        name: 'products',
+        columns: [{ name: 'product_id' }],
+        config: {
+          meta: { dbtiagram: { virtual: { primary_key: { columns: ['product_id'] } } } },
+        },
+      },
+    ]);
+    expect(flow.nodes[0].data.primaryKey).toEqual({ columns: ['product_id'], virtual: true });
+  });
+
+  it('omits primaryKey from flow data when the graph node has none', () => {
+    const { flow } = flowFor([{ name: 'products', columns: [{ name: 'product_id' }] }]);
+    expect(flow.nodes[0].data.primaryKey).toBeUndefined();
+  });
+
+  it('marks virtual edges in the edge data', () => {
+    const { flow } = flowFor([
+      {
+        name: 'products',
+        columns: [{ name: 'product_id' }],
+        config: {
+          meta: {
+            dbtiagram: {
+              virtual: {
+                foreign_keys: [{ to: "ref('customers')", columns: ['product_id'], to_columns: ['customer_id'] }],
+              },
+            },
+          },
+        },
+      },
+      { name: 'customers', columns: [{ name: 'customer_id' }] },
+    ]);
+    expect(flow.edges).toHaveLength(1);
+    expect(flow.edges[0].data.virtual).toBe(true);
+  });
+
+  it('leaves real edges without the virtual flag', () => {
+    const { flow } = flowFor([
+      {
+        name: 'products',
+        columns: [{ name: 'product_id' }],
+        constraints: [
+          { type: 'foreign_key', columns: ['product_id'], to: "ref('customers')", toColumns: ['customer_id'] },
+        ],
+      },
+      { name: 'customers', columns: [{ name: 'customer_id' }] },
+    ]);
+    expect(flow.edges).toHaveLength(1);
+    expect(flow.edges[0].data.virtual).toBeUndefined();
+  });
 });

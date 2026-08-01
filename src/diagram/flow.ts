@@ -18,6 +18,8 @@ export type FlowNodeData = {
   columns: TableNodeColumn[];
   /** Column names on this model that should render highlighted. */
   highlightedColumns?: string[];
+  /** The displayed primary key (copied from the graph node) — key icons (spec 08). */
+  primaryKey?: { columns: string[]; virtual: boolean };
 };
 
 /** Node descriptor for a custom `table` node. */
@@ -29,6 +31,8 @@ export type FlowEdgeData = {
   targetColumn?: string;
   /** Human-readable FK description, e.g. 'order_items.order_id -> orders.order_id'. */
   title: string;
+  /** True for virtual (meta-stored) FKs — drawn dashed (spec 08). */
+  virtual?: boolean;
 };
 
 /** An edge that is guaranteed to carry its `FlowEdgeData` payload. */
@@ -82,6 +86,7 @@ export function buildFlowElements(graph: DiagramGraph, layout: DiagramLayout): F
         label: node.label,
         description: node.description,
         columns: node.columns,
+        ...(node.primaryKey !== undefined ? { primaryKey: node.primaryKey } : {}),
       },
     };
   });
@@ -104,6 +109,7 @@ export function buildFlowElements(graph: DiagramGraph, layout: DiagramLayout): F
             sourceColumn,
             targetColumn,
             title: `${edge.source}.${sourceColumn} -> ${edge.target}.${targetColumn}`,
+            ...(edge.virtual ? { virtual: true } : {}),
           },
         };
       });
@@ -121,7 +127,10 @@ export function buildFlowElements(graph: DiagramGraph, layout: DiagramLayout): F
         targetHandle: TABLE_TARGET_HANDLE,
         type: 'smoothstep',
         interactionWidth: EDGE_INTERACTION_WIDTH,
-        data: { title: `${edge.source} -> ${edge.target}` },
+        data: {
+          title: `${edge.source} -> ${edge.target}`,
+          ...(edge.virtual ? { virtual: true } : {}),
+        },
       },
     ];
   });

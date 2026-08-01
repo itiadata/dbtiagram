@@ -2,7 +2,12 @@
  * Parsing of dbt `model.yml` files. Pure logic — MUST NOT import `vscode`.
  */
 import { parse } from 'yaml';
-import type { ModelConstraint, ModelDefinition, ModelYmlFile } from './types';
+import type {
+  DataTestEntry,
+  ModelConstraint,
+  ModelDefinition,
+  ModelYmlFile,
+} from './types';
 
 export class ModelYmlParseError extends Error {
   public readonly source: string;
@@ -63,7 +68,15 @@ function normalizeModel(raw: Record<string, unknown>, source: string): ModelDefi
   }
 
   const model: ModelDefinition = { name };
-  const modeledKeys = new Set(['name', 'description', 'config', 'columns', 'constraints', 'meta']);
+  const modeledKeys = new Set([
+    'name',
+    'description',
+    'config',
+    'columns',
+    'constraints',
+    'meta',
+    'data_tests',
+  ]);
 
   const extra: Record<string, unknown> = {};
   for (const key of Object.keys(raw)) {
@@ -77,6 +90,12 @@ function normalizeModel(raw: Record<string, unknown>, source: string): ModelDefi
   const config = raw.config;
   if (isRecord(config)) {
     model.config = config;
+  }
+
+  const dataTests = raw.data_tests;
+  if (Array.isArray(dataTests)) {
+    const normalized = normalizeDataTests(dataTests);
+    if (normalized.length > 0) model.dataTests = normalized;
   }
 
   const columns = raw.columns;
@@ -111,7 +130,25 @@ function normalizeColumn(raw: Record<string, unknown>, source: string) {
     ...(typeof raw.data_type === 'string' ? { dataType: raw.data_type } : {}),
     ...(typeof raw.description === 'string' ? { description: raw.description } : {}),
     ...(Array.isArray(raw.tests) ? { tests: raw.tests.filter((t): t is string => typeof t === 'string') } : {}),
+    ...(Array.isArray(raw.data_tests) ? { dataTests: normalizeDataTests(raw.data_tests) } : {}),
   };
+}
+
+/**
+ * Keeps `string` and mapping data-test entries, dropping every other value so
+ * the typed `DataTestEntry[]` never carries junk. Shared by model- and
+ * column-level `data_tests` (spec 08).
+ */
+function normalizeDataTests(raw: unknown[]): DataTestEntry[] {
+  const out: DataTestEntry[] = [];
+  for (const entry of raw) {
+    if (typeof entry === 'string') {
+      out.push(entry);
+    } else if (isRecord(entry)) {
+      out.push(entry);
+    }
+  }
+  return out;
 }
 
 /**

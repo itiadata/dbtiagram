@@ -56,15 +56,36 @@ describe('sample fixture (fixtures/sample-dbt)', () => {
     const edges = graph.edges
       .map(
         (edge) =>
-          `${edge.source}.${edge.sourceColumns.join('+')}->${edge.target}.${edge.targetColumns.join('+')}`,
+          `${edge.source}.${edge.sourceColumns.join('+')}->${edge.target}.${edge.targetColumns.join('+')}${
+            edge.virtual ? ' (virtual)' : ''
+          }`,
       )
       .sort();
     expect(edges).toEqual([
       'order_items.order_id+customer_id->orders.order_id+customer_id',
       'order_items.product_id->products.product_id',
       'orders.customer_id->customers.customer_id',
+      'products.product_id->customers.customer_id (virtual)',
       'staging_orders.order_id->orders.order_id',
     ]);
+  });
+
+  it('reads the virtual PK and virtual FK off the products node (spec 08)', () => {
+    const graph = buildDiagram(loadFixtureModels());
+    const products = graph.nodes.find((node) => node.id === 'products');
+    expect(products?.primaryKey).toEqual({ columns: ['product_id'], virtual: true });
+    expect(products?.foreignKeys).toEqual([
+      {
+        target: 'customers',
+        to: "ref('customers')",
+        columns: ['product_id'],
+        toColumns: ['customer_id'],
+        virtual: true,
+      },
+    ]);
+    // orders keeps its real PK from the fixtures.
+    const orders = graph.nodes.find((node) => node.id === 'orders');
+    expect(orders?.primaryKey).toEqual({ columns: ['order_id'], virtual: false });
   });
 
   it('labels the two same-named model.yml files with their folder (spec 05)', () => {
