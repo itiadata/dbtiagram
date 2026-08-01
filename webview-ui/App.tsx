@@ -33,7 +33,8 @@ import {
   type HandleSide,
 } from '../src/diagram/flow';
 import { HEADER_HEIGHT, NODE_WIDTH, layoutDiagram } from '../src/diagram/layout';
-import { mergeFlowNodes } from '../src/diagram/positions';
+import { buildLayout, type DiagramLayoutTable } from '../src/diagram/layoutFile';
+import { mergeFlowNodes, type NodePosition } from '../src/diagram/positions';
 import { computeVisibleModels, filterGraph, reconcileSelection } from '../src/shared/filter';
 import type {
   DiagramModelFile,
@@ -104,6 +105,16 @@ export function App(): JSX.Element {
   // files/models (default checked) apart from ones the user unchecked.
   const previousFileUrisRef = useRef<string[]>([]);
   const previousModelNamesRef = useRef<string[]>([]);
+
+  // Spec 13: the saved layout this panel writes back to (null when none is
+  // active), the positions to seed when a layout is applied, a tick that makes
+  // the canvas adopt them, the live positions of the visible tables, and the
+  // notice about layout entries whose model no longer exists.
+  const [activeLayout, setActiveLayout] = useState<{ path: string; name: string } | null>(null);
+  const [seedPositions, setSeedPositions] = useState<Map<string, NodePosition> | null>(null);
+  const [seedTick, setSeedTick] = useState(0);
+  const [tablePositions, setTablePositions] = useState<DiagramLayoutTable[]>([]);
+  const [layoutMissing, setLayoutMissing] = useState<string[]>([]);
 
   // Spec 06: the current selection is mirrored into a ref so the `onEdit`
   // funnel (created once) can read the freshest value without re-creating.
@@ -191,6 +202,29 @@ export function App(): JSX.Element {
           // — it still points at the old entity, which is unchanged in the
           // graph — so only the bookkeeping ref is dropped.
           pendingRenameRef.current = null;
+          break;
+        }
+        // Spec 13: a saved layout was opened. Its table list becomes the exact
+        // visible set (every file is checked so file precedence can never hide
+        // a layout table), and its coordinates seed the canvas.
+        case 'layout:apply': {
+          const names = message.layout.tables.map((table) => table.name);
+          setSelectedFiles(() => new Set(previousFileUrisRef.current));
+          setSelectedModels(new Set(names));
+          setSeedPositions(
+            new Map(message.layout.tables.map((table) => [table.name, { x: table.x, y: table.y }])),
+          );
+          setSeedTick((tick) => tick + 1);
+          setFilterTick((tick) => tick + 1);
+          setLayoutMissing(message.missing);
+          break;
+        }
+        case 'layout:active': {
+          setActiveLayout(
+            message.path === null || message.name === null
+              ? null
+              : { path: message.path, name: message.name },
+          );
           break;
         }
       }
@@ -577,6 +611,42 @@ export function App(): JSX.Element {
         ? `${graph.nodes.length} models`
         : `${visibleGraph.nodes.length} of ${graph.nodes.length} models`;
 
+  // Spec 13: the canvas reports the live positions of the visible tables; they
+  // are the single source for both the explicit save and the live write-back.
+  const onPositionsChange = useCallback((tables: DiagramLayoutTable[]): void => {
+    setTablePositions((current) =>
+      current.length === tables.length &&
+      current.every(
+        (table, index) =>
+          table.name === tables[index].name &&
+          table.x === tables[index].x &&
+          table.y === tables[index].y,
+      )
+        ? current
+        : tables,
+    );
+  }, []);
+
+  const onSaveDiagram = useCallback((): void => {
+    vscode.postMessage({
+      type: 'layout:save',
+      layout: buildLayout(activeLayout?.name ?? 'diagram', tablePositions),
+    } satisfies MessageToExtension);
+  }, [activeLayout, tablePositions]);
+
+  // Live write-back: once a layout is active, every drag or visibility change
+  // rewrites its file after a short debounce, with no further user action.
+  useEffect(() => {
+    if (activeLayout === null) return;
+    const handle = window.setTimeout(() => {
+      vscode.postMessage({
+        type: 'layout:changed',
+        layout: buildLayout(activeLayout.name, tablePositions),
+      } satisfies MessageToExtension);
+    }, 400);
+    return () => window.clearTimeout(handle);
+  }, [activeLayout, tablePositions]);
+
   return (
     <main className="app">
       <div className="app__body">
@@ -600,10 +670,40 @@ export function App(): JSX.Element {
         <div className="app__main">
           <header className="app__header">
             <h1>dbt Diagram</h1>
+            {activeLayout !== null && <span className="app__layout">{activeLayout.name}</span>}
             <span className="app__status">{statusText}</span>
+            <button
+              type="button"
+              className="panel-button app__save"
+              onClick={onSaveDiagram}
+              disabled={graph === null}
+              title={
+                activeLayout === null
+                  ? 'Save the visible tables and their positions to a diagram file'
+                  : `Saving to ${activeLayout.path}`
+              }
+            >
+              {activeLayout === null ? 'Save diagram' : 'Saved'}
+            </button>
           </header>
 
           {error !== null && <div className="banner banner--error">{error}</div>}
+          {layoutMissing.length > 0 && (
+            <div className="banner banner--info">
+              <strong>
+                {layoutMissing.length} table{layoutMissing.length === 1 ? '' : 's'} in this diagram
+                no longer exist:
+              </strong>{' '}
+              {layoutMissing.join(', ')}
+              <button
+                type="button"
+                className="panel-button"
+                onClick={() => setLayoutMissing([])}
+              >
+                Dismiss
+              </button>
+            </div>
+          )}
           {pendingErrors.length > 0 && (
             <div className="banner banner--info">
               <strong>Waiting for valid YAML:</strong>
@@ -629,6 +729,9 @@ export function App(): JSX.Element {
                     edges={edges}
                     layoutTick={layoutTick}
                     filterTick={filterTick}
+                    seedPositions={seedPositions}
+                    seedTick={seedTick}
+                    onPositionsChange={onPositionsChange}
                     onEdgeMouseEnter={onEdgeMouseEnter}
                     onEdgeMouseLeave={onEdgeMouseLeave}
                     onEdgeClick={onEdgeClick}
@@ -679,6 +782,11 @@ interface DiagramCanvasProps {
   edges: Edge[];
   layoutTick: number;
   filterTick: number;
+  /** Stored positions from an opened layout, adopted when `seedTick` changes. */
+  seedPositions: Map<string, NodePosition> | null;
+  seedTick: number;
+  /** Reports the live positions of the visible tables (spec 13). */
+  onPositionsChange: (tables: DiagramLayoutTable[]) => void;
   onEdgeMouseEnter: (event: ReactMouseEvent, edge: Edge) => void;
   onEdgeMouseLeave: () => void;
   onEdgeClick: (event: ReactMouseEvent, edge: Edge) => void;
@@ -692,6 +800,9 @@ function DiagramCanvas({
   edges,
   layoutTick,
   filterTick,
+  seedPositions,
+  seedTick,
+  onPositionsChange,
   onEdgeMouseEnter,
   onEdgeMouseLeave,
   onEdgeClick,
@@ -708,6 +819,7 @@ function DiagramCanvas({
   const lastFilterTickRef = useRef(filterTick);
   const lastIdsRef = useRef<string[]>([]);
   const firstFitRef = useRef(true);
+  const lastSeedTickRef = useRef(seedTick);
 
   // Adopt each new diagram without disturbing the layout: existing nodes keep
   // their current position (manual drags and the previous arrangement survive),
@@ -724,7 +836,21 @@ function DiagramCanvas({
     lastTickRef.current = layoutTick;
     const filterChanged = filterTick !== lastFilterTickRef.current;
     lastFilterTickRef.current = filterTick;
-    setRfNodes((current) => (reset ? flow.nodes : mergeFlowNodes(flow.nodes, current)));
+    // Spec 13: opening a saved layout overrides the automatic arrangement for
+    // every table the layout stores a position for. Tables the layout does not
+    // mention (e.g. re-checked later) still get their dagre slot.
+    const seeded = seedTick !== lastSeedTickRef.current;
+    lastSeedTickRef.current = seedTick;
+    const seededNodes =
+      seeded && seedPositions !== null
+        ? flow.nodes.map((node) => {
+            const stored = seedPositions.get(node.id);
+            return stored === undefined ? node : { ...node, position: { ...stored } };
+          })
+        : flow.nodes;
+    setRfNodes((current) =>
+      reset ? flow.nodes : seeded ? seededNodes : mergeFlowNodes(flow.nodes, current),
+    );
 
     const ids = flow.nodes.map((node) => node.id);
     // Fit only when the node set actually grows (net count up); a rename swaps
@@ -734,10 +860,22 @@ function DiagramCanvas({
     lastIdsRef.current = ids;
     const isFirst = firstFitRef.current;
     firstFitRef.current = false;
-    if (isFirst || added || reset || filterChanged) {
+    if (isFirst || added || reset || filterChanged || seeded) {
       void fitView({ padding: 0.15, maxZoom: 1 });
     }
-  }, [flow, layoutTick, filterTick, fitView]);
+  }, [flow, layoutTick, filterTick, seedTick, seedPositions, fitView]);
+
+  // Spec 13: report the live table positions upward so the App can save them
+  // (and, while a layout is active, write them back after a short debounce).
+  useEffect(() => {
+    onPositionsChange(
+      rfNodes.map((node) => ({
+        name: node.id,
+        x: Math.round(node.position.x),
+        y: Math.round(node.position.y),
+      })),
+    );
+  }, [rfNodes, onPositionsChange]);
 
   // Live edge geometry (spec 12): the sides an edge uses, the dot the column
   // mounts, AND the path it takes around the other cards are all re-derived

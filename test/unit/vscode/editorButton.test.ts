@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { modelFileContextKey, shouldShowButton } from '../../../src/vscode/editorButton';
+import {
+  isDiagramLayoutFile,
+  layoutFileContextKey,
+  modelFileContextKey,
+  shouldShowButton,
+} from '../../../src/vscode/editorButton';
 
 const MODEL_PATHS = new Set([
   'c:\\repo\\models\\orders.yml',
@@ -27,5 +32,25 @@ describe('shouldShowButton', () => {
 describe('modelFileContextKey', () => {
   it('is the stable key used by the editor/title when clause', () => {
     expect(modelFileContextKey).toBe('dbtiagram.isModelYml');
+  });
+});
+
+describe('isDiagramLayoutFile', () => {
+  it('shows the layout button for .dbtiagram.yml files', () => {
+    expect(isDiagramLayoutFile('c:\\repo\\diagrams\\order-marts.dbtiagram.yml')).toBe(true);
+    expect(isDiagramLayoutFile('a/b/x.dbtiagram.yml')).toBe(true);
+  });
+
+  it('hides it for every other file', () => {
+    expect(isDiagramLayoutFile('c:\\repo\\models\\orders.yml')).toBe(false);
+    expect(isDiagramLayoutFile('x.dbtiagram.yaml')).toBe(false);
+    expect(isDiagramLayoutFile('')).toBe(false);
+    expect(isDiagramLayoutFile(undefined)).toBe(false);
+  });
+});
+
+describe('layoutFileContextKey', () => {
+  it('is the stable key used by the layout editor/title when clause', () => {
+    expect(layoutFileContextKey).toBe('dbtiagram.isDiagramLayout');
   });
 });

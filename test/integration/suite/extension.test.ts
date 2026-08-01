@@ -51,10 +51,41 @@ suite('dbtiagram extension', () => {
       entry.when?.includes('dbtiagram.isModelYml'),
       'the button must be gated by the model-file context key',
     );
+
+    // Spec 13: a second button opens a saved diagram layout file.
+    const layoutEntry = titleMenu!.find((item) => item.command === 'dbtiagram.openLayout');
+    assert.ok(layoutEntry, 'dbtiagram.openLayout must be contributed to the editor title menu');
+    assert.ok(
+      layoutEntry.when?.includes('dbtiagram.isDiagramLayout'),
+      'the layout button must be gated by the layout-file context key',
+    );
   });
 
-  test('open command works with a model.yml file as the active editor', async () => {
-    const modelUri = vscode.Uri.file(
+  test('openLayout command opens the diagram with a saved layout', async () => {
+    const commands = await vscode.commands.getCommands(true);
+    assert.ok(
+      commands.includes('dbtiagram.openLayout'),
+      'the "dbtiagram.openLayout" command must be registered after activation',
+    );
+
+    const layoutUri = vscode.Uri.file(
+      path.resolve(__dirname, '../../../../fixtures/sample-dbt/diagrams/orders.dbtiagram.yml'),
+    );
+    const before = fs.readFileSync(layoutUri.fsPath, 'utf8');
+
+    await vscode.commands.executeCommand('dbtiagram.openLayout', layoutUri);
+    const appeared = await waitFor(() => hasDiagramTab(), 10_000);
+    assert.ok(appeared, 'the diagram webview should open for a saved layout file');
+
+    // Opening alone must never rewrite the file (writes are webview-driven).
+    assert.strictEqual(
+      fs.readFileSync(layoutUri.fsPath, 'utf8'),
+      before,
+      'opening a layout must not modify it',
+    );
+  });
+
+  test('open command works with a model.yml file as the active editor', async () => {    const modelUri = vscode.Uri.file(
       path.resolve(__dirname, '../../../../fixtures/sample-dbt/models/orders.yml'),
     );
     const doc = await vscode.workspace.openTextDocument(modelUri);

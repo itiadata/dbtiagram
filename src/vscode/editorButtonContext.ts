@@ -4,7 +4,13 @@
  * editor/title menu item in package.json depends on that key.
  */
 import * as vscode from 'vscode';
-import { modelFileContextKey, shouldShowButton } from './editorButton';
+import {
+  isDiagramLayoutFile,
+  layoutFileContextKey,
+  modelFileContextKey,
+  shouldShowButton,
+} from './editorButton';
+import { isLayoutFilePath } from '../diagram/layoutFile';
 
 export function registerEditorTitleButton(): vscode.Disposable[] {
   const disposables: vscode.Disposable[] = [];
@@ -13,10 +19,17 @@ export function registerEditorTitleButton(): vscode.Disposable[] {
 
   const updateContext = async (): Promise<void> => {
     const active = vscode.window.activeTextEditor;
+    const activePath = active?.document.uri.fsPath;
     await vscode.commands.executeCommand(
       'setContext',
       modelFileContextKey,
-      shouldShowButton(active?.document.uri.fsPath, modelPaths),
+      shouldShowButton(activePath, modelPaths),
+    );
+    // Layout files are recognized by their path alone (spec 13).
+    await vscode.commands.executeCommand(
+      'setContext',
+      layoutFileContextKey,
+      isDiagramLayoutFile(activePath),
     );
   };
 
@@ -30,7 +43,9 @@ export function registerEditorTitleButton(): vscode.Disposable[] {
         .getConfiguration('dbtiagram')
         .get<string>('modelFileGlob', '**/models/**/*.yml');
       const uris = await vscode.workspace.findFiles(glob, '**/node_modules/**');
-      modelPaths = new Set(uris.map((uri) => uri.fsPath));
+      modelPaths = new Set(
+        uris.map((uri) => uri.fsPath).filter((fsPath) => !isLayoutFilePath(fsPath)),
+      );
     } finally {
       syncing = false;
     }

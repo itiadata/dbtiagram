@@ -6,6 +6,7 @@ import { parseModelYml } from '../../src/dbt/parse';
 import { serializeModelYml } from '../../src/dbt/serialize';
 import type { ModelDefinition } from '../../src/dbt/types';
 import { buildDiagram } from '../../src/diagram/graph';
+import { applyLayout, parseDiagramLayout } from '../../src/diagram/layoutFile';
 import { disambiguateFileLabels } from '../../src/shared/labels';
 
 const fixtureModelsDir = path.resolve(
@@ -115,5 +116,16 @@ describe('sample fixture (fixtures/sample-dbt)', () => {
       const parsed = parseModelYml(content, file);
       expect(parseModelYml(serializeModelYml(parsed), file)).toEqual(parsed);
     }
+  });
+
+  it('parses the sample saved diagram and only names existing models (spec 13)', () => {
+    const layoutPath = path.resolve(fixtureModelsDir, '../diagrams/orders.dbtiagram.yml');
+    const layout = parseDiagramLayout(fs.readFileSync(layoutPath, 'utf8'), 'orders');
+
+    expect(layout.name).toBe('orders');
+    expect(layout.tables.length).toBeGreaterThan(0);
+
+    const known = new Set(loadFixtureModels().map((model) => model.name));
+    expect(applyLayout(layout, known).missing).toEqual([]);
   });
 });

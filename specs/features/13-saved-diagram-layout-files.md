@@ -1,7 +1,7 @@
 ---
 id: 13
 title: Saved diagram layout files
-status: approved
+status: implemented
 priority: high
 created: 2026-08-01
 owner: unassigned
@@ -110,7 +110,7 @@ tables:
 
 ### 2. Pure layout module (`src/diagram/layoutFile.ts`)
 
-MUST NOT import `vscode`. `js-yaml` is already a dependency (used by
+MUST NOT import `vscode`. The `yaml` package is already a dependency (used by
 `src/dbt/parse.ts` / `serialize.ts`).
 
 - `export const LAYOUT_FILE_SUFFIX = '.dbtiagram.yml';`

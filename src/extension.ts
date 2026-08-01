@@ -11,6 +11,12 @@ export function activate(context: vscode.ExtensionContext): void {
     vscode.commands.registerCommand('dbtiagram.open', () =>
       DiagramPanel.createOrShow(context.extensionUri),
     ),
+    // Opens the diagram with a saved layout applied (spec 13). The editor/title
+    // menu passes the active resource; fall back to the active editor.
+    vscode.commands.registerCommand('dbtiagram.openLayout', (resource?: vscode.Uri) => {
+      const uri = resource ?? vscode.window.activeTextEditor?.document.uri;
+      return DiagramPanel.createOrShow(context.extensionUri, uri);
+    }),
   );
 
   for (const disposable of registerEditorTitleButton()) {

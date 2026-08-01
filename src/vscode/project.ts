@@ -5,6 +5,7 @@
 import * as vscode from 'vscode';
 import { parseModelYml, ModelYmlParseError } from '../dbt/parse';
 import { serializeModelYml } from '../dbt/serialize';
+import { isLayoutFilePath } from '../diagram/layoutFile';
 import type { ModelYmlFile } from '../dbt/types';
 
 export interface ModelYmlRecord {
@@ -40,6 +41,11 @@ export async function loadModelYmlFiles(glob = '**/models/**/*.yml'): Promise<Mo
   const failures: ModelYmlFailure[] = [];
 
   for (const uri of uris) {
+    // Saved diagram layouts (spec 13) may live under models/ and are never
+    // model files, so they must not be parsed or reported as failures.
+    if (isLayoutFilePath(uri.fsPath)) {
+      continue;
+    }
     try {
       const content = await readFileText(uri);
       records.push({ uri, file: parseModelYml(content, uri.fsPath) });

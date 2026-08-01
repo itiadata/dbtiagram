@@ -31,6 +31,12 @@
         "title": "Open dbt Model Diagram",
         "category": "dbt Diagram",
         "icon": "$(database)"
+      },
+      {
+        "command": "dbtiagram.openLayout",
+        "title": "Open dbt Diagram",
+        "category": "dbt Diagram",
+        "icon": "$(database)"
       }
     ],
     "menus": {
@@ -39,6 +45,11 @@
           "command": "dbtiagram.open",
           "group": "navigation@1",
           "when": "dbtiagram.isModelYml"
+        },
+        {
+          "command": "dbtiagram.openLayout",
+          "group": "navigation@1",
+          "when": "dbtiagram.isDiagramLayout && resourceScheme == file"
         }
       ]
     },

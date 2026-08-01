@@ -18,10 +18,18 @@ import {
 } from '../dbt/modelStore';
 import type { ModelDefinition } from '../dbt/types';
 import { buildDiagram } from '../diagram/graph';
+import {
+  applyLayout,
+  defaultLayoutName,
+  isLayoutFilePath,
+  DiagramLayoutParseError,
+  type DiagramLayout,
+} from '../diagram/layoutFile';
 import { matchesGlob } from '../shared/glob';
 import { disambiguateFileLabels } from '../shared/labels';
 import type { DiagramModelFile, MessageToExtension, MessageToWebview } from '../shared/protocol';
 import { registerModelWatcher } from '../vscode/modelWatcher';
+import { promptForLayoutPath, readLayoutFile, writeLayoutFile } from '../vscode/layoutFiles';
 import { loadModelYmlFiles, readFileText, writeModelYmlFile } from '../vscode/project';
 
 /** Ignore text-change echoes of our own disk writes within this window. */
@@ -36,6 +44,8 @@ export class DiagramPanel {
   private store: ModelStore;
   /** fsPath -> timestamp of our own disk writes, to ignore their echo. */
   private readonly selfWrites = new Map<string, number>();
+  /** The saved layout file this panel writes back to, if any (spec 13). */
+  private activeLayout: { uri: vscode.Uri; name: string } | undefined;
 
   private constructor(
     panel: vscode.WebviewPanel,
@@ -70,11 +80,17 @@ export class DiagramPanel {
     panel.onDidDispose(() => this.dispose(), undefined, this.disposables);
   }
 
-  public static async createOrShow(extensionUri: vscode.Uri): Promise<void> {
+  public static async createOrShow(
+    extensionUri: vscode.Uri,
+    layoutUri?: vscode.Uri,
+  ): Promise<void> {
     const column = vscode.window.activeTextEditor?.viewColumn;
 
     if (DiagramPanel.current) {
       DiagramPanel.current.panel.reveal(column);
+      if (layoutUri !== undefined) {
+        await DiagramPanel.current.openLayout(layoutUri);
+      }
       return;
     }
 
@@ -96,8 +112,13 @@ export class DiagramPanel {
       result.failures.map((failure) => ({ uri: failure.uri.fsPath, error: failure.message })),
     );
 
-    DiagramPanel.current = new DiagramPanel(panel, extensionUri, store);
-    panel.webview.html = DiagramPanel.current.getHtml();
+    const current = new DiagramPanel(panel, extensionUri, store);
+    DiagramPanel.current = current;
+    panel.webview.html = current.getHtml();
+
+    if (layoutUri !== undefined) {
+      await current.openLayout(layoutUri);
+    }
   }
 
   private static modelFileGlob(): string {
@@ -178,7 +199,7 @@ export class DiagramPanel {
   private async onFilesRenamed(oldUri: vscode.Uri, newUri: vscode.Uri): Promise<void> {
     const oldPath = oldUri.fsPath;
     const newPath = newUri.fsPath;
-    if (!matchesGlob(newPath, this.modelGlob)) {
+    if (!matchesGlob(newPath, this.modelGlob) || isLayoutFilePath(newPath)) {
       this.store = applyFileDeleted(this.store, oldPath);
       this.publish();
       return;
@@ -206,6 +227,7 @@ export class DiagramPanel {
       case 'webview:ready':
         // The initial publish may have raced the webview's message listener.
         this.publish();
+        this.publishActiveLayout();
         return;
       case 'diagram:edit': {
         try {
@@ -218,7 +240,100 @@ export class DiagramPanel {
         }
         return;
       }
+      case 'layout:save':
+        await this.saveLayout(message.layout);
+        return;
+      case 'layout:changed':
+        await this.writeActiveLayout(message.layout);
+        return;
     }
+  }
+
+  /**
+   * Opens a saved layout file: parses it, reconciles it against the models that
+   * currently exist, and tells the webview to apply it (spec 13).
+   */
+  private async openLayout(uri: vscode.Uri): Promise<void> {
+    let layout: DiagramLayout;
+    try {
+      layout = await readLayoutFile(uri);
+    } catch (err) {
+      const detail = err instanceof DiagramLayoutParseError ? err.message : String(err);
+      this.postMessage({
+        type: 'diagram:error',
+        message: `Could not open ${defaultLayoutName(uri.fsPath)}: ${detail}`,
+      });
+      return;
+    }
+
+    const known = new Set(
+      this.store.records.flatMap((record) => record.file.models.map((model) => model.name)),
+    );
+    const { missing } = applyLayout(layout, known);
+
+    this.activeLayout = { uri, name: layout.name };
+    this.publish();
+    this.postMessage({ type: 'layout:apply', layout, missing });
+    this.publishActiveLayout();
+  }
+
+  /**
+   * Handles the explicit "Save diagram" action: writes to the active layout, or
+   * prompts for a path when there is none. Cancelling the dialog is a no-op.
+   */
+  private async saveLayout(layout: DiagramLayout): Promise<void> {
+    let target = this.activeLayout?.uri;
+    if (target === undefined) {
+      target = await promptForLayoutPath(layout.name);
+      if (target === undefined) {
+        return;
+      }
+    }
+
+    const named: DiagramLayout = { ...layout, name: defaultLayoutName(target.fsPath) };
+    try {
+      await this.persistLayout(target, named);
+    } catch (err) {
+      this.postMessage({
+        type: 'diagram:error',
+        message: `Could not save diagram: ${err instanceof Error ? err.message : String(err)}`,
+      });
+      return;
+    }
+
+    this.activeLayout = { uri: target, name: named.name };
+    this.publishActiveLayout();
+  }
+
+  /** Debounced live write-back; a no-op while no layout is active. */
+  private async writeActiveLayout(layout: DiagramLayout): Promise<void> {
+    const active = this.activeLayout;
+    if (active === undefined) {
+      return;
+    }
+    try {
+      await this.persistLayout(active.uri, { ...layout, name: active.name });
+    } catch (err) {
+      this.postMessage({
+        type: 'diagram:error',
+        message: `Could not update diagram: ${err instanceof Error ? err.message : String(err)}`,
+      });
+    }
+  }
+
+  private async persistLayout(uri: vscode.Uri, layout: DiagramLayout): Promise<void> {
+    await writeLayoutFile(uri, layout);
+    // Layout files never enter the model pipeline, but keeping the guard local
+    // preserves the invariant if the glob ever changes.
+    this.selfWrites.set(uri.fsPath, Date.now());
+  }
+
+  private publishActiveLayout(): void {
+    this.postMessage({
+      type: 'layout:active',
+      path: this.activeLayout?.uri.fsPath ?? null,
+      name: this.activeLayout?.name ?? null,
+    });
   }
 
   private async applyEditAndPersist(edit: ModelEdit): Promise<void> {

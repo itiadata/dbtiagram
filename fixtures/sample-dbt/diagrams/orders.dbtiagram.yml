@@ -1,0 +1,12 @@
+version: 1
+name: orders
+tables:
+  - name: customers
+    x: 40
+    y: 60
+  - name: order_items
+    x: 760
+    y: 60
+  - name: orders
+    x: 400
+    y: 60

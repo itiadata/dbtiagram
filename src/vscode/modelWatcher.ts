@@ -6,6 +6,7 @@
  * skipped entirely while `dbtiagram.watchModelFiles` is false.
  */
 import * as vscode from 'vscode';
+import { isLayoutFilePath } from '../diagram/layoutFile';
 import { matchesGlob } from '../shared/glob';
 
 export interface ModelWatcherCallbacks {
@@ -24,8 +25,12 @@ export interface ModelWatcherCallbacks {
 
 /** Registers workspace listeners that dispatch model.yml changes. */
 export function registerModelWatcher(callbacks: ModelWatcherCallbacks): vscode.Disposable[] {
+  // Saved diagram layouts (spec 13) can sit under models/ and must never enter
+  // the model pipeline, even though they match the model glob.
   const isModelPath = (uri: vscode.Uri): boolean =>
-    callbacks.getEnabled() && matchesGlob(uri.fsPath, callbacks.getGlob());
+    callbacks.getEnabled() &&
+    !isLayoutFilePath(uri.fsPath) &&
+    matchesGlob(uri.fsPath, callbacks.getGlob());
 
   const disposables: vscode.Disposable[] = [
     vscode.workspace.onDidChangeTextDocument((event) => {
