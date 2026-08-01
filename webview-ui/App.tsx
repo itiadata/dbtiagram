@@ -630,7 +630,7 @@ export function App(): JSX.Element {
   const onSaveDiagram = useCallback((): void => {
     vscode.postMessage({
       type: 'layout:save',
-      layout: buildLayout(activeLayout?.name ?? 'diagram', tablePositions),
+      layout: buildLayout(activeLayout?.name ?? 'mydiagram', tablePositions),
     } satisfies MessageToExtension);
   }, [activeLayout, tablePositions]);
 

@@ -227,6 +227,11 @@ export class DiagramPanel {
       case 'webview:ready':
         // The initial publish may have raced the webview's message listener.
         this.publish();
+        // The initial layout:apply races it too, so a freshly opened panel
+        // would otherwise fall back to the default (unfiltered, auto-laid-out)
+        // view. Re-send it here, re-reading the file so any change written
+        // since the panel opened is picked up.
+        await this.sendActiveLayout();
         this.publishActiveLayout();
         return;
       case 'diagram:edit': {
@@ -266,15 +271,38 @@ export class DiagramPanel {
       return;
     }
 
+    this.activeLayout = { uri, name: layout.name };
+    this.publish();
+    this.postMessage({ type: 'layout:apply', layout, missing: this.missingModels(layout) });
+    this.publishActiveLayout();
+  }
+
+  /**
+   * Re-reads the active layout from disk and re-applies it in the webview. Used
+   * on `webview:ready`, where the panel's first `layout:apply` may have raced
+   * the webview's message listener.
+   */
+  private async sendActiveLayout(): Promise<void> {
+    const active = this.activeLayout;
+    if (active === undefined) {
+      return;
+    }
+    try {
+      const layout = await readLayoutFile(active.uri);
+      this.activeLayout = { uri: active.uri, name: layout.name };
+      this.postMessage({ type: 'layout:apply', layout, missing: this.missingModels(layout) });
+    } catch {
+      // The file vanished or became invalid after it was opened; the diagram
+      // stays as it is and the next explicit open reports the error.
+    }
+  }
+
+  /** Layout entries naming models that no longer exist, in file order. */
+  private missingModels(layout: DiagramLayout): string[] {
     const known = new Set(
       this.store.records.flatMap((record) => record.file.models.map((model) => model.name)),
     );
-    const { missing } = applyLayout(layout, known);
-
-    this.activeLayout = { uri, name: layout.name };
-    this.publish();
-    this.postMessage({ type: 'layout:apply', layout, missing });
-    this.publishActiveLayout();
+    return applyLayout(layout, known).missing;
   }
 
   /**

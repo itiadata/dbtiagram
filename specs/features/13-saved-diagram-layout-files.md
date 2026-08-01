@@ -158,7 +158,11 @@ The only place that touches the file system for layouts:
 - `promptForLayoutPath(defaultName): Promise<vscode.Uri | undefined>` —
   `window.showSaveDialog` with `filters: { 'dbt Diagram': ['dbtiagram.yml'] }`,
   `saveLabel: 'Save Diagram'`, and a default URI inside the first workspace
-  folder. The returned path is normalized to end with `.dbtiagram.yml`.
+  folder. The suggested file name is the **bare** name (`mydiagram`) with **no
+  extension**: VS Code appends the filter's extension itself, so including the
+  suffix here would produce `mydiagram.dbtiagram.yml.dbtiagram.yml`. The
+  returned path is still normalized to end with `.dbtiagram.yml`, covering
+  platforms/dialogs that do not append it.
 
 ### 5. Model loading excludes layout files (`src/vscode/project.ts`)
 
@@ -188,6 +192,12 @@ a layout saved inside `models/` is never parsed as a model file. The pure
   panel reads and parses it, stores it as the active layout, and posts
   `layout:apply` + `layout:active` after the first `diagram:update`. A parse
   failure surfaces as a `diagram:error` and leaves the layout inactive.
+- **The apply is re-sent on `webview:ready`.** The first `layout:apply` races
+  the webview's message listener exactly like the first `diagram:update` does,
+  so a freshly opened panel would otherwise show the default (unfiltered,
+  auto-laid-out) diagram. On `webview:ready` the panel therefore **re-reads the
+  active layout file from disk** and re-posts `layout:apply`, which also picks
+  up any change written since the panel opened.
 - If a panel already exists and a `layoutUri` is passed, the panel is revealed
   and the new layout replaces the active one.
 - `layout:save`: if there is an active layout, write straight to it; otherwise
@@ -338,6 +348,27 @@ Then the panel shows a readable error naming the file and the problem
 And no layout is applied and no file is overwritten
 ```
 
+### Reopening a saved diagram restores it, not the default view
+
+```
+Given a saved diagram in which the user removed a model and moved the rest
+And the layout file on disk reflects that
+When the user closes the diagram panel
+And opens the same .dbtiagram.yml again from the editor title bar
+Then the diagram shows exactly the tables listed in the file at their stored positions
+And it does NOT fall back to every model in the default auto-layout
+```
+
+### The save dialog suggests a name without a duplicated extension
+
+```
+Given the dbt Diagram is open and no layout is active
+When the user clicks "Save diagram"
+Then the save dialog suggests a bare name such as "mydiagram"
+And the saved file is named mydiagram.dbtiagram.yml
+And never mydiagram.dbtiagram.yml.dbtiagram.yml
+```
+
 ### Layout files are never parsed as models
 
 ```
@@ -362,7 +393,12 @@ And it contributes no tables to the diagram
 - [ ] An editor title bar button appears for `.dbtiagram.yml` files and only for
       them, and opens the diagram with that layout applied.
 - [ ] Opening a layout makes exactly its tables visible at their stored
-      positions and makes that file the active layout.
+      positions and makes that file the active layout. This holds on a freshly
+      created panel too: the apply is re-sent (re-reading the file) once the
+      webview reports ready, so reopening a saved diagram never falls back to
+      the default view.
+- [ ] The save dialog suggests a bare file name; the resulting file carries the
+      `.dbtiagram.yml` suffix exactly once.
 - [ ] While a layout is active, dragging a table or changing table visibility
       rewrites the file (debounced), with no further user action.
 - [ ] A layout entry for a model that no longer exists is ignored with a

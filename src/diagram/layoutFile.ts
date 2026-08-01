@@ -50,9 +50,18 @@ export function isLayoutFilePath(fsPath: string | undefined): boolean {
 /** The default diagram name for a path: its base name minus the suffix. */
 export function defaultLayoutName(fsPath: string): string {
   const base = fsPath.split(/[\\/]/).pop() ?? fsPath;
-  return base.toLowerCase().endsWith(LAYOUT_FILE_SUFFIX)
-    ? base.slice(0, base.length - LAYOUT_FILE_SUFFIX.length)
-    : base;
+  return stripLayoutSuffix(base);
+}
+
+/**
+ * Removes a trailing `.dbtiagram.yml`. The save dialog suggests this bare name:
+ * VS Code appends the filter's extension itself, so suggesting a name that
+ * already carries the suffix produces `x.dbtiagram.yml.dbtiagram.yml`.
+ */
+export function stripLayoutSuffix(name: string): string {
+  return name.toLowerCase().endsWith(LAYOUT_FILE_SUFFIX)
+    ? name.slice(0, name.length - LAYOUT_FILE_SUFFIX.length)
+    : name;
 }
 
 /**

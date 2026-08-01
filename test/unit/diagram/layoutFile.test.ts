@@ -7,6 +7,7 @@ import {
   isLayoutFilePath,
   parseDiagramLayout,
   serializeDiagramLayout,
+  stripLayoutSuffix,
   type DiagramLayout,
 } from '../../../src/diagram/layoutFile';
 
@@ -44,8 +45,25 @@ describe('defaultLayoutName', () => {
   });
 });
 
-describe('buildLayout', () => {
-  it('sorts tables by name and rounds coordinates', () => {
+describe('stripLayoutSuffix', () => {
+  // The save dialog suggests this bare name; VS Code appends the filter's
+  // extension itself, so suggesting the suffix would duplicate it.
+  it('removes a trailing layout suffix exactly once', () => {
+    expect(stripLayoutSuffix('mydiagram.dbtiagram.yml')).toBe('mydiagram');
+    expect(stripLayoutSuffix('mydiagram.DBTIAGRAM.YML')).toBe('mydiagram');
+  });
+
+  it('leaves a bare name untouched', () => {
+    expect(stripLayoutSuffix('mydiagram')).toBe('mydiagram');
+    expect(stripLayoutSuffix('orders.yml')).toBe('orders.yml');
+  });
+
+  it('is idempotent, so a suggestion can never gain a second suffix', () => {
+    expect(stripLayoutSuffix(stripLayoutSuffix('mydiagram.dbtiagram.yml'))).toBe('mydiagram');
+  });
+});
+
+describe('buildLayout', () => {  it('sorts tables by name and rounds coordinates', () => {
     const layout = buildLayout('My diagram', [
       { name: 'orders', x: 120.4, y: 39.6 },
       { name: 'customers', x: -0.2, y: 10 },

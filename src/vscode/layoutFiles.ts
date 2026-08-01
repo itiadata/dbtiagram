@@ -9,6 +9,7 @@ import {
   LAYOUT_FILE_SUFFIX,
   parseDiagramLayout,
   serializeDiagramLayout,
+  stripLayoutSuffix,
   type DiagramLayout,
 } from '../diagram/layoutFile';
 
@@ -28,13 +29,18 @@ export async function writeLayoutFile(uri: vscode.Uri, layout: DiagramLayout): P
 
 /**
  * Asks the user where to save a diagram. Returns undefined when the dialog is
- * dismissed. The chosen path is normalized to end with the layout suffix.
+ * dismissed.
+ *
+ * The suggested name is deliberately extension-less: VS Code appends the
+ * filter's extension itself, so passing `mydiagram.dbtiagram.yml` here yields
+ * `mydiagram.dbtiagram.yml.dbtiagram.yml` in the dialog. The chosen path is
+ * still normalized, covering dialogs that do not append it.
  */
 export async function promptForLayoutPath(defaultName: string): Promise<vscode.Uri | undefined> {
   const root = vscode.workspace.workspaceFolders?.[0]?.uri;
-  const fileName = `${defaultName}${LAYOUT_FILE_SUFFIX}`;
+  const suggestion = stripLayoutSuffix(defaultName);
   const chosen = await vscode.window.showSaveDialog({
-    defaultUri: root ? vscode.Uri.joinPath(root, fileName) : undefined,
+    defaultUri: root ? vscode.Uri.joinPath(root, suggestion) : undefined,
     saveLabel: 'Save Diagram',
     filters: { 'dbt Diagram': ['dbtiagram.yml'] },
   });

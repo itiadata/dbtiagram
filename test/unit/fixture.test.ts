@@ -6,7 +6,7 @@ import { parseModelYml } from '../../src/dbt/parse';
 import { serializeModelYml } from '../../src/dbt/serialize';
 import type { ModelDefinition } from '../../src/dbt/types';
 import { buildDiagram } from '../../src/diagram/graph';
-import { applyLayout, parseDiagramLayout } from '../../src/diagram/layoutFile';
+import { applyLayout, isLayoutFilePath, parseDiagramLayout } from '../../src/diagram/layoutFile';
 import { disambiguateFileLabels } from '../../src/shared/labels';
 
 const fixtureModelsDir = path.resolve(
@@ -17,14 +17,16 @@ const fixtureModelsDir = path.resolve(
 /**
  * Every model.yml under the fixture's models tree, mirroring the extension's
  * recursive discovery (spec 05): the tree contains two files named
- * orders.yml — models/orders.yml and models/staging/orders.yml.
+ * orders.yml �?" models/orders.yml and models/staging/orders.yml. Saved diagram
+ * layouts are skipped exactly as `loadModelYmlFiles` skips them (spec 13), so a
+ * layout saved under models/ never breaks model parsing.
  */
 function listModelYmlFiles(dir: string): string[] {
   const files: string[] = [];
   for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
     const full = path.join(dir, entry.name);
     if (entry.isDirectory()) files.push(...listModelYmlFiles(full));
-    else if (entry.name.endsWith('.yml')) files.push(full);
+    else if (entry.name.endsWith('.yml') && !isLayoutFilePath(full)) files.push(full);
   }
   return files;
 }
