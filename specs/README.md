@@ -21,7 +21,7 @@ up-to-date spec in `specs/features/`.
 | 06  | Edit model and column properties in the diagram | Done |
 | 07  | Fix FK edge hover interactivity | Done |
 | 08  | Editable primary keys and foreign keys | Done |
-| 09  | FK edges and handle dots follow column pairs (merged former 09 + 10) | Draft |
+| 09  | FK edges and handle dots follow column pairs (merged former 09 + 10) | Implemented |
 | 11  | Sidebar visibility and resizable widths | Draft |
 
 Status values: `draft` → `approved` → `implemented` → `done`.
