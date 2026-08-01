@@ -1,7 +1,7 @@
 ---
 id: 12
 title: Obstacle-aware FK edge routing with free side choice
-status: implemented
+status: done
 priority: high
 created: 2026-08-01
 owner: unassigned

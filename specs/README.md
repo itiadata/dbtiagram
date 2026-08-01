@@ -23,7 +23,7 @@ up-to-date spec in `specs/features/`.
 | 08  | Editable primary keys and foreign keys | Done |
 | 09  | FK edges and handle dots follow column pairs (merged former 09 + 10) | Implemented |
 | 11  | Sidebar visibility and resizable widths | Draft |
-| 12  | Obstacle-aware FK edge routing with free side choice | Implemented |
+| 12  | Obstacle-aware FK edge routing with free side choice | Done |
 
 Status values: `draft` → `approved` → `implemented` → `done`.
 
