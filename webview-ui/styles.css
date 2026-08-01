@@ -485,6 +485,17 @@ body {
 /* ---- Edges ---- */
 
 /*
+ * Edges are interactive again (feature 07): a defined onEdgeClick keeps React
+ * Flow from tagging them `inactive`, whose base rule
+ * `.react-flow__edge.inactive { pointer-events: none; }` disabled edge mouse
+ * events (killing hover) and let the cursor fall through to the panning pane's
+ * grab hand. Show a pointer over the edge instead.
+ */
+.react-flow__edge {
+  cursor: pointer;
+}
+
+/*
  * Visible-stroke styles are scoped to `.react-flow__edge-path` on purpose.
  * React Flow renders a second, invisible path per edge
  * (`.react-flow__edge-interaction`) whose width is the edge's

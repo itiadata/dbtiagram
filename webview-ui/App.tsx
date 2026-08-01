@@ -261,6 +261,19 @@ export function App(): JSX.Element {
     setSelection(null);
   }, []);
 
+  // Feature 07: a defined onEdgeClick is what keeps React Flow from tagging
+  // every edge `inactive` (inactive = !selectable && !onClick), whose base CSS
+  // rule pointer-events: none killed edge hover after spec 06. Clicking an FK
+  // edge selects its child (source) table — the natural behavior that gives
+  // the handler a purpose. elementsSelectable stays false, so React Flow's
+  // native edge selection never engages.
+  const onEdgeClick = useCallback(
+    (_event: ReactMouseEvent, edge: Edge): void => {
+      onTableSelect(edge.source);
+    },
+    [onTableSelect],
+  );
+
   /**
    * The single funnel every mutation goes through (inline editing and the
    * details sidebar). A rename of the currently selected entity records
@@ -468,6 +481,7 @@ export function App(): JSX.Element {
                     filterTick={filterTick}
                     onEdgeMouseEnter={onEdgeMouseEnter}
                     onEdgeMouseLeave={onEdgeMouseLeave}
+                    onEdgeClick={onEdgeClick}
                     onAutoLayout={onAutoLayout}
                     onPaneClick={onPaneClick}
                   />
@@ -490,6 +504,7 @@ interface DiagramCanvasProps {
   filterTick: number;
   onEdgeMouseEnter: (event: ReactMouseEvent, edge: Edge) => void;
   onEdgeMouseLeave: () => void;
+  onEdgeClick: (event: ReactMouseEvent, edge: Edge) => void;
   onAutoLayout: () => void;
   onPaneClick: () => void;
 }
@@ -501,6 +516,7 @@ function DiagramCanvas({
   filterTick,
   onEdgeMouseEnter,
   onEdgeMouseLeave,
+  onEdgeClick,
   onAutoLayout,
   onPaneClick,
 }: DiagramCanvasProps): JSX.Element {
@@ -571,6 +587,7 @@ function DiagramCanvas({
       proOptions={{ hideAttribution: false }}
       onEdgeMouseEnter={onEdgeMouseEnter}
       onEdgeMouseLeave={onEdgeMouseLeave}
+      onEdgeClick={onEdgeClick}
       onPaneClick={onPaneClick}
       minZoom={0.1}
       maxZoom={2}

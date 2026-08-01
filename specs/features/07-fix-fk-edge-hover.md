@@ -1,7 +1,7 @@
 ---
 id: 07
 title: Fix FK edge hover interactivity
-status: approved
+status: implemented
 priority: high
 created: 2026-08-01
 owner: unassigned

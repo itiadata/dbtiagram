@@ -19,7 +19,7 @@ up-to-date spec in `specs/features/`.
 | 04  | Live model.yml edits reflected without losing layout | Done |
 | 05  | Filter diagram by model.yml files and models | Done |
 | 06  | Edit model and column properties in the diagram | Done |
-| 07  | Fix FK edge hover interactivity | Approved |
+| 07  | Fix FK edge hover interactivity | Implemented |
 | 08  | Editable primary keys and foreign keys | Draft |
 
 Status values: `draft` → `approved` → `implemented` → `done`.
