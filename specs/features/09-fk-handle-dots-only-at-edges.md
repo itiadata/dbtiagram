@@ -22,6 +22,11 @@ cards not involved in any FK show no dots at all. FKs with no column pairs are
 **invisible drafts**: no edge is drawn, no dot appears, and model.yml contains
 nothing about the FK until at least one column pair is defined.
 
+The dynamic side choice is **live**: it is re-derived from the node positions
+the moment a card is dragged, not frozen at the last automatic layout, so the
+FK edge departs/arrives on the side of the card that actually faces its
+counterpart at all times.
+
 This feature merges the former features 09 (dots only at edge endpoints) and
 10 (FKs need at least one column pair): the two were drafted separately but
 rewrite the same handle/edge machinery, and feature 10 removes the table-level
@@ -55,18 +60,34 @@ positions so the path is simplest, removes the table-level edge concept
 entirely, and makes the "constructing" FK state explicit: zero pairs = a draft
 that exists only in webview memory.
 
+Manual Verify of the implemented feature surfaced one more problem: the
+dynamic side choice ran **only at build time**. `buildFlowElements` computes
+each edge's `sourceHandle`/`targetHandle` (and the per-node `handles` map the
+webview mounts dots from) from the **initial** dagre layout, and `DiagramCanvas`
+never re-derives them — so dragging a card across another card's horizontal
+center leaves the edge departing/arriving on the old side. The side and the dot
+must follow the card live while it is being dragged.
+
 ## Scope
 
 - `src/diagram/flow.ts` — `FlowNodeData` gains `handles` (the handle ids this
   node actually uses, with their side); `buildFlowElements` computes edge
-  sides dynamically from node positions; the table-level edge branch and
-  `TABLE_SOURCE_HANDLE` / `TABLE_TARGET_HANDLE` are removed.
+  sides dynamically from node positions; a new pure `recomputeEdgeSides`
+  re-derives the same sides (and the per-node `handles` map) from **current**
+  node positions so the webview can keep them live during drags; the
+  table-level edge branch and `TABLE_SOURCE_HANDLE` / `TABLE_TARGET_HANDLE`
+  are removed.
 - `src/diagram/graph.ts` — `buildDiagram` draws **no edge** for FKs with empty
   or unequal-length column arrays; descriptors still appear in
   `node.foreignKeys` so the sidebar can complete legacy zero-pair FKs.
 - `webview-ui/TableNode.tsx` — column Handles mount **only when used**, each
   at its dynamically chosen side; the two table-level `<Handle>` elements are
   removed.
+- `webview-ui/App.tsx` — `DiagramCanvas` derives the live edge geometry
+  (`sourceHandle`/`targetHandle` and each node's `handles`) from the **current**
+  node positions on every node change (drag), merging the App-level hover
+  styling by stable edge id; `DiagramCanvas`'s edge list stops being a mirror
+  of a prop and becomes the live pass.
 - `webview-ui/styles.css` — the base `.react-flow__handle` dot styling is
   unchanged; no hiding rules are needed (unused handles are not mounted).
 - `src/dbt/edit.ts` — `addForeignKey` is replaced by `createForeignKey` (with
@@ -144,6 +165,10 @@ branch; the table-level branch is deleted along with the
 every edge, then attaches the deduped map to each node's `data`. The
 `tableEdgeCounts`/`uniqueId` suffix machinery stays for duplicate column-pair
 edges.
+
+The side decision is extracted into one shared pure helper used both by
+`buildFlowElements` (initial layout) and by `recomputeEdgeSides` (live drags),
+so the two can never drift apart (section 9).
 
 ### 2. Graph (`src/diagram/graph.ts`)
 
@@ -272,7 +297,12 @@ unit tests instead.
   `handles`; sides are dynamic — a forward edge (target right of source) uses
   `source:right`/`target:left`, a back-edge (target left of source) uses
   `source:left`/`target:right`; multiple edges sharing a column dedupe to one
-  handle id per (column, side).
+  handle id per (column, side); `recomputeEdgeSides` re-derives sides from
+  **arbitrary** current rects (a forward placement flipped to a back placement
+  swaps both endpoints' sides and the dot map, and vice versa), preserves edge
+  ids/data, and **falls back to the edge's existing sides when an endpoint is
+  missing from the rects** (a transient mount/rename gap must never crash the
+  webview — the next render recomputes from the complete rect set).
 - `dbt/edit.test.ts` — remove the `addForeignKey` suite; add `createForeignKey`
   (real + virtual persistence, ≥1 pair validation, unequal-length rejection,
   unknown target, unknown source/target column, identity/no-op guard);
@@ -280,6 +310,51 @@ unit tests instead.
   test); `setForeignKeyVirtual` zero-pair rejection in both directions.
 - `fixture.test.ts` — restored virtual-edge expectation; round trip stays
   lossless.
+
+### 9. Live edge sides while dragging (Manual Verify iteration)
+
+`buildFlowElements` computes sides from the initial layout; that is the seed,
+not the truth. The **truth is the current node positions**, which live in
+`DiagramCanvas`'s React Flow node state (`rfNodes`). A new pure function in
+`src/diagram/flow.ts` re-derives the same geometry from arbitrary rects:
+
+```ts
+export interface NodeRect {
+  id: string;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
+export function recomputeEdgeSides(
+  edges: readonly FlowEdge[],
+  nodeRects: readonly NodeRect[],
+): { edges: FlowEdge[]; nodeHandles: Map<string, Map<string, HandleSide>> };
+```
+
+- It walks the existing `FlowEdge`s (ids and `data` — the hover/tooltip
+  payloads — are preserved untouched) and, for each, re-runs the shared side
+  decision from the two endpoints' current horizontal centers, producing new
+  `sourceHandle`/`targetHandle` ids, and rebuilds the per-node `handles` map
+  (handle id → side) exactly as `buildFlowElements` does. An edge whose
+  source **or** target rect is missing from `nodeRects` — a one-render gap
+  while React Flow adopts a new node list (mount, rename) — is passed through
+  unchanged (its current sides stand in); it never throws.
+- `DiagramCanvas` seeds its `rfNodes` state with the current `flow.nodes`
+  (lazy initializer) so the first paint already has complete node rects, then
+  builds `nodeRects` from `rfNodes` (position + width/height), calls
+  `recomputeEdgeSides` on every render that changes the positions (i.e.
+  continuously while a card is dragged), and:
+  - passes nodes whose `data.handles` is overlaid with the live map to
+    `<ReactFlow>` — the mounted dot moves from one side of the column to the
+    other the moment the horizontal centers cross;
+  - merges the App-level hover/active styling (`className`, `animated`) onto
+    the live edges **by stable edge id**, so hover highlighting and edge
+    double-click keep working while the geometry follows the drag.
+- The `rfEdges`/`setRfEdges` state and its `useEffect` mirror of the prop are
+  removed: the edge list passed to `<ReactFlow>` is fully derived
+  (geometry from positions, styling from the id-keyed App pass).
 
 ## Scenarios
 
@@ -333,6 +408,18 @@ Given the dbt Diagram is open and model A (laid out left of B) has an FK to B, a
 When the user looks at the two cards
 Then the forward edge attaches to A's right and B's left
 And the back edge attaches to B's left... (the side facing A) and A's right... (the side facing B)
+```
+
+### Dragging a card moves the edge and the dot to the facing side
+
+```
+Given the dbt Diagram is open and orders.customer_id is an FK to customers.customer_id
+And customers is laid out to the right of orders
+When the user drags customers to the left of orders
+Then while dragging (and once dropped), the edge departs orders.customer_id on the left and arrives customers.customer_id on the right
+And the customer_id rows show their dot on those sides
+When the user drags customers back to the right of orders
+Then the edge departs orders.customer_id on the right and arrives customers.customer_id on the left again
 ```
 
 ### An FK without column pairs draws no edge and no dot
@@ -403,6 +490,11 @@ And no file is written
       the node positions (target center ≥ source center → source right /
       target left; otherwise the flip) and attaches a per-node `handles` map
       (handle id → side) to `FlowNodeData`, deduped and order-stable.
+- [ ] `recomputeEdgeSides` re-derives edge endpoint sides and the per-node
+      `handles` map from **arbitrary current node rects** (same side decision
+      as `buildFlowElements`), preserving edge ids and `data`; `DiagramCanvas`
+      calls it on every node position change, so dragging a card past another
+      card's center flips the edge and the dot to the facing side live.
 - [ ] The webview mounts a source/target Handle for a column **only when its
       id is in `data.handles`**, at the recorded side; unrelated columns and
       edge-free cards show no dots anywhere; used handles keep the current dot

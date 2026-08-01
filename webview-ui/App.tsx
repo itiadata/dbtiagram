@@ -12,7 +12,6 @@ import {
   Panel,
   ReactFlow,
   ReactFlowProvider,
-  applyEdgeChanges,
   applyNodeChanges,
   useReactFlow,
   type Edge,
@@ -26,10 +25,12 @@ import type { ForeignKeyDescriptor } from '../src/dbt/types';
 import type { DiagramGraph } from '../src/diagram/graph';
 import {
   buildFlowElements,
+  recomputeEdgeSides,
   type FlowEdgeData,
   type FlowElements,
+  type HandleSide,
 } from '../src/diagram/flow';
-import { layoutDiagram } from '../src/diagram/layout';
+import { HEADER_HEIGHT, NODE_WIDTH, layoutDiagram } from '../src/diagram/layout';
 import { mergeFlowNodes } from '../src/diagram/positions';
 import { computeVisibleModels, filterGraph, reconcileSelection } from '../src/shared/filter';
 import type {
@@ -694,8 +695,10 @@ function DiagramCanvas({
   onPaneClick,
 }: DiagramCanvasProps): JSX.Element {
   const { fitView } = useReactFlow();
-  const [rfNodes, setRfNodes] = useState<Node[]>([]);
-  const [rfEdges, setRfEdges] = useState<Edge[]>([]);
+  // Seed the node list from the current flow so the first paint already has
+  // full node rects (the live edge pass runs during render, before the adopt
+  // effect below); later flow changes flow through the effect.
+  const [rfNodes, setRfNodes] = useState<Node[]>(() => flow.nodes);
   const lastTickRef = useRef(layoutTick);
   const lastFilterTickRef = useRef(filterTick);
   const lastIdsRef = useRef<string[]>([]);
@@ -731,22 +734,84 @@ function DiagramCanvas({
     }
   }, [flow, layoutTick, filterTick, fitView]);
 
-  useEffect(() => {
-    setRfEdges(edges);
-  }, [edges]);
+  // Live edge geometry (spec 09 Manual Verify iteration): the side an edge
+  // uses — and the dot the column mounts — is re-derived from the CURRENT node
+  // positions on every drag, not frozen at the initial layout. Node rects come
+  // from React Flow's live state; recomputeEdgeSides preserves edge ids/data
+  // so hover highlighting and edge double-click keep working unchanged.
+  const nodeRects = useMemo(
+    () =>
+      rfNodes.map((node) => ({
+        id: node.id,
+        x: node.position.x,
+        y: node.position.y,
+        width: node.width ?? NODE_WIDTH,
+        height: node.height ?? HEADER_HEIGHT,
+      })),
+    [rfNodes],
+  );
+  const { edges: liveEdges, nodeHandles } = useMemo(
+    () => recomputeEdgeSides(flow.edges, nodeRects),
+    [flow.edges, nodeRects],
+  );
+
+  // The nodes React Flow renders: the layout/data from `rfNodes`, with
+  // `data.handles` overlaid from the live pass so the mounted dot follows the
+  // drag. A node whose handle set is unchanged keeps its data reference so
+  // memoized TableNodes don't re-render on every drag frame.
+  const liveNodes = useMemo(
+    () =>
+      rfNodes.map((node) => {
+        const handles = nodeHandles.get(node.id);
+        // rfNodes is typed with the generic Node (data: Record<string, unknown>);
+        // the handles field comes from FlowNodeData (spec 09 merged).
+        const previous = (node.data as { handles?: Record<string, HandleSide> }).handles;
+        if (handles === undefined || handles.size === 0) {
+          return previous === undefined
+            ? node
+            : { ...node, data: { ...node.data, handles: undefined } };
+        }
+        const next = Object.fromEntries(handles);
+        if (
+          previous !== undefined &&
+          Object.keys(previous).length === handles.size &&
+          Object.entries(next).every(([handleId, side]) => previous[handleId] === side)
+        ) {
+          return node;
+        }
+        return { ...node, data: { ...node.data, handles: next } };
+      }),
+    [rfNodes, nodeHandles],
+  );
+
+  // Hover/active styling (className, animated) comes from the App-level edges
+  // pass, keyed by the stable edge ids; the geometry comes from the live pass.
+  const appEdgesById = useMemo(() => new Map(edges.map((edge) => [edge.id, edge])), [edges]);
+  const liveStyledEdges = useMemo(
+    () =>
+      liveEdges.map((edge) => {
+        const styled = appEdgesById.get(edge.id);
+        return styled === undefined
+          ? edge
+          : { ...edge, className: styled.className, animated: styled.animated };
+      }),
+    [liveEdges, appEdgesById],
+  );
 
   const onNodesChange = useCallback((changes: NodeChange[]): void => {
     setRfNodes((current) => applyNodeChanges(changes, current));
   }, []);
 
-  const onEdgesChange = useCallback((changes: EdgeChange[]): void => {
-    setRfEdges((current) => applyEdgeChanges(changes, current));
+  const onEdgesChange = useCallback((_changes: EdgeChange[]): void => {
+    // Edges are fully derived here: geometry from the live node positions,
+    // styling from the App-level hover pass. React Flow never mutates edges in
+    // this app (elementsSelectable is false), so there is nothing to apply.
   }, []);
 
   return (
     <ReactFlow
-      nodes={rfNodes}
-      edges={rfEdges}
+      nodes={liveNodes}
+      edges={liveStyledEdges}
       onNodesChange={onNodesChange}
       onEdgesChange={onEdgesChange}
       nodeTypes={nodeTypes}

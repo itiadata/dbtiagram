@@ -6,6 +6,7 @@ import {
   buildFlowElements,
   columnSourceHandle,
   columnTargetHandle,
+  recomputeEdgeSides,
   type HandleSide,
 } from '../../../src/diagram/flow';
 import type { ModelDefinition } from '../../../src/dbt/types';
@@ -404,5 +405,127 @@ describe('used handle dots (spec 09 merged)', () => {
       expect(byNode.get(edge.source)?.[edge.sourceHandle ?? '']).toBeDefined();
       expect(byNode.get(edge.target)?.[edge.targetHandle ?? '']).toBeDefined();
     }
+  });
+});
+
+describe('recomputeEdgeSides (live drag sides, spec 09 Manual Verify iteration)', () => {
+  /** A flow with one FK a.x -> b.y (dagre lays a left of b initially). */
+  const pairFlow = () =>
+    flowFor([
+      {
+        name: 'a',
+        columns: [{ name: 'x' }],
+        constraints: [{ type: 'foreign_key', columns: ['x'], to: "ref('b')", toColumns: ['y'] }],
+      },
+      { name: 'b', columns: [{ name: 'y' }] },
+    ]).flow;
+
+  /** Two 240px-wide cards at the given left edges (heights are irrelevant to the side choice). */
+  const rects = (aX: number, bX: number) => [
+    { id: 'a', x: aX, y: 0, width: 240, height: 68 },
+    { id: 'b', x: bX, y: 0, width: 240, height: 68 },
+  ];
+
+  it('keeps forward sides when the target stays at/right of the source', () => {
+    const flow = pairFlow();
+    const { edges: rebuilt, nodeHandles } = recomputeEdgeSides(flow.edges, rects(0, 400));
+    expect(rebuilt[0]).toMatchObject({
+      source: 'a',
+      target: 'b',
+      sourceHandle: columnSourceHandle('x', 'right'),
+      targetHandle: columnTargetHandle('y', 'left'),
+    });
+    expect(Object.fromEntries(nodeHandles.get('a')!)).toEqual({
+      [columnSourceHandle('x', 'right')]: 'right',
+    });
+    expect(Object.fromEntries(nodeHandles.get('b')!)).toEqual({
+      [columnTargetHandle('y', 'left')]: 'left',
+    });
+  });
+
+  it('flips both endpoints and the dots when the target is dragged left of the source', () => {
+    const flow = pairFlow();
+    const { edges: rebuilt, nodeHandles } = recomputeEdgeSides(flow.edges, rects(400, 0));
+    expect(rebuilt[0]).toMatchObject({
+      sourceHandle: columnSourceHandle('x', 'left'),
+      targetHandle: columnTargetHandle('y', 'right'),
+    });
+    expect(Object.fromEntries(nodeHandles.get('a')!)).toEqual({
+      [columnSourceHandle('x', 'left')]: 'left',
+    });
+    expect(Object.fromEntries(nodeHandles.get('b')!)).toEqual({
+      [columnTargetHandle('y', 'right')]: 'right',
+    });
+  });
+
+  it('preserves edge ids, data payloads, and edge type across recomputation', () => {
+    const flow = pairFlow();
+    const { edges: rebuilt } = recomputeEdgeSides(flow.edges, rects(400, 0));
+    expect(rebuilt[0].id).toBe(flow.edges[0].id);
+    expect(rebuilt[0].data).toEqual(flow.edges[0].data);
+    expect(rebuilt[0].type).toBe('smoothstep');
+    expect(rebuilt[0].interactionWidth).toBe(EDGE_INTERACTION_WIDTH);
+  });
+
+  it('flips every pair of a multi-pair FK together and dedupes per column', () => {
+    const { flow } = flowFor([
+      {
+        name: 'a',
+        columns: [{ name: 'x1' }, { name: 'x2' }],
+        constraints: [
+          {
+            type: 'foreign_key',
+            columns: ['x1', 'x2'],
+            to: "ref('b')",
+            toColumns: ['y1', 'y2'],
+          },
+          {
+            type: 'foreign_key',
+            columns: ['x1'],
+            to: "ref('b')",
+            toColumns: ['y1'],
+          },
+        ],
+      },
+      { name: 'b', columns: [{ name: 'y1' }, { name: 'y2' }] },
+    ]);
+    const { edges: rebuilt, nodeHandles } = recomputeEdgeSides(flow.edges, rects(400, 0));
+    expect(rebuilt).toHaveLength(3);
+    for (const edge of rebuilt) {
+      expect(edge.sourceHandle).toBe(columnSourceHandle(edge.data.sourceColumn!, 'left'));
+      expect(edge.targetHandle).toBe(columnTargetHandle(edge.data.targetColumn!, 'right'));
+    }
+    // Two edges share a.x1: the live map still holds one handle id per column.
+    expect(Object.keys(Object.fromEntries(nodeHandles.get('a')!))).toEqual([
+      columnSourceHandle('x1', 'left'),
+      columnSourceHandle('x2', 'left'),
+    ]);
+  });
+
+  it('omits nodes with no edges from the live handle map', () => {
+    const { flow } = flowFor([{ name: 'orphan', columns: [{ name: 'id' }] }]);
+    const { edges: rebuilt, nodeHandles } = recomputeEdgeSides(flow.edges, [
+      { id: 'orphan', x: 0, y: 0, width: 240, height: 68 },
+    ]);
+    expect(rebuilt).toEqual([]);
+    expect(nodeHandles.size).toBe(0);
+  });
+
+  it('falls back to the existing sides when an endpoint rect is missing (mount/rename gap)', () => {
+    const flow = pairFlow();
+    // Before React Flow has adopted any nodes (first render) or after a rename
+    // (new edge endpoints, old rects) some endpoints are missing from the
+    // rects; the edges must pass through untouched, never crash.
+    const { edges: rebuilt, nodeHandles } = recomputeEdgeSides(flow.edges, []);
+    expect(rebuilt).toEqual(flow.edges);
+    expect(nodeHandles.size).toBe(0);
+
+    // One endpoint missing is handled the same way.
+    const { edges: partiallyRebuilt, nodeHandles: partialHandles } = recomputeEdgeSides(
+      flow.edges,
+      rects(0, 400).slice(0, 1),
+    );
+    expect(partiallyRebuilt).toEqual(flow.edges);
+    expect(partialHandles.size).toBe(0);
   });
 });
