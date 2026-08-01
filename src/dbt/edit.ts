@@ -159,7 +159,8 @@ function mapColumn(
 /**
  * Renames a model and re-points every `foreign_key` constraint `to` ref that
  * names the old model (in any model, self-references included) at the new
- * name. Unchanged models keep their object identity, so
+ * name — for real constraints and virtual meta FKs alike (spec 08, Manual
+ * Verify fix (j)). Unchanged models keep their object identity, so
  * `distributeEditedModels` rewrites only the affected files (spec 06).
  */
 function renameModel(
@@ -171,15 +172,21 @@ function renameModel(
   const next = models.map((m) => {
     if (m.name !== oldName) {
       const constraints = renameFkTargets(m.constraints, oldName, newName);
-      return constraints === m.constraints ? m : { ...m, constraints };
+      const withVirtual = renameVirtualFkTargets(m, oldName, newName);
+      if (constraints === m.constraints && withVirtual === m) return m;
+      return {
+        ...withVirtual,
+        constraints: constraints === m.constraints ? m.constraints : constraints,
+      };
     }
     renamed = true;
     if (newName === m.name) return m; // no-op rename keeps object identity
-    return {
+    const renamedModel: ModelDefinition = {
       ...m,
       name: newName,
       constraints: renameFkTargets(m.constraints, oldName, newName),
     };
+    return renameVirtualFkTargets(renamedModel, oldName, newName);
   });
   if (!renamed) throw new EditError(`No model named "${oldName}" exists in the workspace`);
   return { models: next, changed: true };
@@ -208,11 +215,38 @@ function renameFkTargets(
 }
 
 /**
+ * Re-points a model's **virtual** FK `to` refs from `oldName` to `newName`
+ * (spec 08, Manual Verify fix (j)) — the `config.meta.dbtiagram.virtual`
+ * block equivalent of `renameFkTargets`. Unparseable `to` strings are left
+ * untouched, mirroring real constraints. Returns the original model object
+ * when nothing changed, preserving identity for `distributeEditedModels`.
+ */
+function renameVirtualFkTargets(
+  model: ModelDefinition,
+  oldName: string,
+  newName: string,
+): ModelDefinition {
+  const block = readVirtualConstraints(model);
+  if (block.foreignKeys === undefined) return model;
+  let changed = false;
+  const next = block.foreignKeys.map((fk) => {
+    const to = renameRefTarget(fk.to, oldName, newName);
+    if (to === null || to === fk.to) return fk;
+    changed = true;
+    return { ...fk, to };
+  });
+  if (!changed) return model;
+  return writeVirtualConstraints(model, { ...block, foreignKeys: next });
+}
+
+/**
  * Renames a column and re-points every FK reference to it: `to_columns` in
  * constraints whose `to` targets the renamed model (in any model,
  * self-references included) and `columns` in constraints declared on the
- * renamed model itself. Unchanged models keep their object identity, so
- * `distributeEditedModels` rewrites only the affected files (spec 06).
+ * renamed model itself — for real constraints and virtual meta FKs alike
+ * (spec 08, Manual Verify fix (j)). Unchanged models keep their object
+ * identity, so `distributeEditedModels` rewrites only the affected files
+ * (spec 06).
  */
 function renameColumn(
   models: ModelDefinition[],
@@ -224,7 +258,12 @@ function renameColumn(
   const next = models.map((m) => {
     if (m.name !== modelName) {
       const constraints = renameFkColumns(m.constraints, modelName, oldName, newName, false);
-      return constraints === m.constraints ? m : { ...m, constraints };
+      const withVirtual = renameVirtualFkColumns(m, modelName, oldName, newName, false);
+      if (constraints === m.constraints && withVirtual === m) return m;
+      return {
+        ...withVirtual,
+        constraints: constraints === m.constraints ? m.constraints : constraints,
+      };
     }
     renamed = true;
     const columns = m.columns ?? [];
@@ -239,6 +278,7 @@ function renameColumn(
     if (nextColumns !== m.columns) model = { ...model, columns: nextColumns };
     const constraints = renameFkColumns(m.constraints, modelName, oldName, newName, true);
     if (constraints !== m.constraints) model = { ...model, constraints };
+    model = renameVirtualFkColumns(model, modelName, oldName, newName, true);
     return model;
   });
   if (!renamed) throw new EditError(`No model named "${modelName}" exists in the workspace`);
@@ -300,6 +340,48 @@ function renameFkColumns(
 function mapNames(names: string[], oldName: string, newName: string): string[] {
   if (newName === oldName || !names.includes(oldName)) return names;
   return names.map((n) => (n === oldName ? newName : n));
+}
+
+/**
+ * Re-points a model's **virtual** FK column references after a column rename
+ * (spec 08, Manual Verify fix (j)) — the `config.meta.dbtiagram.virtual`
+ * block equivalent of `renameFkColumns`: source-side `columns` when the FK is
+ * declared on the renamed model, and target-side `to_columns` when the FK's
+ * `to` parses to it. Unparseable `to` strings leave `to_columns` untouched,
+ * mirroring real constraints. Returns the original model object when nothing
+ * changed, preserving identity for `distributeEditedModels`.
+ */
+function renameVirtualFkColumns(
+  model: ModelDefinition,
+  renamedModel: string,
+  oldName: string,
+  newName: string,
+  declaredOnRenamedModel: boolean,
+): ModelDefinition {
+  const block = readVirtualConstraints(model);
+  if (block.foreignKeys === undefined) return model;
+  let changed = false;
+  const next = block.foreignKeys.map((fk) => {
+    let nextFk: VirtualForeignKey = fk;
+    if (declaredOnRenamedModel) {
+      const columns = mapNames(fk.columns, oldName, newName);
+      if (columns !== fk.columns) {
+        nextFk = { ...nextFk, columns };
+        changed = true;
+      }
+    }
+    const ref = parseRef(fk.to);
+    if (ref !== null && ref.name === renamedModel) {
+      const toColumns = mapNames(fk.toColumns, oldName, newName);
+      if (toColumns !== fk.toColumns) {
+        nextFk = { ...nextFk, toColumns };
+        changed = true;
+      }
+    }
+    return nextFk;
+  });
+  if (!changed) return model;
+  return writeVirtualConstraints(model, { ...block, foreignKeys: next });
 }
 
 /**

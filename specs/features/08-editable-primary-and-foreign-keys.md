@@ -362,6 +362,26 @@ block's `foreignKeys` list.
 - Removes the matching real constraint or virtual meta entry. No-op (identity)
   when nothing matches.
 
+#### Rename propagation to virtual FKs
+
+The feature-06 rename cascade (`setModelName` / `setColumnName`) re-points real
+`foreign_key` constraints. It applies **equally to virtual FKs** in the
+`config.meta.dbtiagram.virtual.foreign_keys` block (Manual-Verify fix, 2026-08-01):
+
+- **Model rename** (`setModelName`): every virtual FK whose `to` is a parseable
+  `ref(...)` naming the renamed model is re-pointed at the new name, exactly as
+  real constraints are (`renameRefTarget`, in any model, self-references
+  included). Unparseable `to` values are left untouched.
+- **Column rename** (`setColumnName`): every virtual FK that references the
+  renamed column is re-pointed, exactly as real constraints are: its `columns`
+  when the FK is declared on the renamed model (source side), and its
+  `to_columns` when the FK's `to` parses to the renamed model (target side, any
+  model, self-references included).
+
+Identity preservation holds as for real constraints: a model whose virtual block
+did not change keeps object identity, so `distributeEditedModels` rewrites only
+the affected files.
+
 ### 8. Webview — diagram cards (`webview-ui/TableNode.tsx`, `styles.css`)
 
 - Each column row whose name is in `data.primaryKey.columns` renders a small
@@ -453,6 +473,11 @@ fixture graph expectations.
     column → error, unparseable-target → error, real + virtual, identity.
   - `setForeignKeyVirtual` both directions; `addForeignKey` (table-level,
     validation); `removeForeignKey` real + virtual.
+  - Rename propagation to virtual FKs: `setColumnName` re-points virtual FK
+    `columns` (source side) and `to_columns` (target side) like real
+    constraints; `setModelName` re-points virtual FK `to` refs; self-references
+    included; unparseable `to` untouched; identity preserved when nothing
+    changes (Manual-Verify fix, Confirm at Approval (j)).
 - `diagram/graph.test.ts` — `node.primaryKey` (virtual wins over real, real
   fallback), `node.foreignKeys` (real + virtual, unparseable `to` kept with no
   `target`, self-refs kept), virtual edges (flag set, unknown-target/self-ref
@@ -611,6 +636,28 @@ Then the order_items table is selected in the details sidebar
 And the Foreign keys section is visible with the matching FK highlighted and scrolled into view
 ```
 
+### Renaming a column re-points virtual FKs too
+
+```
+Given the dbt Diagram is open and order_items has a virtual FK with
+  columns [order_id] and to_columns [order_id] in config.meta.dbtiagram.virtual
+When the user renames the order_id column in orders (the FK's target) to order_key
+Then the virtual FK's to_columns read [order_key]
+And its columns are unchanged
+When the user renames the order_id column in order_items (the FK's source) to item_key
+Then the virtual FK's columns read [item_key]
+And the dashed edge from order_items to orders still targets orders.order_key
+```
+
+### Renaming a model re-points virtual FK targets too
+
+```
+Given the dbt Diagram is open and order_items has a virtual FK with to: ref('orders')
+When the user renames the orders model to orders_v2
+Then the virtual FK's to reads ref('orders_v2')
+And the dashed edge still connects order_items to orders_v2
+```
+
 ### Invalid edits are rejected with an error
 
 ```
@@ -650,6 +697,11 @@ And rows that are not part of the PK show no icon
       change posts exactly one edit through the existing `diagram:edit` funnel.
 - [ ] Double-clicking an FK edge selects the child table and focuses (highlights
       + scrolls into view) the matching FK entry in the Foreign keys section.
+- [ ] Renaming a column or model re-points **virtual** FKs exactly as it does
+      real `foreign_key` constraints: source-side `columns`, target-side
+      `to_columns`/`to` in the `config.meta.dbtiagram.virtual.foreign_keys`
+      block, self-references included; unparseable `to` values stay untouched;
+      unchanged models keep object identity.
 - [ ] Invalid edits (unknown target model, unknown column, unequal pair
       lengths) surface the existing error banner and write nothing.
 - [ ] `src/dbt/` and `src/diagram/` changes are covered by sub-second Vitest
@@ -699,3 +751,9 @@ And rows that are not part of the PK show no icon
 - **(i) Legacy `tests` untouched.** PK sync writes/removes column-level
   `data_tests` only; legacy `tests` entries (as in the fixtures) are left
   exactly as they are.
+- **(j) Virtual FKs follow renames (Manual-Verify fix).** The feature-06 rename
+  cascade extends to virtual FKs in `config.meta.dbtiagram.virtual.foreign_keys`
+  with the same rules as real constraints — source `columns`, target
+  `to_columns` (column rename), and `to` refs (model rename), self-references
+  included, unparseable `to` untouched, identity-preserving. Confirmed by the
+  user after Manual Verify found virtual FKs were left stale.
