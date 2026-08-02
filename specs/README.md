@@ -22,7 +22,7 @@ up-to-date spec in `specs/features/`.
 | 07  | Fix FK edge hover interactivity | Done |
 | 08  | Editable primary keys and foreign keys | Done |
 | 09  | FK edges and handle dots follow column pairs (merged former 09 + 10) | Implemented |
-| 11  | Sidebar visibility and resizable widths | Draft |
+| 11  | Sidebar visibility and resizable widths | Approved |
 | 12  | Obstacle-aware FK edge routing with free side choice | Done |
 | 13  | Saved diagram layout files | Done |
 
