@@ -24,7 +24,7 @@ up-to-date spec in `specs/features/`.
 | 09  | FK edges and handle dots follow column pairs (merged former 09 + 10) | Implemented |
 | 11  | Sidebar visibility and resizable widths | Draft |
 | 12  | Obstacle-aware FK edge routing with free side choice | Done |
-| 13  | Saved diagram layout files | Implemented |
+| 13  | Saved diagram layout files | Done |
 
 Status values: `draft` → `approved` → `implemented` → `done`.
 
