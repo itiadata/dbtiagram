@@ -15,6 +15,7 @@ import {
   useEffect,
   useRef,
   useState,
+  type CSSProperties,
   type ChangeEvent,
   type KeyboardEvent,
 } from 'react';
@@ -43,6 +44,10 @@ interface DetailsSidebarProps {
   onDraftVirtualChange: (draftId: string, virtual: boolean) => void;
   onDraftAddPair: (draft: DraftForeignKey, source: string, target: string) => void;
   onRemoveLastPair: (fk: ForeignKeyDescriptor) => void;
+  /** Hides the whole sidebar, leaving its reopen rail (spec 11). */
+  onCollapse: () => void;
+  /** Inline width from the App's resize state (spec 11). */
+  style?: CSSProperties;
 }
 
 export function DetailsSidebar({
@@ -56,9 +61,23 @@ export function DetailsSidebar({
   onDraftVirtualChange,
   onDraftAddPair,
   onRemoveLastPair,
+  onCollapse,
+  style,
 }: DetailsSidebarProps): JSX.Element {
   return (
-    <aside className="details">
+    <aside className="details" style={style}>
+      <div className="details__header">
+        <span className="details__header-title">Properties</span>
+        <button
+          type="button"
+          className="sidebar__collapse"
+          title="Hide sidebar"
+          aria-label="Hide sidebar"
+          onClick={onCollapse}
+        >
+          <span className="sidebar__chevron sidebar__chevron--flip" aria-hidden="true" />
+        </button>
+      </div>
       {entity === null ? (
         <p className="details__empty">Select a table or a column to edit its properties.</p>
       ) : entity.kind === 'table' ? (

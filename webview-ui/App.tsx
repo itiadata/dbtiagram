@@ -5,6 +5,7 @@ import {
   useRef,
   useState,
   type MouseEvent as ReactMouseEvent,
+  type PointerEvent as ReactPointerEvent,
 } from 'react';
 import {
   Background,
@@ -57,6 +58,16 @@ const nodeTypes: NodeTypes = { table: TableNode };
 // The obstacle-aware FK edge (spec 12) — it draws the routed polyline.
 const edgeTypes: EdgeTypes = { [FK_EDGE_TYPE]: FkEdge };
 
+// Sidebar geometry (spec 11): the default/starting width and the drag clamps
+// for both the filter and the details sidebar. The collapsed state is a slim
+// rail (see `.rail` in styles.css), not a width change.
+const SIDEBAR_DEFAULT_WIDTH = 260;
+const SIDEBAR_MIN_WIDTH = 160;
+const SIDEBAR_MAX_WIDTH = 480;
+
+const clampSidebarWidth = (width: number): number =>
+  Math.min(SIDEBAR_MAX_WIDTH, Math.max(SIDEBAR_MIN_WIDTH, width));
+
 /** What the user selected on the diagram (spec 06): a table or a column. */
 type Selection =
   | { kind: 'table'; id: string }
@@ -82,6 +93,12 @@ export function App(): JSX.Element {
   const [hoveredEdgeId, setHoveredEdgeId] = useState<string | null>(null);
   const [hoveredColumn, setHoveredColumn] = useState<ColumnRef | null>(null);
   const [layoutTick, setLayoutTick] = useState(0);
+  // Spec 11: sidebar visibility and widths are plain webview state — they
+  // survive panel hide/reveal (retainContextWhenHidden) and reset on reopen.
+  const [filterVisible, setFilterVisible] = useState(true);
+  const [detailsVisible, setDetailsVisible] = useState(true);
+  const [filterWidth, setFilterWidth] = useState(SIDEBAR_DEFAULT_WIDTH);
+  const [detailsWidth, setDetailsWidth] = useState(SIDEBAR_DEFAULT_WIDTH);
   // Spec 08: the FK highlighted + scrolled into view in the details sidebar
   // after double-clicking its edge; null when nothing is focused.
   const [focusedFk, setFocusedFk] = useState<ForeignKeyDescriptor | null>(null);
@@ -324,12 +341,17 @@ export function App(): JSX.Element {
     );
   }, []);
 
+  // Spec 11: selecting anything (table header, column row, FK edge click/
+  // double-click — the latter two funnel through onTableSelect) reveals the
+  // details sidebar so the properties never seem to have "disappeared".
   const onTableSelect = useCallback((model: string): void => {
     setSelection({ kind: 'table', id: model });
+    setDetailsVisible(true);
   }, []);
 
   const onColumnSelect = useCallback((model: string, column: string): void => {
     setSelection({ kind: 'column', model, column });
+    setDetailsVisible(true);
   }, []);
 
   const onPaneClick = useCallback((): void => {
@@ -650,22 +672,29 @@ export function App(): JSX.Element {
   return (
     <main className="app">
       <div className="app__body">
-        <FilterSidebar
-          files={modelFiles}
-          availableModelNames={availableModelNames}
-          selectedFiles={selectedFiles}
-          selectedModels={selectedModels}
-          fileSearch={fileSearch}
-          modelSearch={modelSearch}
-          onFileSearchChange={setFileSearch}
-          onModelSearchChange={setModelSearch}
-          onToggleFile={toggleFile}
-          onToggleModel={toggleModel}
-          onSelectAllFiles={selectAllFiles}
-          onClearFiles={clearFiles}
-          onSelectAllModels={selectAllModels}
-          onClearModels={clearModels}
-        />
+        {filterVisible ? (
+          <FilterSidebar
+            style={{ width: filterWidth }}
+            files={modelFiles}
+            availableModelNames={availableModelNames}
+            selectedFiles={selectedFiles}
+            selectedModels={selectedModels}
+            fileSearch={fileSearch}
+            modelSearch={modelSearch}
+            onFileSearchChange={setFileSearch}
+            onModelSearchChange={setModelSearch}
+            onToggleFile={toggleFile}
+            onToggleModel={toggleModel}
+            onSelectAllFiles={selectAllFiles}
+            onClearFiles={clearFiles}
+            onSelectAllModels={selectAllModels}
+            onClearModels={clearModels}
+            onCollapse={() => setFilterVisible(false)}
+          />
+        ) : (
+          <SidebarRail side="left" onExpand={() => setFilterVisible(true)} />
+        )}
+        {filterVisible && <SidebarResizer side="left" onWidthChange={setFilterWidth} />}
 
         <div className="app__main">
           <header className="app__header">
@@ -745,33 +774,40 @@ export function App(): JSX.Element {
           )}
         </div>
 
-        <DetailsSidebar
-          key={detailsKey}
-          entity={selectedEntity}
-          nodes={graph?.nodes ?? []}
-          focusedFk={focusedFk}
-          drafts={selectedEntity?.kind === 'table' ? (draftFks[selectedEntity.node.id] ?? []) : []}
-          onEdit={onEdit}
-          onAddDraft={(target) => {
-            if (selectedEntity?.kind === 'table') addDraft(selectedEntity.node.id, target);
-          }}
-          onRemoveDraft={(draftId) => {
-            if (selectedEntity?.kind === 'table') removeDraft(selectedEntity.node.id, draftId);
-          }}
-          onDraftVirtualChange={(draftId, virtual) => {
-            if (selectedEntity?.kind === 'table') {
-              setDraftVirtual(selectedEntity.node.id, draftId, virtual);
-            }
-          }}
-          onDraftAddPair={(draft, source, target) => {
-            if (selectedEntity?.kind === 'table') {
-              addDraftPair(selectedEntity.node.id, draft, source, target);
-            }
-          }}
-          onRemoveLastPair={(fk) => {
-            if (selectedEntity?.kind === 'table') removeLastPair(selectedEntity.node.id, fk);
-          }}
-        />
+        {detailsVisible && <SidebarResizer side="right" onWidthChange={setDetailsWidth} />}
+        {detailsVisible ? (
+          <DetailsSidebar
+            style={{ width: detailsWidth }}
+            key={detailsKey}
+            entity={selectedEntity}
+            nodes={graph?.nodes ?? []}
+            focusedFk={focusedFk}
+            drafts={selectedEntity?.kind === 'table' ? (draftFks[selectedEntity.node.id] ?? []) : []}
+            onEdit={onEdit}
+            onAddDraft={(target) => {
+              if (selectedEntity?.kind === 'table') addDraft(selectedEntity.node.id, target);
+            }}
+            onRemoveDraft={(draftId) => {
+              if (selectedEntity?.kind === 'table') removeDraft(selectedEntity.node.id, draftId);
+            }}
+            onDraftVirtualChange={(draftId, virtual) => {
+              if (selectedEntity?.kind === 'table') {
+                setDraftVirtual(selectedEntity.node.id, draftId, virtual);
+              }
+            }}
+            onDraftAddPair={(draft, source, target) => {
+              if (selectedEntity?.kind === 'table') {
+                addDraftPair(selectedEntity.node.id, draft, source, target);
+              }
+            }}
+            onRemoveLastPair={(fk) => {
+              if (selectedEntity?.kind === 'table') removeLastPair(selectedEntity.node.id, fk);
+            }}
+            onCollapse={() => setDetailsVisible(false)}
+          />
+        ) : (
+          <SidebarRail side="right" onExpand={() => setDetailsVisible(true)} />
+        )}
       </div>
     </main>
   );
@@ -995,5 +1031,88 @@ function DiagramCanvas({
         </button>
       </Panel>
     </ReactFlow>
+  );
+}
+
+/**
+ * The collapsed state of a sidebar (spec 11): a slim vertical strip with a
+ * chevron that reopens the sidebar. The chevron points back toward the
+ * collapsed sidebar — left rail points left, right rail points right.
+ */
+function SidebarRail({
+  side,
+  onExpand,
+}: {
+  side: 'left' | 'right';
+  onExpand: () => void;
+}): JSX.Element {
+  const title =
+    side === 'left' ? 'Show filter sidebar' : 'Show properties sidebar';
+  return (
+    <div className={`rail rail--${side}`}>
+      <button
+        type="button"
+        className="rail__button"
+        title={title}
+        aria-label={title}
+        onClick={onExpand}
+      >
+        <span
+          className={`sidebar__chevron${side === 'left' ? ' sidebar__chevron--flip' : ''}`}
+          aria-hidden="true"
+        />
+      </button>
+    </div>
+  );
+}
+
+/**
+ * The drag strip on a visible sidebar's inner edge (spec 11): a ~6px column
+ * with `cursor: col-resize` that live-resizes the sidebar via pointer events.
+ * Pointer capture keeps the drag alive when the pointer leaves the strip.
+ */
+function SidebarResizer({
+  side,
+  onWidthChange,
+}: {
+  side: 'left' | 'right';
+  onWidthChange: (width: number) => void;
+}): JSX.Element {
+  const draggingRef = useRef(false);
+  const bodyRectRef = useRef<DOMRect | null>(null);
+
+  const onPointerDown = (event: ReactPointerEvent<HTMLDivElement>): void => {
+    if (event.button !== 0) return;
+    const body = event.currentTarget.closest('.app__body');
+    if (body === null) return;
+    bodyRectRef.current = body.getBoundingClientRect();
+    draggingRef.current = true;
+    event.currentTarget.setPointerCapture(event.pointerId);
+  };
+
+  const onPointerMove = (event: ReactPointerEvent<HTMLDivElement>): void => {
+    if (!draggingRef.current || bodyRectRef.current === null) return;
+    const body = bodyRectRef.current;
+    const raw = side === 'left' ? event.clientX - body.left : body.right - event.clientX;
+    onWidthChange(clampSidebarWidth(raw));
+  };
+
+  const onPointerUp = (event: ReactPointerEvent<HTMLDivElement>): void => {
+    draggingRef.current = false;
+    bodyRectRef.current = null;
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+      event.currentTarget.releasePointerCapture(event.pointerId);
+    }
+  };
+
+  return (
+    <div
+      className="sidebar-resizer"
+      role="separator"
+      aria-orientation="vertical"
+      onPointerDown={onPointerDown}
+      onPointerMove={onPointerMove}
+      onPointerUp={onPointerUp}
+    />
   );
 }

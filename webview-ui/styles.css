@@ -115,9 +115,11 @@ body {
 
 /* ---- Sidebar (spec 05) ---- */
 
+/* The width comes inline from the App's resize state (spec 11); `flex: 0 0
+   auto` lets the inline width win while keeping the previous flex-shrink: 0
+   behavior (the sidebar never compresses to give the canvas room). */
 .sidebar {
-  width: 260px;
-  flex-shrink: 0;
+  flex: 0 0 auto;
   box-sizing: border-box;
   display: flex;
   flex-direction: column;
@@ -183,6 +185,31 @@ body {
 
 .sidebar__chevron--open {
   transform: rotate(90deg);
+}
+
+/* Spec 11: collapse control in the sidebar headers (filter sidebar header and
+   the details sidebar header). Reuses the chevron look; the base chevron
+   points right (toward the canvas), the flipped one points left. */
+.sidebar__collapse {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2px 4px;
+  border: none;
+  border-radius: 3px;
+  background: none;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.sidebar__collapse:hover {
+  color: var(--text);
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+}
+
+.sidebar__chevron--flip {
+  transform: rotate(180deg);
 }
 
 .sidebar__section-title {
@@ -299,10 +326,10 @@ body {
 
 /* ---- Details sidebar (spec 06) ---- */
 
-/* Mirror of the left `.sidebar`, pinned to the right edge of the layout. */
+/* Mirror of the left `.sidebar`, pinned to the right edge of the layout. Its
+   width is likewise inline from the App's resize state (spec 11). */
 .details {
-  width: 260px;
-  flex-shrink: 0;
+  flex: 0 0 auto;
   box-sizing: border-box;
   display: flex;
   flex-direction: column;
@@ -311,6 +338,80 @@ body {
   overflow-y: auto;
   border-left: 1px solid var(--border);
   background: color-mix(in srgb, var(--card) 55%, transparent);
+}
+
+/* Spec 11: header row that hosts the collapse control at the top-right. */
+.details__header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.details__header-title {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+}
+
+/* ---- Collapsed sidebar rails + drag resizers (spec 11) ---- */
+
+/* The collapsed state of a sidebar: a slim vertical strip mirroring the
+   sidebar's visual language — same background, a border on the main side, and
+   a chevron that reopens the sidebar. */
+.rail {
+  width: 28px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: color-mix(in srgb, var(--card) 55%, transparent);
+}
+
+.rail--left {
+  border-right: 1px solid var(--border);
+}
+
+.rail--right {
+  border-left: 1px solid var(--border);
+}
+
+.rail__button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 4px;
+  border: none;
+  border-radius: 4px;
+  background: none;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.rail__button:hover {
+  color: var(--text);
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+}
+
+/* Drag strip on a visible sidebar's inner edge. Transparent by default with
+   an accent hover tint; `touch-action: none` so pointer drags work on touch
+   devices. */
+.sidebar-resizer {
+  width: 6px;
+  flex-shrink: 0;
+  cursor: col-resize;
+  touch-action: none;
+  background: transparent;
+}
+
+.sidebar-resizer:hover {
+  background: color-mix(in srgb, var(--accent) 25%, transparent);
 }
 
 .details__section {

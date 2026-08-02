@@ -7,7 +7,7 @@
  * toggle in its header; the sidebar is deliberately generic so future features
  * can add their own collapsible sections to the column.
  */
-import { useState, type ReactNode } from 'react';
+import { useState, type CSSProperties, type ReactNode } from 'react';
 import { matchesSearch } from '../src/shared/filter';
 import type { DiagramModelFile } from '../src/shared/protocol';
 
@@ -21,6 +21,8 @@ interface CollapsibleSectionProps {
   actions?: ReactNode;
   /** Larger title styling for the top-level sections in the sidebar column. */
   large?: boolean;
+  /** Collapse control rendered at the far right of the header (spec 11). */
+  onCollapse?: () => void;
   children: ReactNode;
 }
 
@@ -31,6 +33,7 @@ function CollapsibleSection({
   count,
   actions,
   large,
+  onCollapse,
   children,
 }: CollapsibleSectionProps): JSX.Element {
   return (
@@ -50,6 +53,17 @@ function CollapsibleSection({
         </button>
         {actions !== undefined && <span className="sidebar__bulk">{actions}</span>}
         {count !== undefined && <span className="sidebar__count">{count}</span>}
+        {onCollapse !== undefined && (
+          <button
+            type="button"
+            className="sidebar__collapse"
+            title="Hide sidebar"
+            aria-label="Hide sidebar"
+            onClick={onCollapse}
+          >
+            <span className="sidebar__chevron" aria-hidden="true" />
+          </button>
+        )}
       </div>
       {open && <div className="sidebar__section-body">{children}</div>}
     </section>
@@ -72,6 +86,10 @@ interface FilterSidebarProps {
   onClearFiles: () => void;
   onSelectAllModels: () => void;
   onClearModels: () => void;
+  /** Hides the whole sidebar, leaving its reopen rail (spec 11). */
+  onCollapse: () => void;
+  /** Inline width from the App's resize state (spec 11). */
+  style?: CSSProperties;
 }
 
 export function FilterSidebar({
@@ -89,6 +107,8 @@ export function FilterSidebar({
   onClearFiles,
   onSelectAllModels,
   onClearModels,
+  onCollapse,
+  style,
 }: FilterSidebarProps): JSX.Element {
   // Collapse toggles are plain webview state: they survive panel hide/reveal
   // (retainContextWhenHidden) and reset on reopen. All filter data still flows
@@ -103,11 +123,12 @@ export function FilterSidebar({
   const checkedModelCount = availableModelNames.filter((name) => selectedModels.has(name)).length;
 
   return (
-    <aside className="sidebar">
+    <aside className="sidebar" style={style}>
       <CollapsibleSection
         title="Filter"
         open={filterOpen}
         onToggle={() => setFilterOpen((open) => !open)}
+        onCollapse={onCollapse}
         large
       >
         <CollapsibleSection
