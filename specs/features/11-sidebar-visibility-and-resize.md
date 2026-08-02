@@ -1,7 +1,7 @@
 ---
 id: 11
 title: Sidebar visibility and resizable widths
-status: implemented
+status: done
 priority: medium
 created: 2026-08-01
 owner: unassigned
