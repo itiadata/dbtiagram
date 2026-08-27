@@ -315,6 +315,22 @@ describe('buildDiagram', () => {
         { source: 'a', target: 'b', sourceColumns: ['x1'], targetColumns: ['y1'], virtual: false },
       ]);
     });
+
+    it('still emits a relation edge when the FK names a missing column (spec 20)', () => {
+      const graph = buildDiagram([
+        {
+          name: 'order_items',
+          columns: [{ name: 'id' }],
+          constraints: [
+            { type: 'foreign_key', columns: ['customer_id'], to: "ref('customers')", toColumns: ['id'] },
+          ],
+        },
+        { name: 'customers', columns: [{ name: 'id' }] },
+      ]);
+      expect(graph.edges).toEqual([
+        { source: 'order_items', target: 'customers', sourceColumns: ['customer_id'], targetColumns: ['id'], virtual: false },
+      ]);
+    });
   });
 
   describe('virtual FK edges', () => {

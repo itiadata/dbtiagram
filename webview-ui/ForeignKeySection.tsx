@@ -270,31 +270,44 @@ function FkCard({ fk, node, nodes, modelNames, focused, onEdit, onRemoveLastPair
       {isZeroPair && (
         <p className="fk-card__draft-note">Draft — add a column pair to create this FK</p>
       )}
-      {fk.columns.map((source, index) => (
-        <div key={index} className="fk-pair">
-          <div className="fk-pair__select">
-            <SearchSelect options={sourceColumns} value={source} onSelect={(v) => changeSource(index, v)} />
+      {fk.columns.map((source, index) => {
+        const targetValue = fk.toColumns[index] ?? null;
+        return (
+          <div key={index} className="fk-pair">
+            <div
+              className={`fk-pair__select${
+                sourceColumns.includes(source ?? '') || source === null ? '' : ' fk-pair__select--unresolved'
+              }`}
+            >
+              <SearchSelect options={sourceColumns} value={source} onSelect={(v) => changeSource(index, v)} />
+            </div>
+            <span className="fk-pair__arrow">→</span>
+            <div
+              className={`fk-pair__select${
+                targetColumns.includes(targetValue ?? '') || targetValue === null
+                  ? ''
+                  : ' fk-pair__select--unresolved'
+              }`}
+            >
+              <SearchSelect
+                options={targetColumns}
+                value={targetValue}
+                placeholder="target column"
+                disabled={targetNode === undefined}
+                onSelect={(v) => changeTarget(index, v)}
+              />
+            </div>
+            <button
+              type="button"
+              className="fk-pair__remove"
+              aria-label="Remove column pair"
+              onClick={() => removePair(index)}
+            >
+              ×
+            </button>
           </div>
-          <span className="fk-pair__arrow">→</span>
-          <div className="fk-pair__select">
-            <SearchSelect
-              options={targetColumns}
-              value={fk.toColumns[index] ?? null}
-              placeholder="target column"
-              disabled={targetNode === undefined}
-              onSelect={(v) => changeTarget(index, v)}
-            />
-          </div>
-          <button
-            type="button"
-            className="fk-pair__remove"
-            aria-label="Remove column pair"
-            onClick={() => removePair(index)}
-          >
-            ×
-          </button>
-        </div>
-      ))}
+        );
+      })}
       {sourceColumns.length > 0 && (
         <button
           type="button"

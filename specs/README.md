@@ -37,6 +37,7 @@ up-to-date spec in `specs/features/`.
 | 17  | Modular source layout and fast feedback loop | Done |
 | 18  | Plan-time implementation contracts | Done |
 | 19  | Diagram viewport and chrome polish | Done |
+| 20  | Show foreign keys with missing columns as broken instead of dropping them | Implemented |
 
 Status values: `draft` → `approved` → `implemented` → `done`.
 

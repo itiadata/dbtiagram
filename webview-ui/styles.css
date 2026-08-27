@@ -613,6 +613,12 @@ body {
   min-width: 0;
 }
 
+.fk-pair__select--unresolved {
+  outline: 1px solid var(--error);
+  border-radius: 3px;
+}
+
+
 .fk-pair__remove {
   border: none;
   background: none;
@@ -929,6 +935,14 @@ body {
   stroke-width: 1.5;
 }
 
+/* A broken FK — one or both ends name a column that no longer exists on its
+   model (spec 20). Distinct from virtual (dashed but muted): error-coloured
+   and dashed, and hover/active still wins. */
+.react-flow__edge.edge--unresolved .react-flow__edge-path {
+  stroke: var(--error);
+  stroke-dasharray: 4 3;
+}
+
 .react-flow__edge.edge--active .react-flow__edge-path {
   stroke: var(--accent-hover);
   stroke-width: 3.5;
@@ -973,6 +987,13 @@ body {
   opacity: 0;
   pointer-events: none;
 }
+
+/* A card-level handle a broken FK end anchors to (spec 20). */
+.react-flow__handle.table-node__handle--broken {
+  background: var(--error);
+  border-color: var(--error);
+}
+
 
 .react-flow__attribution {
   color: var(--muted);

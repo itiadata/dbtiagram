@@ -23,6 +23,7 @@ import { Handle, Position, useUpdateNodeInternals, type NodeProps } from '@xyflo
 import {
   columnSourceHandle,
   columnTargetHandle,
+  CARD_ANCHOR,
   type HandleSide,
   type FlowNode,
 } from '../src/diagram/flow';
@@ -90,6 +91,7 @@ function TableNodeComponent({ id, data }: NodeProps<FlowNode>): JSX.Element {
     const handleId = type === 'source' ? columnSourceHandle(column, side) : columnTargetHandle(column, side);
     const used = usedHandles?.[handleId] !== undefined;
     const position = side === 'right' ? Position.Right : Position.Left;
+    const broken = column === CARD_ANCHOR && used;
     // Every handle sits at the row's exact vertical center, so all edges
     // attaching to the same (column, side) — however many, in either
     // direction — converge on ONE shared dot (spec 12, section 9).
@@ -99,13 +101,23 @@ function TableNodeComponent({ id, data }: NodeProps<FlowNode>): JSX.Element {
         id={handleId}
         type={type}
         position={position}
-        className={used ? undefined : 'table-node__handle--unused'}
+        className={
+          used
+            ? broken
+              ? 'table-node__handle--broken'
+              : undefined
+            : 'table-node__handle--unused'
+        }
       />
     );
   };
 
   return (
     <div className={`table-node${selectedTable ? ' table-node--selected' : ''}`}>
+      {renderHandle(CARD_ANCHOR, 'left', 'target')}
+      {renderHandle(CARD_ANCHOR, 'right', 'target')}
+      {renderHandle(CARD_ANCHOR, 'left', 'source')}
+      {renderHandle(CARD_ANCHOR, 'right', 'source')}
       <div
         className={`table-node__title${selectedTable ? ' table-node__title--selected' : ''}`}
         title={data.description}

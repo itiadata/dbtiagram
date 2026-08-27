@@ -53,6 +53,7 @@ export function useEdgeHighlighting(flow: FlowElements | null): EdgeHighlighting
       const classes = [
         active ? 'edge--active' : null,
         edge.data.virtual ? 'edge--virtual' : null,
+        edge.data.unresolved !== undefined ? 'edge--unresolved' : null,
       ].filter((c): c is string => c !== null);
       return {
         ...edge,

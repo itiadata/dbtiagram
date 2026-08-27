@@ -55,6 +55,11 @@ export type FlowEdgeData = {
   /** True for virtual (meta-stored) FKs — drawn dashed (spec 08). */
   virtual?: boolean;
   /**
+   * Which ends of this FK name a column that does not exist (spec 20).
+   * Present only when at least one end is missing; otherwise absent.
+   */
+  unresolved?: { source: boolean; target: boolean };
+  /**
    * The routed orthogonal polyline, source anchor first (spec 12). The custom
    * `fk` edge draws it with rounded corners; when absent (a transient
    * missing-rect render) the edge falls back to a straight path.
@@ -109,6 +114,13 @@ export type ColumnRowIndexLookup = (nodeId: string, column: string) => number | 
 /** Edge type id of the custom obstacle-aware FK edge (spec 12). */
 export const FK_EDGE_TYPE = 'fk';
 
+/**
+ * Pseudo-column name used to build the card-level fallback handle ids that a
+ * broken FK end attaches to. Chosen so no real YAML column name can collide
+ * (spec 20).
+ */
+export const CARD_ANCHOR = '\u0000card';
+
 
 /**
  * Width (px) of the invisible hover/click band around every edge, rendered by
@@ -133,6 +145,7 @@ export function buildFlowElements(graph: DiagramGraph, layout: DiagramLayout): F
 
   const usedIds = new Set<string>();
   const rawEdges: FlowEdge[] = [];
+  const columnIndexOf = columnRowIndexLookup(graph);
 
   // Only column-pair edges exist (spec 09 merged): graph edges with empty or
   // unequal-length arrays never reach this layer. Handles/paths are filled in
@@ -141,6 +154,16 @@ export function buildFlowElements(graph: DiagramGraph, layout: DiagramLayout): F
   for (const edge of graph.edges) {
     edge.sourceColumns.forEach((sourceColumn, index) => {
       const targetColumn = edge.targetColumns[index];
+      const sourceMissing = columnIndexOf(edge.source, sourceColumn) === undefined;
+      const targetMissing = columnIndexOf(edge.target, targetColumn) === undefined;
+      const missing: string[] = [];
+      if (sourceMissing) {
+        missing.push(`${edge.source}.${sourceColumn}`);
+      }
+      if (targetMissing) {
+        missing.push(`${edge.target}.${targetColumn}`);
+      }
+      const title = `${edge.source}.${sourceColumn} -> ${edge.target}.${targetColumn}`;
       rawEdges.push({
         id: uniqueId(usedIds, `${edge.source}.${sourceColumn}->${edge.target}.${targetColumn}`),
         source: edge.source,
@@ -152,8 +175,9 @@ export function buildFlowElements(graph: DiagramGraph, layout: DiagramLayout): F
         data: {
           sourceColumn,
           targetColumn,
-          title: `${edge.source}.${sourceColumn} -> ${edge.target}.${targetColumn}`,
+          title: missing.length > 0 ? `${title} (missing column: ${missing.join(', ')})` : title,
           ...(edge.virtual ? { virtual: true } : {}),
+          ...(missing.length > 0 ? { unresolved: { source: sourceMissing, target: targetMissing } } : {}),
         },
       });
     });
@@ -166,7 +190,6 @@ export function buildFlowElements(graph: DiagramGraph, layout: DiagramLayout): F
     width: placement.width,
     height: placement.height,
   }));
-  const columnIndexOf = columnRowIndexLookup(graph);
   const { edges, nodeHandles } = routeEdges(rawEdges, nodeRects, columnIndexOf);
 
   const nodes: FlowNode[] = graph.nodes.map((node) => {
@@ -259,8 +282,10 @@ export function routeEdges(
       target: { rect: targetRect, rowCenterY: rowCenterY(targetRect, targetColumn) },
       obstacles,
     });
-    const sourceHandle = columnSourceHandle(sourceColumn, route.sourceSide);
-    const targetHandle = columnTargetHandle(targetColumn, route.targetSide);
+    const sourceAnchor = columnIndexOf(edge.source, sourceColumn) === undefined ? CARD_ANCHOR : sourceColumn;
+    const targetAnchor = columnIndexOf(edge.target, targetColumn) === undefined ? CARD_ANCHOR : targetColumn;
+    const sourceHandle = columnSourceHandle(sourceAnchor, route.sourceSide);
+    const targetHandle = columnTargetHandle(targetAnchor, route.targetSide);
     addHandle(edge.source, sourceHandle, route.sourceSide);
     addHandle(edge.target, targetHandle, route.targetSide);
     return {

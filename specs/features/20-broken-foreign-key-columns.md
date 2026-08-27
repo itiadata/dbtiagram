@@ -1,7 +1,7 @@
 ---
 id: 20
 title: Show foreign keys with missing columns as broken instead of dropping them
-status: approved
+status: implemented
 priority: high
 created: 2026-08-27
 owner: unassigned

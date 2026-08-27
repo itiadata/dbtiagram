@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { buildDiagram } from '../../../src/diagram/graph';
 import { layoutDiagram } from '../../../src/diagram/layout';
 import {
+  CARD_ANCHOR,
   EDGE_INTERACTION_WIDTH,
   FK_EDGE_TYPE,
   buildFlowElements,
@@ -27,7 +28,7 @@ function routeEdgesFor(
   edges: Parameters<typeof routeEdges>[0],
   nodeRects: Parameters<typeof routeEdges>[1],
 ) {
-  return routeEdges(edges, nodeRects, () => undefined);
+  return routeEdges(edges, nodeRects, () => 0);
 }
 
 describe('buildFlowElements', () => {
@@ -544,5 +545,112 @@ describe('routeEdges (live drag geometry, spec 12)', () => {
     );
     expect(partiallyRebuilt).toEqual(flow.edges);
     expect(partialHandles.size).toBe(0);
+  });
+});
+
+describe('broken FK columns (spec 20)', () => {
+  it('anchors an FK to the card when the source column is missing', () => {
+    const { flow } = flowFor([
+      {
+        name: 'order_items',
+        columns: [{ name: 'id' }],
+        constraints: [
+          { type: 'foreign_key', columns: ['customer_id'], to: "ref('customers')", toColumns: ['id'] },
+        ],
+      },
+      { name: 'customers', columns: [{ name: 'id' }] },
+    ]);
+    expect(flow.edges).toHaveLength(1);
+    const edge = flow.edges[0];
+    expect(edge.sourceHandle?.startsWith(`${CARD_ANCHOR}:source:`)).toBe(true);
+    expect(edge.targetHandle?.startsWith('id:target:')).toBe(true);
+    expect(edge.data.unresolved).toEqual({ source: true, target: false });
+  });
+
+  it('titles a source-missing FK with the missing column', () => {
+    const { flow } = flowFor([
+      {
+        name: 'order_items',
+        columns: [{ name: 'id' }],
+        constraints: [
+          { type: 'foreign_key', columns: ['customer_id'], to: "ref('customers')", toColumns: ['id'] },
+        ],
+      },
+      { name: 'customers', columns: [{ name: 'id' }] },
+    ]);
+    expect(flow.edges[0].data.title).toBe(
+      'order_items.customer_id -> customers.id (missing column: order_items.customer_id)',
+    );
+  });
+
+  it('anchors an FK to the card when the target column is missing', () => {
+    const { flow } = flowFor([
+      {
+        name: 'order_items',
+        columns: [{ name: 'id' }, { name: 'customer_id' }],
+        constraints: [
+          { type: 'foreign_key', columns: ['customer_id'], to: "ref('customers')", toColumns: ['id'] },
+        ],
+      },
+      { name: 'customers', columns: [{ name: 'customer_id' }] },
+    ]);
+    const edge = flow.edges[0];
+    expect(edge.sourceHandle?.startsWith('customer_id:source:')).toBe(true);
+    expect(edge.targetHandle?.startsWith(`${CARD_ANCHOR}:target:`)).toBe(true);
+    expect(edge.data.unresolved).toEqual({ source: false, target: true });
+    expect(edge.data.title).toBe(
+      'order_items.customer_id -> customers.id (missing column: customers.id)',
+    );
+  });
+
+  it('titles an FK with both ends missing', () => {
+    const { flow } = flowFor([
+      {
+        name: 'order_items',
+        columns: [{ name: 'id' }],
+        constraints: [
+          { type: 'foreign_key', columns: ['customer_id'], to: "ref('customers')", toColumns: ['id'] },
+        ],
+      },
+      { name: 'customers', columns: [{ name: 'customer_id' }] },
+    ]);
+    expect(flow.edges[0].data.title).toBe(
+      'order_items.customer_id -> customers.id (missing column: order_items.customer_id, customers.id)',
+    );
+    expect(flow.edges[0].data.unresolved).toEqual({ source: true, target: true });
+  });
+
+  it('leaves a healthy FK unresolved-free', () => {
+    const { flow } = flowFor([
+      {
+        name: 'order_items',
+        columns: [{ name: 'id' }, { name: 'customer_id' }],
+        constraints: [
+          { type: 'foreign_key', columns: ['customer_id'], to: "ref('customers')", toColumns: ['id'] },
+        ],
+      },
+      { name: 'customers', columns: [{ name: 'id' }] },
+    ]);
+    const edge = flow.edges[0];
+    expect(edge.data.unresolved).toBeUndefined();
+    expect(edge.sourceHandle?.startsWith('customer_id:source:')).toBe(true);
+    expect(edge.targetHandle?.startsWith('id:target:')).toBe(true);
+    expect(edge.data.title).toBe('order_items.customer_id -> customers.id');
+  });
+
+  it('mounts the card handle on the node whose column is missing', () => {
+    const { flow } = flowFor([
+      {
+        name: 'order_items',
+        columns: [{ name: 'id' }],
+        constraints: [
+          { type: 'foreign_key', columns: ['customer_id'], to: "ref('customers')", toColumns: ['id'] },
+        ],
+      },
+      { name: 'customers', columns: [{ name: 'id' }] },
+    ]);
+    const orderItems = flow.nodes.find((n) => n.id === 'order_items')!;
+    const keys = Object.keys(orderItems.data.handles ?? {});
+    expect(keys.some((k) => k.startsWith(`${CARD_ANCHOR}:source:`))).toBe(true);
   });
 });
