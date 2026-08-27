@@ -68,19 +68,25 @@ export async function writeModelYmlFile(uri: vscode.Uri, file: ModelYmlFile): Pr
 }
 
 /**
- * Opens `uri` beside the diagram and selects the declaration at `position`
- * (spec 15). A `null` position places the cursor at the top of the file. This
- * is the only editor touch point in the extension.
+ * Opens `uri` and selects the declaration at `position` (spec 15). A `null`
+ * position places the cursor at the top of the file. This is the only editor
+ * touch point in the extension.
+ *
+ * A file that already has a tab is reused and focused where it is, so the
+ * action never spawns a duplicate tab; only a file with no tab opens beside
+ * the diagram.
  */
 export async function revealInEditor(
   uri: vscode.Uri,
   position: DeclarationPosition | null,
 ): Promise<void> {
   const doc = await vscode.workspace.openTextDocument(uri);
+  const existingColumn = findOpenViewColumn(uri);
   const editor = await vscode.window.showTextDocument(doc, {
-    viewColumn: vscode.ViewColumn.Beside,
+    viewColumn: existingColumn ?? vscode.ViewColumn.Beside,
     preserveFocus: false,
-    preview: true,
+    // An already-open tab must not be demoted to a preview tab.
+    preview: existingColumn === undefined,
   });
 
   const selection =
@@ -95,4 +101,28 @@ export async function revealInEditor(
 
   editor.selection = selection;
   editor.revealRange(selection, vscode.TextEditorRevealType.InCenterIfOutsideViewport);
+}
+
+/**
+ * The view column of an editor/tab already showing `uri`, or undefined. Visible
+ * editors are checked first; `tabGroups` then catches tabs that are open but
+ * currently in the background of their group.
+ */
+function findOpenViewColumn(uri: vscode.Uri): vscode.ViewColumn | undefined {
+  const visible = vscode.window.visibleTextEditors.find(
+    (editor) => editor.document.uri.fsPath === uri.fsPath,
+  );
+  if (visible?.viewColumn !== undefined) {
+    return visible.viewColumn;
+  }
+
+  for (const group of vscode.window.tabGroups.all) {
+    for (const tab of group.tabs) {
+      if (tab.input instanceof vscode.TabInputText && tab.input.uri.fsPath === uri.fsPath) {
+        return group.viewColumn;
+      }
+    }
+  }
+
+  return undefined;
 }

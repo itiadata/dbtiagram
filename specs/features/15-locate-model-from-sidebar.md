@@ -44,9 +44,10 @@ to identify the owning file. What is missing is the declaration **line**:
 - **Reveal in diagram**: centers the viewport on the table's node at a readable
   zoom, selects it, and reveals the details sidebar. Never changes filter state
   and therefore never writes to an active layout file.
-- **Open in model.yml**: the host resolves the model to its defining file, opens
-  it beside the diagram, selects the model name at its declaration, and scrolls
-  it into view.
+- **Open in model.yml**: the host resolves the model to its defining file,
+  reuses the editor tab already showing that file when there is one (focusing
+  its group) and otherwise opens it beside the diagram, then selects the model
+  name at its declaration and scrolls it into view.
 - A pure declaration locator (`src/dbt/locate.ts`) mapping (file text, model
   name) to a zero-based line/column/length using the `yaml` package's node
   ranges rather than a regex.
@@ -107,6 +108,16 @@ And chooses "Open in model.yml"
 Then the defining model.yml opens in an editor beside the diagram
 And the cursor is on the line declaring "- name: orders"
 And that model name is selected and scrolled into view
+```
+
+### The model.yml is already open in a tab
+
+```
+Given the model.yml declaring "orders" is already open in an editor tab
+When the user chooses "Open in model.yml" for orders
+Then no second tab is opened for that file
+And the existing tab is focused in the group it already lives in
+And the cursor moves to the orders declaration line, scrolled into view
 ```
 
 ### Two models with the same name in different files
@@ -322,12 +333,20 @@ export function useRevealModel(onRevealed: (name: string) => void): RevealModelS
   returns the first record whose `file.models` contains the name — this is the
   documented resolution for duplicate model names. (Scenario: *Two models with
   the same name*.)
-- **`revealInEditor`** does `openTextDocument(uri)` then
-  `showTextDocument(doc, { viewColumn: ViewColumn.Beside, preserveFocus: false,
-  preview: true })`. With a position it sets `editor.selection` to
-  `new Selection(line, column, line, column + length)`; with `null` it sets
-  `new Selection(0, 0, 0, 0)`. It then calls `editor.revealRange(selection,
-  TextEditorRevealType.InCenterIfOutsideViewport)`.
+- **`revealInEditor`** does `openTextDocument(uri)` then `showTextDocument`. It
+  first looks for a tab already showing that file, so the action never spawns a
+  duplicate tab:
+  - a matching entry in `vscode.window.visibleTextEditors`, or failing that a
+    matching `TabInputText` tab in `vscode.window.tabGroups.all`, supplies the
+    `viewColumn` to reuse, and the document opens there with `preview: false`
+    (an already-open tab must not be demoted to a preview tab);
+  - with no such tab it falls back to `{ viewColumn: ViewColumn.Beside,
+    preview: true }` as before.
+  Both paths use `preserveFocus: false`. With a position it sets
+  `editor.selection` to `new Selection(line, column, line, column + length)`;
+  with `null` it sets `new Selection(0, 0, 0, 0)`. It then calls
+  `editor.revealRange(selection, TextEditorRevealType.InCenterIfOutsideViewport)`.
+  (Scenario: *The model.yml is already open in a tab*.)
 - **`placeMenu`** prefers `left = point.x`, `top = point.y`. If
   `point.x + menu.width > viewport.width - margin` it flips to
   `point.x - menu.width`; likewise vertically. Both results are finally clamped
@@ -429,8 +448,9 @@ verified in the Manual Verify step; the flip half of that scenario is covered by
       the same behavior.
 - [ ] `ContextMenu` supports disabled and checkable items so feature 16 can reuse
       it, and stays fully on screen near the viewport edges.
-- [ ] "Open in model.yml" opens the defining file beside the diagram with the
-      model name selected at its declaration line.
+- [ ] "Open in model.yml" opens the defining file with the model name selected
+      at its declaration line, reusing the tab already showing that file when
+      one exists and otherwise opening beside the diagram.
 - [ ] A model that cannot be located still opens its file at line 0 with the
       specified warning; a model that no longer exists produces the specified
       error and opens nothing.
@@ -442,9 +462,10 @@ verified in the Manual Verify step; the flip half of that scenario is covered by
 
 ## Confirm at Approval
 
-- **(a) Editor column.** The `model.yml` opens in `ViewColumn.Beside` as a
-  preview tab with focus moved to it. Say if you prefer the same column, a
-  non-preview tab, or `preserveFocus: true`.
+- **(a) Editor column.** A file already open in a tab is reused and focused
+  where it is; only a file with no tab opens in `ViewColumn.Beside` as a preview
+  tab. Focus moves to the editor in both cases. Say if you prefer the same
+  column, a non-preview tab, or `preserveFocus: true`.
 - **(b) Reveal zoom.** Reveal centers at `max(current zoom, 0.8)` and never zooms
   out. Confirm, or give a fixed zoom.
 - **(c) Menu labels.** "Reveal in diagram" / "Open in model.yml". Say if you
