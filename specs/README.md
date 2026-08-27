@@ -7,7 +7,13 @@ up-to-date spec in `specs/features/`.
 ## Layout
 
 - `features/` — one Markdown file per feature. Each file uses Frontmatter
-  (metadata) + Gherkin (`Given` / `When` / `Then`) scenarios.
+  (metadata) + Gherkin (`Given` / `When` / `Then`) scenarios + an
+  `## Implementation Plan`.
+- `TEMPLATE.md` — the canonical skeleton for a new feature spec. Copy it.
+- `ARCHITECTURE.md` — one line per module under `src/` and `webview-ui/`
+  (path, responsibility, key exports, layer rule). Consult it while planning so
+  every path a plan cites is real; update it in the same commit as any module
+  add/split/removal.
 
 ## Feature Index
 
@@ -29,14 +35,60 @@ up-to-date spec in `specs/features/`.
 | 15  | Locate a model from the sidebar list | Approved |
 | 16  | Sticky notes on the diagram | Approved |
 | 17  | Modular source layout and fast feedback loop | Done |
+| 18  | Plan-time implementation contracts | Implemented |
 
 Status values: `draft` → `approved` → `implemented` → `done`.
 
+## Two-pass workflow
+
+Work is split into a **planning pass** and an **implementation pass**, which may
+be performed by models of different capability. The expensive reasoning happens
+once, at plan time, and is captured in the spec; implementation is then
+transcription plus verification.
+
+- **Planning pass.** Copy `TEMPLATE.md`, write Summary / Scope / Scenarios, then
+  do the design work: read the code, consult `ARCHITECTURE.md`, and fill in the
+  `## Implementation Plan` — files, signatures, behavior notes, tests,
+  verification, do-not-touch. Every design judgement call is resolved here.
+- **Implementation pass.** Follow the plan literally. Write the listed files and
+  the listed tests, run the listed verification commands. Touch no file outside
+  the plan's Files table. When the plan does not cover something, **stop and
+  ask** — do not invent behavior, and do not "improve" adjacent code.
+
+A file discovered to be missing from the Files table is a *plan bug*: return to
+the planning pass and amend the spec rather than improvising.
+
+## Definition of Ready
+
+A spec may not move from `draft` to `approved` unless all of the following hold.
+This gate is checked at the point where the lifecycle already requires the
+user's explicit confirmation.
+
+- [ ] Summary, Scope (in and out) and at least one Gherkin scenario are present.
+- [ ] An `## Implementation Plan` exists with **all six** subsections present —
+      Files, Signatures, Behavior notes, Tests, Verification, Do not touch. A
+      subsection with nothing to say reads `None.`; it is never omitted.
+- [ ] The Files table names every file to create or modify, with an action and a
+      responsibility.
+- [ ] Every exported function/type that is new or changed has its exact
+      TypeScript signature and its layer rule (`pure`, `shared`,
+      `vscode-facing`, `webview`).
+- [ ] Every scenario maps to at least one test case in the Tests subsection, and
+      each test case names its file, its input, and its literal expected output.
+- [ ] Every path cited in the plan exists in the repo or is explicitly marked
+      `create`.
+
+Specs created before feature 18 keep their current shape; they are not
+retrofitted.
+
 ## Workflow
 
-1. **Draft.** Write or extend a spec in `specs/features/` before touching code.
+1. **Draft.** Copy `TEMPLATE.md` into `specs/features/` and write the spec —
+   including its `## Implementation Plan` — before touching code.
 2. **Approve.** The user reviews and approves the spec (explicit confirmation).
-3. **Implement.** Code is written test-first: pure logic in `src/dbt/` and
+   The Definition of Ready above is a hard gate on this transition.
+3. **Implement.** Follow the Implementation Plan. Code is written test-first:
+   pure logic in `src/dbt/` and
    `src/diagram/` with Vitest unit tests in `test/unit/`; VS Code API wiring in
    `src/vscode/` and `src/webview/`; integration coverage in `test/integration/`.
 4. **Automatic Verify.** Run `npm test` and `npm run typecheck` and resolve every

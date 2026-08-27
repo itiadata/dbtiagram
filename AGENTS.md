@@ -15,8 +15,12 @@ The extension has **no runtime AI dependency** — it works fully offline.
 
 - `specs/` — Feature specs (Spec-Driven Development). **This is the source of
   truth for product behavior. Never implement anything not specified here.**
-  - `specs/features/` — one Markdown file per feature, Frontmatter + Gherkin.
-  - `specs/README.md` — spec index and workflow.
+  - `specs/features/` — one Markdown file per feature, Frontmatter + Gherkin +
+    an `## Implementation Plan`.
+  - `specs/TEMPLATE.md` — canonical skeleton for a new feature spec.
+  - `specs/ARCHITECTURE.md` — module map: path, responsibility, key exports and
+    layer rule for everything under `src/` and `webview-ui/`.
+  - `specs/README.md` — spec index, two-pass workflow, Definition of Ready.
 - `src/` — TypeScript extension logic, organized to enforce the API-isolation rule:
   - `src/dbt/` — **pure** domain logic: parsing/serializing model.yml, edit
     application. MUST NOT import `vscode`.
@@ -77,6 +81,18 @@ committed `.certs/` bundle only adds trust and is harmless.
    approved, up-to-date spec in `specs/`. Write or extend the spec first, have it
    approved, then implement. When behavior is ambiguous, ask the user instead of
    guessing.
+
+   Specs are written in **two passes** (see `specs/README.md`). The planning pass
+   produces a mandatory `## Implementation Plan` — files, signatures, behavior
+   notes, tests, verification commands, do-not-touch list — using
+   `specs/TEMPLATE.md` and `specs/ARCHITECTURE.md`. The implementation pass
+   **follows that plan rather than re-deriving it**: write exactly the listed
+   files and tests, touch nothing outside the plan's Files table, run the listed
+   verification commands. If the plan does not cover something you need — a
+   missing file, an undefined signature, an unspecified edge case — **stop and
+   ask the user**; do not improvise, and do not refactor adjacent code.
+   Whenever a module is added, split, or removed, update
+   `specs/ARCHITECTURE.md` in the same commit.
 2. **Strict TypeScript.** No `any` (use `unknown` + narrowing), no implicit
    `any`. All VS Code API usage must live in the isolated wrapper modules
    (`src/vscode/`, `src/webview/`); pure domain logic (`src/dbt/`, `src/diagram/`)

@@ -1,7 +1,7 @@
 ---
 id: 18
 title: Plan-time implementation contracts for split planning/implementation models
-status: approved
+status: implemented
 priority: high
 created: 2026-08-27
 owner: unassigned
@@ -193,13 +193,13 @@ feature spec written after this one is checked against `specs/TEMPLATE.md`.
 
 ## Acceptance Criteria
 
-- [ ] `specs/TEMPLATE.md` exists and contains the six Implementation Plan subsections.
-- [ ] `specs/ARCHITECTURE.md` lists every module under `src/` and `webview-ui/`
+- [x] `specs/TEMPLATE.md` exists and contains the six Implementation Plan subsections.
+- [x] `specs/ARCHITECTURE.md` lists every module under `src/` and `webview-ui/`
       with its responsibility, key exports, and layer rule.
-- [ ] Every path named in `specs/ARCHITECTURE.md` resolves to a real file.
-- [ ] `specs/README.md` documents the two-pass workflow and the Definition of
+- [x] Every path named in `specs/ARCHITECTURE.md` resolves to a real file.
+- [x] `specs/README.md` documents the two-pass workflow and the Definition of
       Ready gate.
-- [ ] `AGENTS.md` instructs the implementing pass to follow the Implementation
+- [x] `AGENTS.md` instructs the implementing pass to follow the Implementation
       Plan and to stop and ask when the plan does not cover something.
-- [ ] No file under `src/`, `webview-ui/` or `test/` is modified.
-- [ ] `npm run verify` is green.
+- [x] No file under `src/`, `webview-ui/` or `test/` is modified.
+- [x] `npm run verify` is green.
