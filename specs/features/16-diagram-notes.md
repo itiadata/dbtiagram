@@ -5,258 +5,63 @@ status: approved
 priority: medium
 created: 2026-08-27
 owner: unassigned
-depends_on: [13]
+depends_on: [13, 15]
 ---
 
 # Sticky notes on the diagram
 
 ## Summary
 
-As a dbt developer documenting a diagram, I want to **pin free-text notes to
-specific points on the canvas**. A note is a resizable rectangle of text that I
-can drag anywhere, resize from its bottom-right corner, and set to display
-**collapsed** (just a note icon) or **expanded** by default. Double-clicking
-toggles between the two. Notes are created from a toolbar button or by
-right-clicking empty canvas space, and they are stored in the diagram's
+As a dbt developer documenting a diagram, I want to pin free-text notes to
+specific points on the canvas — resizable rectangles I can drag anywhere, set to
+display collapsed or expanded by default, and toggle with a double-click — so
+that the diagram carries its own explanation. Notes are created from a toolbar
+button or the canvas context menu and are stored in the diagram's
 `.dbtiagram.yml` file alongside the table positions.
 
 ## Background
 
-Spec 13 introduced `.dbtiagram.yml` as the diagram's own file, holding
-`version`, `name`, and `tables[{name,x,y}]`, with live debounced write-back
-whenever the user drags a table or changes visibility. Its Out of scope section
-explicitly deferred "anything beyond `tables`" and noted the schema is versioned
-so more can be added later. This feature is the first such addition.
+Spec 13 introduced `.dbtiagram.yml` as the diagram's own file, holding `version`,
+`name`, and `tables[{name,x,y}]`, with live debounced write-back whenever the
+user drags a table or changes visibility. Its Out of scope section explicitly
+deferred "anything beyond `tables`" and noted the schema is versioned so more can
+be added later. This feature is the first such addition.
 
 The canvas is React Flow (spec 03), so a note is naturally a **custom node
 type** — it inherits dragging, canvas coordinates, pan/zoom, and selection for
-free, exactly like `TableNode` does.
+free, exactly like `TableNode` does. The reusable `ContextMenu` component comes
+from feature 15, which must land first.
 
 ## Scope
 
-- **A `note` node type** on the canvas with:
-  - free text (multi-line, plain text — no markdown rendering),
-  - a position (`x`/`y` in canvas coordinates),
-  - a size (`width`/`height`) resizable by dragging the **bottom-right corner**,
-  - a **`collapsedByDefault`** flag deciding how the note renders when the
-    diagram is opened, independent of the runtime collapsed/expanded state that
-    double-click toggles,
-  - drag support in **both** states (the collapsed icon is draggable too).
-- **Collapsed rendering**: a small fixed-size square (28×28) showing a note
-  icon, with the note's first line as its tooltip.
-- **Expanded rendering**: the rectangle at its stored size, showing the text.
-  Clicking into the text starts editing it in place; blur commits.
-- **Two creation paths**:
-  - an **"Add note"** button in the diagram toolbar — places a note at the
-    center of the current viewport,
-  - a **canvas context menu** on empty space with an "Add note here" item —
-    places the note at the right-clicked point (converted to canvas
-    coordinates).
-- **A note context menu** (right-click on a note) with `Edit text`,
-  `Collapse` / `Expand` (the runtime state), `Collapsed by default` (a checkable
-  item writing the stored flag), and `Delete`.
-- **Persistence** in `.dbtiagram.yml` under a new optional `notes` key
-  (Implementation Notes §1), written through spec 13's existing debounced
-  live write-back and included in the explicit "Save diagram" action.
-- **Deleting a note** with the `Delete`/`Backspace` key while it is selected, as
-  well as from its context menu.
+**In scope**
 
-### Out of scope
+- A `note` node type with free plain text, a canvas position, a size resizable
+  from its bottom-right corner, and a persisted `collapsedByDefault` flag,
+  draggable in both collapsed and expanded form.
+- Collapsed rendering as a 28×28 icon whose tooltip is the note's first
+  non-empty line; expanded rendering as the stored rectangle with in-place text
+  editing committed on blur.
+- Two creation paths: an "Add note" toolbar button (viewport center) and an
+  "Add note here" item in the empty-canvas context menu (the clicked point).
+- A note context menu with `Edit text`, `Collapse`/`Expand` (runtime only),
+  `Collapsed by default` (checkable, persisted), and `Delete`.
+- Persistence under a new optional `notes` key in `.dbtiagram.yml`, written
+  through spec 13's existing debounced write-back and the explicit "Save
+  diagram".
+- Deleting a note with `Delete`/`Backspace` while it is selected, and from its
+  context menu.
+
+**Out of scope**
 
 - Markdown or rich text, links, images, colours, or per-note styling.
-- Attaching a note to a table (anchored/child notes that move with a node).
-- Notes acting as obstacles for FK edge routing (spec 12) — edges route as if
-  notes were not there.
+- Attaching a note to a table (anchored notes that move with a node).
+- Notes acting as obstacles for FK edge routing (spec 12).
 - Notes in the left sidebar (no "Notes" list, no filtering by note).
-- Undo/redo of note operations beyond VS Code's own undo of the `.dbtiagram.yml`
-  file.
+- Undo/redo beyond VS Code's own undo of the `.dbtiagram.yml` file.
 - Resizing from any handle other than the bottom-right corner.
-- Notes when **no** layout file is active: they are still fully usable but exist
-  only in webview state until the diagram is saved (see Confirm at Approval (c)).
-
-## Implementation Notes
-
-### 1. File format (`src/diagram/layoutFile.ts`)
-
-The schema stays at `version: 1` and gains an **optional** `notes` array, so
-existing files keep loading unchanged and files written by this version keep
-loading in the previous one (which simply drops the unknown key).
-
-```yaml
-version: 1
-name: Order marts
-tables:
-  - name: orders
-    x: 120
-    y: 40
-notes:
-  - id: n-3f2a91
-    text: |-
-      Grain: one row per order.
-      Backfilled 2026-06.
-    x: 480
-    y: -120
-    width: 240
-    height: 140
-    collapsedByDefault: false
-```
-
-The file stores `collapsedByDefault`, **not** the runtime state: double-clicking
-a note to peek at it never rewrites the file (see §4).
-
-New pure API, all additive:
-
-```ts
-export interface DiagramNote {
-  id: string;
-  text: string;
-  x: number;
-  y: number;
-  width: number;
-  height: number;
-  /** How the note renders when the diagram is opened. Runtime toggles never change it. */
-  collapsedByDefault: boolean;
-}
-
-export const NOTE_DEFAULT_WIDTH = 220;
-export const NOTE_DEFAULT_HEIGHT = 120;
-export const NOTE_MIN_WIDTH = 120;
-export const NOTE_MIN_HEIGHT = 64;
-```
-
-- `DiagramLayout` gains `notes: DiagramNote[]` (always present in memory, `[]`
-  when the file has none).
-- `parseDiagramLayout` accepts a missing `notes` key as `[]`, rejects a
-  non-array `notes`, and for each entry requires a non-empty string `id`, a
-  string `text`, finite numeric `x`/`y`/`width`/`height`, and a boolean
-  `collapsedByDefault` (missing `collapsedByDefault` defaults to `false`;
-  missing `width`/`height` default to the constants above). Sizes are clamped to
-  the minimums. Duplicate `id`s keep the first entry. Any other invalid entry
-  raises `DiagramLayoutParseError` with a message naming the note id.
-- `serializeDiagramLayout` writes `notes` **after** `tables`, with the key order
-  `id`, `text`, `x`, `y`, `width`, `height`, `collapsedByDefault`, sorted by `id`
-  for stable diffs. The key is **omitted entirely** when there are no notes, so
-  existing files are not churned.
-- `buildLayout(name, visible, notes = [])` gains a third parameter; it rounds
-  note coordinates and sizes to integers exactly as it does table coordinates.
-- `applyLayout` returns the notes untouched in a new `notes: DiagramNote[]`
-  field (notes have no workspace reconciliation — they reference nothing).
-- `export function createNote(x: number, y: number, id: string): DiagramNote` —
-  a default-sized, empty note at the given point with
-  `collapsedByDefault: false`. `id` is supplied by the caller so the function
-  stays pure and testable; the webview passes a `n-<random hex>` value.
-
-### 2. Protocol (`src/shared/protocol.ts`)
-
-No new message types. `layout:save` / `layout:changed` / `layout:apply` already
-carry a whole `DiagramLayout`, which now includes `notes`.
-
-### 3. Node type (`webview-ui/NoteNode.tsx`)
-
-- Registered in the `nodeTypes` map as `note` next to the existing `table` type.
-- Node `data` is the `DiagramNote`, its runtime collapsed state, plus callbacks
-  for text/size/collapse changes.
-- Expanded: a `<div className="note">` with `width`/`height` from the node data,
-  a header strip used as the React Flow drag handle, a `<textarea>` for the
-  text, and a bottom-right resize grip.
-  - The grip uses pointer events (`setPointerCapture`) and divides the pointer
-    delta by the current React Flow zoom so resizing tracks the cursor at any
-    zoom level; the resulting size is clamped to `NOTE_MIN_*`.
-  - The `<textarea>` and the grip set `nodrag`/`nowheel` so typing and resizing
-    do not pan the canvas or drag the node.
-- Collapsed: a 28×28 button showing a note glyph, `title` = the note's first
-  non-empty line (or "Empty note"), draggable as a whole.
-- `onDoubleClick` on either form toggles the **runtime** collapsed state only
-  (§4); it does not touch `collapsedByDefault` and triggers no file write.
-- Notes render **behind** table nodes (a lower `zIndex`) unless selected, so a
-  note never hides a table.
-- Notes are excluded from everything that reasons about tables: dagre layout
-  (`src/diagram/layout.ts` input), `mergeFlowNodes`' table-position merge, FK
-  edge building and routing, and `buildLayout`'s `tables` argument. The webview
-  keeps notes in a separate `notes` state array and concatenates them into the
-  React Flow node array at render time.
-
-### 4. Collapse semantics
-
-There are **two distinct** values:
-
-- `note.collapsedByDefault` — persisted in `.dbtiagram.yml`. It decides how the
-  note renders the moment a diagram is opened or a layout is applied.
-- a webview-only `collapsedNow: Map<noteId, boolean>` — the runtime state.
-  Double-click toggles **this** and nothing else, so peeking into a note (or
-  collapsing one to get it out of the way) **never** writes to disk and never
-  changes what a teammate sees when they open the file.
-
-On `layout:apply`, `collapsedNow` is reset so every note's runtime state equals
-its `collapsedByDefault`. The note context menu's checkable
-`Collapsed by default` item is the **only** control that writes the persisted
-flag; toggling it does not change the current runtime state (the note stays as
-it is on screen). The `Collapse`/`Expand` item is a synonym for double-click and
-is likewise not persisted.
-
-### 5. Creation and the canvas context menu (`webview-ui/App.tsx`)
-
-- Toolbar: an **"Add note"** button next to the existing "Save diagram" button.
-  It creates a note at the viewport center via
-  `screenToFlowPosition(centerOfCanvasRect)`, selects it, and focuses its
-  textarea for immediate typing.
-- Canvas context menu: `onPaneContextMenu` on `<ReactFlow>` (which
-  `preventDefault()`s) opens the same lightweight menu component introduced in
-  spec 15, containing `Add note here`. The click point is converted with
-  `screenToFlowPosition`.
-- Note context menu: `onNodeContextMenu`, filtered to `node.type === 'note'`,
-  with `Edit text`, `Collapse`/`Expand` (runtime only), `Collapsed by default`
-  (checkable, persisted), and `Delete`.
-- Table-node context menu: `onNodeContextMenu` filtered to `node.type ===
-  'table'` opens the menu specified in feature 15 §3 (`Open in model.yml`).
-- All menus close on Escape, outside pointerdown, canvas pan, and zoom.
-
-### 6. Persistence wiring
-
-- The existing debounced (400 ms) `layout:changed` effect from spec 13 §8 gains
-  the notes array as a dependency, so creating, dragging, resizing, editing,
-  deleting a note, or changing its `collapsedByDefault` rewrites the active
-  layout file. Typing in a note therefore autosaves 400 ms after the last
-  keystroke. Runtime collapse toggles are **not** a dependency and write
-  nothing.
-- `layout:save` includes the notes.
-- `layout:apply` seeds the notes state from `layout.notes` and resets every
-  note's runtime collapsed state to its `collapsedByDefault`.
-- With no active layout, notes live in webview state only; the first
-  "Save diagram" writes them.
-
-### 7. Styles (`webview-ui/styles.css`)
-
-`.note`, `.note__header`, `.note__text`, `.note__grip`, `.note--collapsed`, and
-the shared `.context-menu` rules (shared with spec 15). Colours come from the
-existing VS Code theme variables; the note uses the editor widget background
-with a subtle border, and the collapsed icon uses the same accent as the toolbar
-buttons.
-
-### 8. Fixture
-
-`fixtures/sample-dbt/diagrams/orders.dbtiagram.yml` gains one note with
-`collapsedByDefault: false` and one with `collapsedByDefault: true` so F5
-debugging exercises both states.
-`test/unit/fixture.test.ts` asserts the file parses and that its notes have
-sane, in-range values.
-
-### 9. Tests (`test/unit/diagram/layoutFile.test.ts`)
-
-- Round-trip: a layout with notes serializes and re-parses identically.
-- A file with **no** `notes` key parses to `notes: []`.
-- A layout with no notes serializes **without** a `notes` key.
-- Notes are sorted by `id` and coordinates/sizes rounded on write.
-- Defaults: missing `collapsedByDefault` → `false`; missing `width`/`height` →
-  the constants; below-minimum sizes clamp to `NOTE_MIN_*`.
-- Rejects: non-array `notes`, an entry that is not a mapping, a missing/empty
-  `id`, a non-string `text`, non-finite coordinates — each with a message naming
-  the note.
-- Duplicate ids keep the first entry.
-- `createNote` returns a default-sized, empty note with
-  `collapsedByDefault: false` at the given point.
-- `applyLayout` passes notes through unchanged and still reconciles tables.
-- Every existing `layoutFile.test.ts` case keeps passing unchanged.
+- Persisting notes when no layout file is active — they live in webview state
+  until the diagram is saved.
 
 ## Scenarios
 
@@ -373,55 +178,330 @@ Then it loads with no notes and no error
 And the next write does not add an empty notes key
 ```
 
+### A malformed note entry is reported
+
+```
+Given a .dbtiagram.yml whose notes array contains an entry with no id
+When the user opens it
+Then the diagram reports a parse error naming the "notes" problem
+And no partial layout is applied
+```
+
+## Implementation Plan
+
+### Files
+
+| Path | Action | Responsibility |
+|------|--------|----------------|
+| `src/diagram/layoutFile.ts` | modify | `DiagramNote`, note constants, `createNote`; notes in `DiagramLayout`, `buildLayout`, `serializeDiagramLayout`, `parseDiagramLayout`, `applyLayout`. |
+| `webview-ui/NoteNode.tsx` | create | The `note` React Flow node: expanded rectangle, collapsed icon, textarea, resize grip. |
+| `webview-ui/hooks/useNotes.ts` | create | Note state: the persisted notes array, the runtime collapse map, node projection, and every mutation callback. |
+| `webview-ui/hooks/useLayoutPersistence.ts` | modify | Accept the notes array; include it in `buildLayout` for both the explicit save and the debounced write-back. |
+| `webview-ui/DiagramCanvas.tsx` | modify | Register the `note` node type, render note nodes behind tables, split node changes, `onPaneContextMenu`, Delete-key handling. |
+| `webview-ui/App.tsx` | modify | "Add note" toolbar button; wire `useNotes`, the canvas/note context menus, and `layout:apply` notes. |
+| `webview-ui/styles.css` | modify | `.note`, `.note__header`, `.note__text`, `.note__grip`, `.note--collapsed`. |
+| `fixtures/sample-dbt/diagrams/orders.dbtiagram.yml` | modify | Add one expanded-by-default and one collapsed-by-default note. |
+| `test/unit/diagram/layoutFile.test.ts` | modify | Cover every new parse/serialize/default/clamp rule. |
+| `test/unit/fixture.test.ts` | modify | Assert the fixture diagram's notes parse with in-range values. |
+| `specs/ARCHITECTURE.md` | modify | Update the `layoutFile.ts` exports row; add `NoteNode.tsx` and `useNotes.ts`. |
+
+### Signatures
+
+```ts
+// src/diagram/layoutFile.ts  (pure — must not import `vscode`)
+export interface DiagramNote {
+  id: string;
+  text: string;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  /** How the note renders when the diagram is opened. Runtime toggles never change it. */
+  collapsedByDefault: boolean;
+}
+
+export const NOTE_DEFAULT_WIDTH = 220;
+export const NOTE_DEFAULT_HEIGHT = 120;
+export const NOTE_MIN_WIDTH = 120;
+export const NOTE_MIN_HEIGHT = 64;
+
+export interface DiagramLayout {
+  version: typeof LAYOUT_VERSION;
+  name: string;
+  tables: DiagramLayoutTable[];
+  /** Always present in memory; `[]` when the file has no notes. */
+  notes: DiagramNote[];
+}
+
+export function buildLayout(
+  name: string,
+  visible: readonly { name: string; x: number; y: number }[],
+  notes?: readonly DiagramNote[], // default []
+): DiagramLayout;
+
+/** A default-sized empty note. `id` is supplied so this stays pure. */
+export function createNote(x: number, y: number, id: string): DiagramNote;
+
+export interface AppliedLayout {
+  visible: Set<string>;
+  positions: Map<string, NodePosition>;
+  missing: string[];
+  /** Passed through untouched — notes reference nothing in the workspace. */
+  notes: DiagramNote[];
+}
+```
+
+```ts
+// webview-ui/hooks/useNotes.ts  (webview)
+import type { Node, NodeChange } from '@xyflow/react';
+import type { DiagramNote } from '../../src/diagram/layoutFile';
+
+export interface NotesState {
+  /** The persisted notes, in insertion order. */
+  notes: DiagramNote[];
+  /** React Flow nodes of type 'note', carrying data + callbacks. */
+  noteNodes: Node[];
+  noteIds: ReadonlySet<string>;
+  /** Applies position/select/remove changes that belong to notes. */
+  applyNoteNodeChanges: (changes: NodeChange[]) => void;
+  /** Creates a note at canvas coordinates and returns its new id. */
+  addNote: (x: number, y: number) => string;
+  updateNoteText: (id: string, text: string) => void;
+  resizeNote: (id: string, width: number, height: number) => void;
+  deleteNote: (id: string) => void;
+  setCollapsedByDefault: (id: string, value: boolean) => void;
+  /** Runtime-only toggle; never persisted. */
+  toggleCollapsedNow: (id: string) => void;
+  isCollapsed: (id: string) => boolean;
+  /** Seeds from an opened layout and resets every runtime collapse state. */
+  applyLayoutNotes: (notes: DiagramNote[]) => void;
+  /** Ids of currently selected notes, for the Delete key. */
+  selectedNoteIds: string[];
+}
+
+export function useNotes(): NotesState;
+```
+
+```ts
+// webview-ui/NoteNode.tsx  (webview)
+export interface NoteNodeData extends Record<string, unknown> {
+  note: DiagramNote;
+  collapsed: boolean;
+  onTextChange: (id: string, text: string) => void;
+  onResize: (id: string, width: number, height: number) => void;
+  onToggleCollapsed: (id: string) => void;
+}
+
+export function NoteNode(props: NodeProps): JSX.Element;
+```
+
+```ts
+// webview-ui/hooks/useLayoutPersistence.ts  (webview) — changed signature
+export function useLayoutPersistence(
+  notes: readonly DiagramNote[],
+): LayoutPersistenceState;
+```
+
+```ts
+// webview-ui/DiagramCanvas.tsx  (webview) — added props
+//   noteNodes: Node[];
+//   noteIds: ReadonlySet<string>;
+//   onNoteNodeChanges: (changes: NodeChange[]) => void;
+//   onPaneContextMenu: (event: ReactMouseEvent) => void;
+//   onDeleteSelectedNotes: () => void;
+```
+
+### Behavior notes
+
+- **Schema stays `version: 1`.** `notes` is optional, so files written before
+  this feature load unchanged and files written by this version still load in
+  older builds (which drop the unknown key). (Scenario: *An older diagram file
+  still opens*.)
+- **`parseDiagramLayout` note rules**, in this order per entry, with these
+  literal messages (all raised as `DiagramLayoutParseError`):
+  - `notes` missing ⇒ `[]`. `notes` present but not an array ⇒
+    `Diagram file "notes" must be an array`.
+  - entry not a mapping ⇒ `Every entry in "notes" must be a mapping`.
+  - `id` not a non-empty string ⇒ `Every note entry needs an "id"`.
+  - `text` present and not a string ⇒ `Note "<id>" needs a string "text"`;
+    missing `text` ⇒ `''`.
+  - `x`/`y` not finite numbers ⇒
+    `Note "<id>" needs numeric "x" and "y" coordinates`.
+  - `width`/`height` missing ⇒ `NOTE_DEFAULT_WIDTH` / `NOTE_DEFAULT_HEIGHT`;
+    present but not finite numbers ⇒ `Note "<id>" needs numeric "width" and "height"`.
+  - `collapsedByDefault` missing ⇒ `false`; present but not a boolean ⇒
+    `Note "<id>" needs a boolean "collapsedByDefault"`.
+  - Sizes are then clamped with `Math.max(value, NOTE_MIN_*)`.
+  - Duplicate `id`s keep the **first** entry and skip the rest, mirroring the
+    existing duplicate-table rule.
+- **`serializeDiagramLayout`** writes `notes` **after** `tables`, each entry with
+  the key order `id`, `text`, `x`, `y`, `width`, `height`, `collapsedByDefault`.
+  The `notes` key is **omitted entirely** when the array is empty, so existing
+  files are not churned.
+- **`buildLayout`** sorts notes by `id` ascending and rounds `x`, `y`, `width`,
+  `height` with `Math.round`, exactly as it already does for tables.
+- **`createNote(x, y, id)`** returns
+  `{ id, text: '', x, y, width: NOTE_DEFAULT_WIDTH, height: NOTE_DEFAULT_HEIGHT,
+  collapsedByDefault: false }` — no rounding (that is `buildLayout`'s job).
+- **`applyLayout`** copies `layout.notes` into its result unchanged; table
+  reconciliation is untouched.
+- **Two distinct collapse values.** `note.collapsedByDefault` is persisted and
+  decides rendering the moment a diagram is opened. A webview-only
+  `collapsedNow: Map<string, boolean>` inside `useNotes` is the runtime state;
+  `toggleCollapsedNow` and the `Collapse`/`Expand` menu item change **only**
+  that, so peeking into a note never writes to disk. `isCollapsed(id)` returns
+  `collapsedNow.get(id) ?? note.collapsedByDefault`. `applyLayoutNotes` clears
+  `collapsedNow` entirely. (Scenarios: *Double-click collapse is temporary*,
+  *Choosing the default display state*.)
+- **Note ids** are generated in `useNotes` as `` `n-${hex}` `` where `hex` is 6
+  lowercase hex characters from `crypto.getRandomValues`. Generation stays out of
+  the pure module.
+- **Persistence wiring.** `useLayoutPersistence(notes)` adds `notes` to the
+  debounced (400 ms) `layout:changed` effect's dependency list and passes it to
+  `buildLayout` in both `onSaveDiagram` and the effect. Runtime collapse state is
+  **not** a dependency and writes nothing. The existing `writeArmedRef` guard is
+  unchanged, so opening a diagram still cannot truncate its file.
+- **`layout:apply`** wiring in `App.tsx` calls both
+  `filter.applyLayoutTables(layout.applyLayout(message))` and
+  `notesState.applyLayoutNotes(message.layout.notes)`.
+- **Canvas integration.** `DiagramCanvas` keeps `rfNodes` as **tables only**:
+  `nodeRects`, `routeEdges`, `mergeFlowNodes`, the fit effect, and the
+  `onPositionsChange` report all continue to see only tables, so notes never
+  affect layout or FK routing. It renders `[...noteNodes, ...liveNodes]` so notes
+  paint first; note nodes carry `zIndex: 0` (or `5` when selected) and table
+  nodes `zIndex: 1`. (Scenario: *Notes do not interfere with tables*.)
+- **`onNodesChange`** partitions incoming changes by `noteIds.has(change.id)`:
+  note changes go to `onNoteNodeChanges`, the rest to `setRfNodes` via
+  `applyNodeChanges`. Changes without an `id` field go to the table branch.
+- Note nodes are `selectable: true` while tables keep the app's own selection
+  model; `elementsSelectable` stays `false` on `<ReactFlow>` and note selection
+  is tracked by React Flow node `selected` flags applied through
+  `applyNoteNodeChanges`.
+- **Delete key.** `DiagramCanvas` listens for `keydown` of `Delete` or
+  `Backspace` on its container and calls `onDeleteSelectedNotes()` when the event
+  target is not an input/textarea and at least one note is selected.
+- **`NoteNode` expanded** renders `<div className="note" style={{ width, height }}>`
+  with a `.note__header` acting as the React Flow `dragHandle`, a
+  `.note__text` `<textarea>` whose value is local state committed to
+  `onTextChange` on blur, and a `.note__grip`. The textarea and the grip carry
+  the `nodrag nowheel` classes so typing and resizing never pan the canvas or
+  drag the node.
+- **The grip** uses `setPointerCapture` and divides the pointer delta by the
+  current React Flow zoom (`useReactFlow().getZoom()`) so it tracks the cursor at
+  any zoom; the result is clamped to `NOTE_MIN_WIDTH`/`NOTE_MIN_HEIGHT` and
+  reported through `onResize` on pointer-up. (Scenario: *Dragging and resizing*.)
+- **`NoteNode` collapsed** renders a 28×28 `<button className="note note--collapsed">`
+  with a note glyph and `title` = the note's first non-empty line, or
+  `Empty note` when the text is blank. It is draggable as a whole.
+- `onDoubleClick` on either form calls `onToggleCollapsed(id)` only.
+- **Menus.** `onPaneContextMenu` (which `preventDefault()`s) opens the feature 15
+  `ContextMenu` with a single `Add note here` item placed at
+  `screenToFlowPosition({ x: event.clientX, y: event.clientY })`.
+  `onNodeContextMenu` filtered to `node.type === 'note'` opens
+  `Edit text`, `Collapse` or `Expand` (whichever applies to the current runtime
+  state), `Collapsed by default` (`checked: note.collapsedByDefault`), and
+  `Delete`. `node.type === 'table'` keeps the feature 15 menu. All menus close on
+  Escape, outside pointerdown, and scroll, per feature 15.
+- **Toolbar.** An `Add note` button sits next to `Save diagram` in the
+  `app__header`. It creates the note at `screenToFlowPosition` of the canvas
+  rect's center, selects it, and focuses its textarea.
+- With **no active layout**, notes live in webview state only and the first
+  "Save diagram" writes them; nothing else changes. (Scenario: *Notes in a
+  diagram with no layout file yet*.)
+
+### Tests
+
+| Test file | Test name | Input | Expected |
+|-----------|-----------|-------|----------|
+| `test/unit/diagram/layoutFile.test.ts` | `round-trips a layout with notes` | layout with `tables: []` and one note `{id:'n-1',text:'Grain: one row per order.',x:10,y:20,width:240,height:140,collapsedByDefault:false}` | `parseDiagramLayout(serializeDiagramLayout(layout), 'd')` deep-equals the layout |
+| `test/unit/diagram/layoutFile.test.ts` | `parses a file with no notes key as an empty array` | `"version: 1\nname: d\ntables: []\n"` | `.notes` is `[]` |
+| `test/unit/diagram/layoutFile.test.ts` | `omits the notes key when there are none` | `serializeDiagramLayout(buildLayout('d', []))` | output does not contain `notes` |
+| `test/unit/diagram/layoutFile.test.ts` | `sorts notes by id and rounds coordinates and sizes` | `buildLayout('d', [], [{id:'n-b',...,x:10.6,y:20.4,width:200.5,height:100.4,...},{id:'n-a',...}])` | notes are `['n-a','n-b']`; the `n-b` entry has `x:11, y:20, width:201, height:100` |
+| `test/unit/diagram/layoutFile.test.ts` | `defaults a missing collapsedByDefault to false` | note entry without the key | `.collapsedByDefault === false` |
+| `test/unit/diagram/layoutFile.test.ts` | `defaults missing width and height` | note entry without `width`/`height` | `{ width: 220, height: 120 }` |
+| `test/unit/diagram/layoutFile.test.ts` | `clamps below-minimum sizes` | note with `width: 10, height: 10` | `{ width: 120, height: 64 }` |
+| `test/unit/diagram/layoutFile.test.ts` | `rejects a non-array notes key` | `"version: 1\nname: d\ntables: []\nnotes: nope\n"` | throws `DiagramLayoutParseError` with message `Diagram file "notes" must be an array` |
+| `test/unit/diagram/layoutFile.test.ts` | `rejects a note entry that is not a mapping` | `notes: ['x']` | message `Every entry in "notes" must be a mapping` |
+| `test/unit/diagram/layoutFile.test.ts` | `rejects a note with no id` | note entry `{x: 1, y: 2}` | message `Every note entry needs an "id"` |
+| `test/unit/diagram/layoutFile.test.ts` | `rejects a non-string text` | note `{id:'n-1', text: 5, x:1, y:2}` | message `Note "n-1" needs a string "text"` |
+| `test/unit/diagram/layoutFile.test.ts` | `rejects non-finite coordinates` | note `{id:'n-1', x:'a', y:2}` | message `Note "n-1" needs numeric "x" and "y" coordinates` |
+| `test/unit/diagram/layoutFile.test.ts` | `rejects a non-boolean collapsedByDefault` | note `{id:'n-1', x:1, y:2, collapsedByDefault:'yes'}` | message `Note "n-1" needs a boolean "collapsedByDefault"` |
+| `test/unit/diagram/layoutFile.test.ts` | `keeps the first of duplicate note ids` | two notes with `id: 'n-1'`, texts `'first'` and `'second'` | one note, `text === 'first'` |
+| `test/unit/diagram/layoutFile.test.ts` | `createNote returns a default-sized empty note` | `createNote(30, 40, 'n-7')` | `{id:'n-7',text:'',x:30,y:40,width:220,height:120,collapsedByDefault:false}` |
+| `test/unit/diagram/layoutFile.test.ts` | `applyLayout passes notes through and still reconciles tables` | layout with tables `['orders','ghost']` and one note, known models `{'orders'}` | `visible` is `{'orders'}`, `missing` is `['ghost']`, `notes` deep-equals the input note array |
+| `test/unit/fixture.test.ts` | `the fixture diagram notes parse with sane values` | `fixtures/sample-dbt/diagrams/orders.dbtiagram.yml` | 2 notes; ids non-empty; `width >= 120`, `height >= 64`; exactly one has `collapsedByDefault === true` |
+
+Scenario coverage: *Adding a note from the toolbar*, *Adding a note by
+right-clicking*, *Dragging and resizing*, *Double-click collapse is temporary*,
+*Choosing the default display state*, *Deleting a note*, *Notes do not interfere
+with tables*, and *Notes in a diagram with no layout file yet* are React webview
+behaviors with no unit-test harness in this repo (matching spec 11) and are
+verified in the Manual Verify step; their **persisted** halves are covered by the
+`layoutFile.test.ts` rows above. *Notes are restored when reopened* maps to the
+round-trip and `applyLayout` rows plus the fixture row; *An older diagram file
+still opens* maps to the no-notes-key and omits-the-key rows; *A malformed note
+entry is reported* maps to the reject rows.
+
+### Verification
+
+1. `npm run verify` — typecheck + unit suites, must be green. Every pre-existing
+   `layoutFile.test.ts` case must still pass unchanged.
+2. `npm test` — before the commit, must be green.
+3. Manual (F5 on `fixtures/sample-dbt`, open `diagrams/orders.dbtiagram.yml`):
+   both fixture notes render in their stored states; add, drag, resize, edit,
+   collapse, and delete a note and confirm the file contents.
+
+### Do not touch
+
+- `src/dbt/**` — notes never touch a `model.yml`.
+- `src/shared/protocol.ts` — no new message types; `layout:save`,
+  `layout:changed` and `layout:apply` already carry a whole `DiagramLayout`.
+- `src/diagram/graph.ts`, `layout.ts`, `positions.ts`, `routing.ts`, `flow.ts` —
+  notes are excluded from dagre layout, position merging, and FK routing.
+- `src/shared/filter.ts` and `webview-ui/FilterSidebar.tsx` — notes never appear
+  in the sidebar.
+- `LAYOUT_VERSION`, `LAYOUT_FILE_SUFFIX`, `isLayoutFilePath`,
+  `defaultLayoutName`, `stripLayoutSuffix`, and the existing table parse/
+  serialize rules — all must stay byte-compatible.
+- The `writeArmedRef` guard in `useLayoutPersistence`.
+
 ## Acceptance Criteria
 
 - [ ] A note can be created from an "Add note" toolbar button and from an
       "Add note here" item in the empty-canvas context menu, at the viewport
       center and at the clicked point respectively.
 - [ ] A note is draggable in both expanded and collapsed form, and resizable from
-      its bottom-right corner, clamped to a minimum size, correct at any zoom.
+      its bottom-right corner, clamped to 120×64, correct at any zoom.
 - [ ] Double-click toggles the **runtime** collapsed state only and writes
-      nothing to disk; collapsed shows only a note icon with the first line as
-      its tooltip.
-- [ ] A note's persisted `collapsedByDefault` is changed only by its context
-      menu's checkable item, and decides how the note renders when the diagram is
-      opened.
+      nothing to disk; collapsed shows a 28×28 icon with the first non-empty line
+      as its tooltip.
+- [ ] `collapsedByDefault` is changed only by the note context menu's checkable
+      item and decides how the note renders when the diagram is opened.
 - [ ] A note's text is editable in place and committed on blur.
 - [ ] Notes are deletable via the Delete key and via their context menu.
-- [ ] Right-clicking a table node opens the feature 15 menu with
-      "Open in model.yml".
-- [ ] Notes persist in `.dbtiagram.yml` under an optional `notes` array
-      (`id`, `text`, `x`, `y`, `width`, `height`, `collapsedByDefault`), sorted
-      by `id`, with integer coordinates, written through the existing debounced
-      write-back and the explicit save; the key is omitted when there are no
-      notes.
-- [ ] `.dbtiagram.yml` files written before this feature load unchanged, and the
-      schema stays at `version: 1`.
+- [ ] Notes persist under an optional `notes` array (`id`, `text`, `x`, `y`,
+      `width`, `height`, `collapsedByDefault`), sorted by `id`, with integer
+      values, through the existing debounced write-back and the explicit save;
+      the key is omitted when there are no notes.
+- [ ] Files written before this feature load unchanged and the schema stays at
+      `version: 1`.
 - [ ] Notes never affect table layout, FK edge routing, the filter sidebar, or
       any `model.yml`.
-- [ ] `src/diagram/layoutFile.ts` stays pure (no `vscode` import) and every new
-      parse/serialize/default/clamp rule is covered by sub-second Vitest unit
-      tests; all existing `layoutFile.test.ts` cases still pass.
-- [ ] `npm test` and `npm run typecheck` pass; `src/dbt/*` is unchanged.
+- [ ] `src/diagram/layoutFile.ts` stays pure and every new parse/serialize/
+      default/clamp rule is covered by Vitest unit tests; all existing
+      `layoutFile.test.ts` cases still pass.
+- [ ] `specs/ARCHITECTURE.md` reflects the new and changed modules.
+- [ ] `npm run verify` is green.
 
 ## Confirm at Approval
 
-- **(a) Schema stays `version: 1` with an optional `notes` key.** This keeps
-  forward and backward compatibility (older builds ignore the key). The
-  alternative is bumping to `version: 2`, which would make older builds reject
-  the file outright. Confirm the non-breaking choice.
-- **(b) `collapsedByDefault` is separate from the runtime state.** *(Confirmed.)*
-  The file stores only `collapsedByDefault`; double-click toggles a webview-only
-  state and never writes to disk. Opening a diagram always renders each note per
-  its stored default.
-- **(c) Notes without an active layout.** They are fully usable but unsaved until
-  the diagram is saved, matching how table positions already behave. Confirm, or
-  ask for "Add note" to prompt for a save first.
-- **(d) Plain text only.** No markdown, colours, or per-note styling in v1.
-- **(e) Defaults.** New note: 220×120, `collapsedByDefault: false`, empty;
-  minimum 120×64; collapsed icon 28×28. Say if you want different numbers.
-- **(f) Z-order.** Notes render behind tables so a note can never hide a table.
+- **(a) Schema stays `version: 1`** with an optional `notes` key, keeping forward
+  and backward compatibility. The alternative — bumping to `version: 2` — would
+  make older builds reject the file outright. Confirm the non-breaking choice.
+- **(b) Notes without an active layout** are fully usable but unsaved until the
+  diagram is saved, matching how table positions already behave. Confirm, or ask
+  for "Add note" to prompt for a save first.
+- **(c) Defaults.** New note 220×120, empty, `collapsedByDefault: false`; minimum
+  120×64; collapsed icon 28×28. Say if you want different numbers.
+- **(d) Z-order.** Notes render behind tables so a note can never hide a table.
   Confirm, or ask for notes on top.
-- **(g) Shared context-menu component.** *(Confirmed: table nodes get the
-  "Open in model.yml" menu.)* The canvas, note, and table menus all reuse the
-  menu component specified in feature 15 §3, so feature 15 must land first.
