@@ -38,11 +38,7 @@ export interface SelectionState {
   reconcileToGraph: (diagram: DiagramGraph) => void;
 }
 
-/**
- * @param revealDetails Called whenever something is selected, so the details
- *   sidebar reopens if the user had collapsed it (spec 11).
- */
-export function useSelection(revealDetails: () => void): SelectionState {
+export function useSelection(): SelectionState {
   const [selection, setSelection] = useState<Selection>(null);
   const [focusedFk, setFocusedFk] = useState<ForeignKeyDescriptor | null>(null);
 
@@ -57,21 +53,15 @@ export function useSelection(revealDetails: () => void): SelectionState {
   // Spec 11: selecting anything (table header, column row, FK edge click/
   // double-click — the latter two funnel through onTableSelect) reveals the
   // details sidebar so the properties never seem to have "disappeared".
-  const onTableSelect = useCallback(
-    (model: string): void => {
-      setSelection({ kind: 'table', id: model });
-      revealDetails();
-    },
-    [revealDetails],
-  );
+  // Spec 19: visibility itself now lives in `App` (details-visibility.ts),
+  // keyed off the selection; this hook only tracks the selection.
+  const onTableSelect = useCallback((model: string): void => {
+    setSelection({ kind: 'table', id: model });
+  }, []);
 
-  const onColumnSelect = useCallback(
-    (model: string, column: string): void => {
-      setSelection({ kind: 'column', model, column });
-      revealDetails();
-    },
-    [revealDetails],
-  );
+  const onColumnSelect = useCallback((model: string, column: string): void => {
+    setSelection({ kind: 'column', model, column });
+  }, []);
 
   const onPaneClick = useCallback((): void => {
     setSelection(null);

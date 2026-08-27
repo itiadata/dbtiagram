@@ -36,6 +36,7 @@ up-to-date spec in `specs/features/`.
 | 16  | Sticky notes on the diagram | Done |
 | 17  | Modular source layout and fast feedback loop | Done |
 | 18  | Plan-time implementation contracts | Done |
+| 19  | Diagram viewport and chrome polish | Implemented |
 
 Status values: `draft` → `approved` → `implemented` → `done`.
 

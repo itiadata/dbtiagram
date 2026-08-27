@@ -1,13 +1,13 @@
 :root {
   color-scheme: light dark;
-  --bg: #f5f5f5;
-  --card: #ffffff;
-  --border: #d0d0d0;
-  --accent: #2563eb;
-  --accent-hover: #1e40af;
-  --text: #1f1f1f;
-  --muted: #6b6b6b;
-  --error: #b91c1c;
+  --bg: var(--vscode-editor-background, #f5f5f5);
+  --card: var(--vscode-editorWidget-background, var(--vscode-sideBar-background, #ffffff));
+  --border: var(--vscode-widget-border, var(--vscode-editorWidget-border, #d0d0d0));
+  --accent: var(--vscode-focusBorder, #2563eb);
+  --accent-hover: var(--vscode-textLink-activeForeground, #1e40af);
+  --text: var(--vscode-editor-foreground, var(--vscode-foreground, #1f1f1f));
+  --muted: var(--vscode-descriptionForeground, #6b6b6b);
+  --error: var(--vscode-errorForeground, #b91c1c);
 }
 
 html,
@@ -973,17 +973,6 @@ body {
   background: transparent;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --bg: #1f1f1f;
-    --card: #2b2b2b;
-    --border: #4a4a4a;
-    --text: #e6e6e6;
-    --muted: #9b9b9b;
-    --accent-hover: #60a5fa;
-  }
-}
-
 /* Spec 15: per-row actions affordance in the Models list. The row is a flex
    container so the "..." button sits at its trailing edge; the button stays in
    the tab order (keyboard access to the menu) but only paints on hover/focus. */
@@ -1139,3 +1128,29 @@ body {
   line-height: 1;
   cursor: pointer;
 }
+
+/* Spec 19: theme React Flow's Controls (zoom in/out, fit view, lock) with the
+   VS Code palette — the stock stylesheet hardcodes a white background and a
+   near-black SVG fill, which is unreadable on a dark theme. `fill: currentColor`
+   is needed on both the button and its `path` because React Flow's own CSS
+   sets a `fill` directly on the `path`, which otherwise wins. */
+.react-flow__controls {
+  box-shadow: none;
+}
+
+.react-flow__controls-button {
+  background: var(--card);
+  border-bottom: 1px solid var(--border);
+  color: var(--text);
+  fill: currentColor;
+}
+
+.react-flow__controls-button:hover {
+  background: color-mix(in srgb, var(--accent) 20%, var(--card));
+}
+
+.react-flow__controls-button svg,
+.react-flow__controls-button path {
+  fill: currentColor;
+}
+

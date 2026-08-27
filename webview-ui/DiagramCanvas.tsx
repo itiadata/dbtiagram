@@ -16,6 +16,7 @@ import {
   Panel,
   ReactFlow,
   applyNodeChanges,
+  useNodesInitialized,
   useReactFlow,
   type Edge,
   type EdgeChange,
@@ -69,9 +70,6 @@ export interface DiagramCanvasProps {
   /** Right-click on empty canvas; opens the "Add note here" menu (spec 16). */
   onPaneContextMenu: (event: ReactMouseEvent, flowPoint: { x: number; y: number }) => void;
   onDeleteSelectedNotes: () => void;
-  /** Bumped by the "Add note" toolbar button; creates a note at the center. */
-  addNoteTick: number;
-  onAddNoteAt: (x: number, y: number) => void;
 }
 
 export function DiagramCanvas({
@@ -95,12 +93,9 @@ export function DiagramCanvas({
   onNoteNodeChanges,
   onPaneContextMenu,
   onDeleteSelectedNotes,
-  addNoteTick,
-  onAddNoteAt,
 }: DiagramCanvasProps): JSX.Element {
   const { fitView, setCenter, getZoom, screenToFlowPosition } = useReactFlow();
   const containerRef = useRef<HTMLDivElement | null>(null);
-  const lastAddNoteTickRef = useRef(addNoteTick);
   // Seed the node list from the current flow so the first paint already has
   // full node rects (the live edge pass runs during render, before the adopt
   // effect below); later flow changes flow through the effect.
@@ -108,8 +103,9 @@ export function DiagramCanvas({
   const lastTickRef = useRef(layoutTick);
   const lastFilterTickRef = useRef(filterTick);
   const lastIdsRef = useRef<string[]>([]);
-  const firstFitRef = useRef(true);
   const lastSeedTickRef = useRef(seedTick);
+  const didInitialFitRef = useRef(false);
+  const nodesInitialized = useNodesInitialized();
 
   // Adopt each new diagram without disturbing the layout: existing nodes keep
   // their current position (manual drags and the previous arrangement survive),
@@ -148,12 +144,24 @@ export function DiagramCanvas({
     // 04 — the renamed card keeps its position via mergeFlowNodes).
     const added = ids.length > lastIdsRef.current.length;
     lastIdsRef.current = ids;
-    const isFirst = firstFitRef.current;
-    firstFitRef.current = false;
-    if (isFirst || added || reset || filterChanged || seeded) {
+    if (added || reset || filterChanged || seeded) {
       void fitView({ padding: 0.15, maxZoom: 1 });
     }
   }, [flow, layoutTick, filterTick, seedTick, seedPositions, fitView]);
+
+  // Spec 19: the pre-measurement `fitView` prop/`fitViewOptions` run before
+  // React Flow has measured the table cards, so the initial fit is against
+  // stale/default dimensions. Once nodes are actually measured, correct the
+  // viewport once — a ref guard keeps this to a single fit for the life of
+  // the panel, so later measurement churn (e.g. a card growing after an
+  // inline edit) never refits and disturbs an in-progress pan/zoom (spec 04).
+  useEffect(() => {
+    if (!nodesInitialized || didInitialFitRef.current) {
+      return;
+    }
+    didInitialFitRef.current = true;
+    void fitView({ padding: 0.15, maxZoom: 1 });
+  }, [nodesInitialized, fitView]);
 
   // Spec 13: report the live table positions upward so the App can save them
   // (and, while a layout is active, write them back after a short debounce).
@@ -306,25 +314,6 @@ export function DiagramCanvas({
     },
     [onDeleteSelectedNotes],
   );
-
-  // Spec 16: the "Add note" toolbar button lives outside ReactFlowProvider, so
-  // it bumps a tick and the canvas — which can translate screen to canvas
-  // coordinates — places the note at the center of the visible viewport.
-  useEffect(() => {
-    if (addNoteTick === lastAddNoteTickRef.current) {
-      return;
-    }
-    lastAddNoteTickRef.current = addNoteTick;
-    const rect = containerRef.current?.getBoundingClientRect();
-    if (rect === undefined) {
-      return;
-    }
-    const point = screenToFlowPosition({
-      x: rect.left + rect.width / 2,
-      y: rect.top + rect.height / 2,
-    });
-    onAddNoteAt(point.x, point.y);
-  }, [addNoteTick, screenToFlowPosition, onAddNoteAt]);
 
   const onPaneContextMenuInternal = useCallback(
     (event: ReactMouseEvent | MouseEvent): void => {

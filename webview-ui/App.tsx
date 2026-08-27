@@ -5,7 +5,7 @@
  * Since spec 17 the behavior lives in focused hooks (`hooks/`) and the canvas
  * and sidebar chrome are their own components; this file is composition only.
  */
-import { useCallback, useMemo, useState, type MouseEvent as ReactMouseEvent } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent } from 'react';
 import { ReactFlowProvider, type Edge, type Node } from '@xyflow/react';
 import type { ModelEdit } from '../src/dbt/edit';
 import type { ForeignKeyDescriptor } from '../src/dbt/types';
@@ -16,6 +16,7 @@ import { filterGraph } from '../src/shared/filter';
 import { DetailsSidebar, type SelectedEntity } from './DetailsSidebar';
 import { DiagramCanvas } from './DiagramCanvas';
 import { ContextMenu } from './ContextMenu';
+import { nextDetailsVisible, selectionKey } from './details-visibility';
 import {
   DiagramInteractionContext,
   type DiagramInteractionContextValue,
@@ -42,12 +43,11 @@ export function App(): JSX.Element {
   // Spec 11: sidebar visibility and widths are plain webview state — they
   // survive panel hide/reveal (retainContextWhenHidden) and reset on reopen.
   const [filterVisible, setFilterVisible] = useState(true);
-  const [detailsVisible, setDetailsVisible] = useState(true);
+  const [detailsVisible, setDetailsVisible] = useState(false);
   const [filterWidth, setFilterWidth] = useState(SIDEBAR_DEFAULT_WIDTH);
   const [detailsWidth, setDetailsWidth] = useState(SIDEBAR_DEFAULT_WIDTH);
 
-  const revealDetails = useCallback((): void => setDetailsVisible(true), []);
-  const selection = useSelection(revealDetails);
+  const selection = useSelection();
   const filter = useDiagramFilter();
   const notes = useNotes();
   const layout = useLayoutPersistence(notes.notes);
@@ -61,6 +61,16 @@ export function App(): JSX.Element {
     onColumnSelect,
     setFocusedFk,
   } = selection;
+
+  // Spec 19: the details sidebar's visibility is a pure function of whether
+  // the selection changed and, if so, to what — a manual collapse survives
+  // until the selection next changes.
+  const previousSelectionKeyRef = useRef(selectionKey(selection.selection));
+  useEffect(() => {
+    const key = selectionKey(selection.selection);
+    setDetailsVisible((previous) => nextDetailsVisible(previous, key, previousSelectionKeyRef.current));
+    previousSelectionKeyRef.current = key;
+  }, [selection.selection]);
 
   useHostMessages({
     onDiagramUpdate: (message) => {
@@ -173,12 +183,12 @@ export function App(): JSX.Element {
   const contextMenu = useContextMenu();
   const { openMenu, closeMenu } = contextMenu;
 
-  // Reveal selects the table and opens the details sidebar; the canvas centers
-  // on it. Nothing here touches filter state, so no layout write is triggered.
+  // Reveal selects the table; the details-visibility effect opens the
+  // sidebar as a consequence of the selection changing, and the canvas
+  // centers on it.
   const onRevealed = useCallback(
     (name: string): void => {
       onTableSelect(name);
-      setDetailsVisible(true);
     },
     [onTableSelect],
   );
@@ -199,16 +209,6 @@ export function App(): JSX.Element {
       textarea?.focus();
     });
   }, []);
-
-  const [addNoteTick, setAddNoteTick] = useState(0);
-
-  // The canvas resolves the viewport center and calls back with canvas coords.
-  const onAddNoteAt = useCallback(
-    (x: number, y: number): void => {
-      focusNoteText(notes.addNote(x, y));
-    },
-    [notes, focusNoteText],
-  );
 
   const onPaneContextMenu = useCallback(
     (event: ReactMouseEvent, flowPoint: { x: number; y: number }): void => {
@@ -362,15 +362,6 @@ export function App(): JSX.Element {
             <span className="app__status">{statusText}</span>
             <button
               type="button"
-              className="panel-button"
-              onClick={() => setAddNoteTick((tick) => tick + 1)}
-              disabled={graph === null}
-              title="Add a sticky note at the center of the view"
-            >
-              Add note
-            </button>
-            <button
-              type="button"
               className="panel-button app__save"
               onClick={layout.onSaveDiagram}
               disabled={graph === null}
@@ -442,8 +433,6 @@ export function App(): JSX.Element {
                     onNoteNodeChanges={notes.applyNoteNodeChanges}
                     onPaneContextMenu={onPaneContextMenu}
                     onDeleteSelectedNotes={onDeleteSelectedNotes}
-                    addNoteTick={addNoteTick}
-                    onAddNoteAt={onAddNoteAt}
                   />
                 </DiagramInteractionContext.Provider>
               </ReactFlowProvider>
