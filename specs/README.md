@@ -38,6 +38,7 @@ up-to-date spec in `specs/features/`.
 | 18  | Plan-time implementation contracts | Done |
 | 19  | Diagram viewport and chrome polish | Done |
 | 20  | Show foreign keys with missing columns as broken instead of dropping them | Implemented |
+| 21  | Fix details pane auto-reveal and the lost first click after opening a diagram | Done |
 
 Status values: `draft` → `approved` → `implemented` → `done`.
 

@@ -1,7 +1,7 @@
 ---
 id: 21
 title: Fix details pane auto-reveal and the lost first click after opening a diagram
-status: approved
+status: done
 priority: high
 created: 2026-08-27
 owner: unassigned
@@ -260,16 +260,16 @@ export function shouldRunInitialFit(
 
 ## Acceptance Criteria
 
-- [ ] Clicking a table header selects it and reveals the details sidebar on the
+- [x] Clicking a table header selects it and reveals the details sidebar on the
       first click.
-- [ ] Clicking a column row while the pane is open switches it to that column and
+- [x] Clicking a column row while the pane is open switches it to that column and
       keeps it open.
-- [ ] Clicking empty canvas clears the selection and collapses the pane.
-- [ ] A manual collapse survives re-selecting the same entity and is undone by
+- [x] Clicking empty canvas clears the selection and collapses the pane.
+- [x] A manual collapse survives re-selecting the same entity and is undone by
       selecting a different entity.
-- [ ] `App.tsx` no longer contains `previousSelectionKeyRef` or any ref read
+- [x] `App.tsx` no longer contains `previousSelectionKeyRef` or any ref read
       inside a state updater.
-- [ ] The post-measurement corrective fit runs in `useLayoutEffect` and is
+- [x] The post-measurement corrective fit runs in `useLayoutEffect` and is
       skipped once the user has interacted with the canvas.
-- [ ] The first click on a freshly opened diagram selects the clicked table.
-- [ ] `npm run verify` is green.
+- [x] The first click on a freshly opened diagram selects the clicked table.
+- [x] `npm run verify` is green.
