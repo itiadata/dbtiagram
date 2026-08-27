@@ -1,7 +1,7 @@
 ---
 id: 16
 title: Sticky notes on the diagram
-status: approved
+status: done
 priority: medium
 created: 2026-08-27
 owner: unassigned

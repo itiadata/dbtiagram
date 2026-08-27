@@ -32,8 +32,8 @@ up-to-date spec in `specs/features/`.
 | 12  | Obstacle-aware FK edge routing with free side choice | Done |
 | 13  | Saved diagram layout files | Done |
 | 14  | One diagram tab per source file, scoped to that file | Done |
-| 15  | Locate a model from the sidebar list | Approved |
-| 16  | Sticky notes on the diagram | Approved |
+| 15  | Locate a model from the sidebar list | Done |
+| 16  | Sticky notes on the diagram | Done |
 | 17  | Modular source layout and fast feedback loop | Done |
 | 18  | Plan-time implementation contracts | Done |
 

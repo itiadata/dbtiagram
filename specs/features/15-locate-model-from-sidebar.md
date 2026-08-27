@@ -1,7 +1,7 @@
 ---
 id: 15
 title: Locate a model from the sidebar list
-status: approved
+status: done
 priority: medium
 created: 2026-08-27
 owner: unassigned
