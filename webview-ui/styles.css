@@ -983,3 +983,86 @@ body {
     --accent-hover: #60a5fa;
   }
 }
+
+/* Spec 15: per-row actions affordance in the Models list. The row is a flex
+   container so the "..." button sits at its trailing edge; the button stays in
+   the tab order (keyboard access to the menu) but only paints on hover/focus. */
+.sidebar__row {
+  display: flex;
+  align-items: center;
+}
+
+.sidebar__row .sidebar__item {
+  flex: 1;
+  min-width: 0;
+}
+
+.sidebar__more {
+  flex-shrink: 0;
+  border: none;
+  background: none;
+  color: var(--text);
+  cursor: pointer;
+  padding: 0 4px;
+  font-size: 14px;
+  line-height: 1;
+  border-radius: 3px;
+  opacity: 0;
+}
+
+.sidebar__row:hover .sidebar__more,
+.sidebar__more:focus-visible {
+  opacity: 0.75;
+}
+
+.sidebar__more:hover {
+  opacity: 1;
+  background: color-mix(in srgb, var(--accent) 18%, transparent);
+}
+
+/* Spec 15: shared context menu. Portalled to <body> and fixed-positioned, so
+   sidebar/canvas overflow can never clip it. */
+.context-menu {
+  position: fixed;
+  z-index: 1000;
+  margin: 0;
+  padding: 4px;
+  list-style: none;
+  min-width: 180px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--card);
+  box-shadow: 0 4px 12px rgb(0 0 0 / 35%);
+}
+
+.context-menu__item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  padding: 5px 8px;
+  border: none;
+  border-radius: 3px;
+  background: none;
+  color: var(--text);
+  font: inherit;
+  font-size: 12px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.context-menu__item:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--accent) 20%, transparent);
+}
+
+.context-menu__item:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+/* Fixed gutter keeps labels aligned whether or not an item is checkable. */
+.context-menu__check {
+  display: inline-block;
+  width: 10px;
+  flex-shrink: 0;
+}

@@ -25,6 +25,7 @@ lines** under `test/unit/` (see `specs/features/17-modular-source-layout.md`).
 | `src/dbt/types.ts` | pure | The dbt model.yml data model shared across parsing, editing and diagramming. | `ModelYmlFile`, `ModelDefinition`, `ModelColumn`, `ModelConfig`, `ModelConstraint`, `DataTestEntry`, `ForeignKeyDescriptor`, `VirtualPrimaryKey`, `VirtualForeignKey`, `VirtualConstraintsBlock` |
 | `src/dbt/parse.ts` | pure | Parse model.yml text into `ModelYmlFile`, raising a typed error on malformed YAML. | `parseModelYml`, `ModelYmlParseError` |
 | `src/dbt/serialize.ts` | pure | Serialize a `ModelYmlFile` back to YAML text for write-back. | `serializeModelYml` |
+| `src/dbt/locate.ts` | pure | Locate a model's `name:` declaration in model.yml text via the yaml package's node ranges (spec 15). | `findModelDeclaration`, `DeclarationPosition` |
 | `src/dbt/refs.ts` | pure | Parse and rewrite `ref('…')` targets inside model properties. | `parseRef`, `renameRefTarget`, `RefTarget` |
 | `src/dbt/virtual.ts` | pure | Read/write the dbtiagram-managed virtual constraints block (PKs/FKs not expressed as dbt constraints). | `readVirtualConstraints`, `writeVirtualConstraints` |
 | `src/dbt/modelStore.ts` | pure | In-memory set of loaded model.yml files: upsert, text change, delete, rename, and redistribution of edited models. | `createModelStore`, `ModelStore`, `upsertRecord`, `applyTextChange`, `applyFileDeleted`, `applyFileRenamed`, `distributeEditedModels`, `replaceModelStore`, `ModelFileRecord`, `LoadedModelFile`, `FailedModelFile` |
@@ -60,7 +61,7 @@ lines** under `test/unit/` (see `specs/features/17-modular-source-layout.md`).
 
 | Path | Layer | Responsibility | Key exports |
 |------|-------|----------------|-------------|
-| `src/vscode/project.ts` | vscode-facing | Discover, read and write model.yml files in the workspace. | `loadModelYmlFiles`, `readFileText`, `writeModelYmlFile`, `ModelYmlRecord`, `ModelYmlFailure`, `ModelYmlLoadResult` |
+| `src/vscode/project.ts` | vscode-facing | Discover, read and write model.yml files in the workspace, and reveal a declaration in an editor. | `loadModelYmlFiles`, `readFileText`, `writeModelYmlFile`, `revealInEditor`, `ModelYmlRecord`, `ModelYmlFailure`, `ModelYmlLoadResult` |
 | `src/vscode/modelWatcher.ts` | vscode-facing | File-system watcher that pushes create/change/delete events to the panel. | `registerModelWatcher`, `ModelWatcherCallbacks` |
 | `src/vscode/editorButton.ts` | pure | Decision logic for whether the editor-title button shows for a document. | `shouldShowButton`, `isDiagramLayoutFile`, `modelFileContextKey`, `layoutFileContextKey` |
 | `src/vscode/editorButtonContext.ts` | vscode-facing | Registers the editor-title button and keeps its `when`-clause context keys in sync. | `registerEditorTitleButton` |
@@ -73,6 +74,7 @@ lines** under `test/unit/` (see `specs/features/17-modular-source-layout.md`).
 | `src/webview/panel.ts` | vscode-facing | The diagram panel: lifecycle, message pump, model store wiring, write-back. | `DiagramPanel` |
 | `src/webview/html.ts` | vscode-facing | Build the webview HTML shell (CSP, nonce, asset URIs). | `buildWebviewHtml` |
 | `src/webview/panelKey.ts` | pure | One panel per source file: key and title derivation. | `diagramPanelKey`, `diagramPanelTitle`, `DiagramSource`, `defaultCaseInsensitive` |
+| `src/webview/openSource.ts` | pure | Orchestrates "Open in model.yml" against a host port: resolve, read, locate, reveal or report (spec 15). | `openModelSource`, `OpenSourceHost` |
 | `src/webview/layoutMessages.ts` | pure | Layout-related message handling against a small `LayoutHost` port, so it stays testable. | `publishActiveLayout`, `openLayout`, `sendActiveLayout`, `saveLayout`, `writeActiveLayout`, `ActiveLayout`, `LayoutHost` |
 | `src/extension.ts` | vscode-facing | `activate` / `deactivate` only — command registration and disposal. | `activate`, `deactivate` |
 
@@ -85,6 +87,8 @@ lines** under `test/unit/` (see `specs/features/17-modular-source-layout.md`).
 | `webview-ui/DiagramCanvas.tsx` | webview | React Flow canvas: nodes, edges, pan/zoom, node drag. | `DiagramCanvas`, `DiagramCanvasProps` |
 | `webview-ui/TableNode.tsx` | webview | Custom React Flow node rendering a table with its column rows and handles. | `TableNode` |
 | `webview-ui/FkEdge.tsx` | webview | Custom FK edge renderer with hover-friendly interaction width. | `FkEdge`, `roundedPath` |
+| `webview-ui/ContextMenu.tsx` | webview | Reusable portal-rendered context menu with disabled and checkable items (spec 15). | `ContextMenu`, `ContextMenuItem`, `ContextMenuProps` |
+| `webview-ui/context-menu-position.ts` | webview (pure) | Viewport flip/clamp geometry for the context menu (spec 15). | `placeMenu`, `MenuBox`, `MenuPoint`, `MenuPlacement` |
 | `webview-ui/FilterSidebar.tsx` | webview | Left sidebar: file/model filtering, search, locate. | `FilterSidebar` |
 | `webview-ui/DetailsSidebar.tsx` | webview | Right sidebar: edit the selected model or column. | `DetailsSidebar`, `SelectedEntity` |
 | `webview-ui/PrimaryKeySection.tsx` | webview | Primary key editing UI inside the details sidebar. | `PrimaryKeySection` |
@@ -99,6 +103,8 @@ lines** under `test/unit/` (see `specs/features/17-modular-source-layout.md`).
 | `webview-ui/styles.css` | webview | Webview styling, themed from VS Code CSS variables. | — |
 | `webview-ui/hooks/useHostMessages.ts` | webview | Subscribe to host → webview messages and dispatch to handlers. | `useHostMessages`, `HostMessageHandlers`, `DiagramUpdateMessage`, `LayoutApplyMessage`, `LayoutActiveMessage` |
 | `webview-ui/hooks/useSelection.ts` | webview | Current model/column selection state. | `useSelection`, `Selection`, `SelectionState` |
+| `webview-ui/hooks/useContextMenu.ts` | webview | Open/close state (point + items) for the shared context menu (spec 15). | `useContextMenu`, `ContextMenuState` |
+| `webview-ui/hooks/useRevealModel.ts` | webview | "Reveal in diagram" target state and callback (spec 15). | `useRevealModel`, `RevealTarget`, `RevealModelState` |
 | `webview-ui/hooks/useDiagramFilter.ts` | webview | Filter sidebar state on top of `src/shared/filter.ts`. | `useDiagramFilter`, `DiagramFilterState` |
 | `webview-ui/hooks/useDraftForeignKeys.ts` | webview | Track in-progress FK edits that are not yet persistable. | `useDraftForeignKeys`, `DraftForeignKeysState` |
 | `webview-ui/hooks/useEdgeHighlighting.ts` | webview | Hover/selection highlighting of FK edges and handle dots. | `useEdgeHighlighting`, `EdgeHighlightingState` |

@@ -27,8 +27,9 @@ import { disambiguateFileLabels } from '../shared/labels';
 import type { DiagramModelFile, MessageToExtension, MessageToWebview } from '../shared/protocol';
 import { registerModelWatcher } from '../vscode/modelWatcher';
 import { promptForLayoutPath, readLayoutFile, writeLayoutFile } from '../vscode/layoutFiles';
-import { loadModelYmlFiles, readFileText, writeModelYmlFile } from '../vscode/project';
+import { loadModelYmlFiles, readFileText, revealInEditor, writeModelYmlFile } from '../vscode/project';
 import { buildWebviewHtml } from './html';
+import { openModelSource, type OpenSourceHost } from './openSource';
 import {
   openLayout,
   publishActiveLayout,
@@ -324,7 +325,27 @@ export class DiagramPanel {
       case 'layout:changed':
         await writeActiveLayout(this.layoutHost, message.layout);
         return;
+      case 'model:openSource':
+        await openModelSource(this.openSourceHost, message.model);
+        return;
     }
+  }
+
+  /** Adapter handing the pure "Open in model.yml" orchestration its host port. */
+  private get openSourceHost(): OpenSourceHost {
+    return {
+      // Store order resolves duplicate model names to the first declaring file.
+      findModelFile: (model) =>
+        this.store.records.find((record) =>
+          record.file.models.some((candidate) => candidate.name === model),
+        )?.uri,
+      readFileText: (fsPath) => readFileText(vscode.Uri.file(fsPath)),
+      reveal: (fsPath, position) => revealInEditor(vscode.Uri.file(fsPath), position),
+      showWarning: (message) => {
+        void vscode.window.showWarningMessage(message);
+      },
+      postError: (message) => this.postMessage({ type: 'diagram:error', message }),
+    };
   }
 
   /**

@@ -10,6 +10,7 @@
 import { useState, type CSSProperties, type ReactNode } from 'react';
 import { matchesSearch } from '../src/shared/filter';
 import type { DiagramModelFile } from '../src/shared/protocol';
+import type { ContextMenuItem } from './ContextMenu';
 
 interface CollapsibleSectionProps {
   title: string;
@@ -86,6 +87,12 @@ interface FilterSidebarProps {
   onClearFiles: () => void;
   onSelectAllModels: () => void;
   onClearModels: () => void;
+  /** Centers the diagram on a model and selects it (spec 15). */
+  onRevealModel: (name: string) => void;
+  /** Opens the model.yml declaring a model at its declaration line (spec 15). */
+  onOpenModelSource: (name: string) => void;
+  /** Opens the shared context menu (spec 15); the sidebar supplies the items. */
+  onOpenMenu: (x: number, y: number, items: ContextMenuItem[]) => void;
   /** Hides the whole sidebar, leaving its reopen rail (spec 11). */
   onCollapse: () => void;
   /** Inline width from the App's resize state (spec 11). */
@@ -107,6 +114,9 @@ export function FilterSidebar({
   onClearFiles,
   onSelectAllModels,
   onClearModels,
+  onRevealModel,
+  onOpenModelSource,
+  onOpenMenu,
   onCollapse,
   style,
 }: FilterSidebarProps): JSX.Element {
@@ -121,6 +131,18 @@ export function FilterSidebar({
   const visibleModels = availableModelNames.filter((name) => matchesSearch(name, modelSearch));
   const checkedFileCount = files.filter((file) => selectedFiles.has(file.uri)).length;
   const checkedModelCount = availableModelNames.filter((name) => selectedModels.has(name)).length;
+
+  // Spec 15: reveal is meaningless for a model the filter has hidden — there is
+  // no node to center on — so the item is offered disabled rather than absent.
+  const modelMenuItems = (name: string): ContextMenuItem[] => [
+    {
+      label: 'Reveal in diagram',
+      disabled: !selectedModels.has(name),
+      title: selectedModels.has(name) ? undefined : 'Model is hidden by the filter',
+      onSelect: () => onRevealModel(name),
+    },
+    { label: 'Open in model.yml', onSelect: () => onOpenModelSource(name) },
+  ];
 
   return (
     <aside className="sidebar" style={style}>
@@ -228,7 +250,14 @@ export function FilterSidebar({
               <li className="sidebar__empty">No matches</li>
             )}
             {visibleModels.map((name) => (
-              <li key={name}>
+              <li
+                key={name}
+                className="sidebar__row"
+                onContextMenu={(event) => {
+                  event.preventDefault();
+                  onOpenMenu(event.clientX, event.clientY, modelMenuItems(name));
+                }}
+              >
                 <label className="sidebar__item">
                   <input
                     type="checkbox"
@@ -237,6 +266,18 @@ export function FilterSidebar({
                   />
                   <span className="sidebar__item-label">{name}</span>
                 </label>
+                {/* Keyboard-reachable equivalent of the right-click menu. */}
+                <button
+                  type="button"
+                  className="sidebar__more"
+                  aria-label={`Actions for ${name}`}
+                  onClick={(event) => {
+                    const rect = event.currentTarget.getBoundingClientRect();
+                    onOpenMenu(rect.left, rect.bottom, modelMenuItems(name));
+                  }}
+                >
+                  ⋯
+                </button>
               </li>
             ))}
             {visibleModels.length === 0 && <li className="sidebar__empty">No matches</li>}

@@ -6,7 +6,7 @@
  * and sidebar chrome are their own components; this file is composition only.
  */
 import { useCallback, useMemo, useState, type MouseEvent as ReactMouseEvent } from 'react';
-import { ReactFlowProvider, type Edge } from '@xyflow/react';
+import { ReactFlowProvider, type Edge, type Node } from '@xyflow/react';
 import type { ModelEdit } from '../src/dbt/edit';
 import type { ForeignKeyDescriptor } from '../src/dbt/types';
 import type { DiagramGraph } from '../src/diagram/graph';
@@ -15,6 +15,7 @@ import { layoutDiagram } from '../src/diagram/layout';
 import { filterGraph } from '../src/shared/filter';
 import { DetailsSidebar, type SelectedEntity } from './DetailsSidebar';
 import { DiagramCanvas } from './DiagramCanvas';
+import { ContextMenu } from './ContextMenu';
 import {
   DiagramInteractionContext,
   type DiagramInteractionContextValue,
@@ -22,6 +23,8 @@ import {
 import { FilterSidebar } from './FilterSidebar';
 import { postToHost } from './host';
 import { useDiagramFilter } from './hooks/useDiagramFilter';
+import { useContextMenu } from './hooks/useContextMenu';
+import { useRevealModel } from './hooks/useRevealModel';
 import { useDraftForeignKeys } from './hooks/useDraftForeignKeys';
 import { useEdgeHighlighting } from './hooks/useEdgeHighlighting';
 import { useHostMessages } from './hooks/useHostMessages';
@@ -162,6 +165,39 @@ export function App(): JSX.Element {
     setLayoutTick((tick) => tick + 1);
   }, []);
 
+  const contextMenu = useContextMenu();
+  const { openMenu, closeMenu } = contextMenu;
+
+  // Reveal selects the table and opens the details sidebar; the canvas centers
+  // on it. Nothing here touches filter state, so no layout write is triggered.
+  const onRevealed = useCallback(
+    (name: string): void => {
+      onTableSelect(name);
+      setDetailsVisible(true);
+    },
+    [onTableSelect],
+  );
+  const { revealTarget, revealModel } = useRevealModel(onRevealed);
+
+  const onOpenModelSource = useCallback((model: string): void => {
+    postToHost({ type: 'model:openSource', model });
+  }, []);
+
+  // Spec 15: only table cards carry a menu; other node types (notes) are
+  // handled by their own features.
+  const onNodeContextMenu = useCallback(
+    (event: ReactMouseEvent, node: Node): void => {
+      event.preventDefault();
+      if (node.type !== 'table') {
+        return;
+      }
+      openMenu(event.clientX, event.clientY, [
+        { label: 'Open in model.yml', onSelect: () => onOpenModelSource(node.id) },
+      ]);
+    },
+    [openMenu, onOpenModelSource],
+  );
+
   const current = selection.selection;
   const interaction: DiagramInteractionContextValue = useMemo(
     () => ({
@@ -241,6 +277,9 @@ export function App(): JSX.Element {
             onClearFiles={filter.clearFiles}
             onSelectAllModels={filter.selectAllModels}
             onClearModels={filter.clearModels}
+            onRevealModel={revealModel}
+            onOpenModelSource={onOpenModelSource}
+            onOpenMenu={openMenu}
             onCollapse={() => setFilterVisible(false)}
           />
         ) : (
@@ -319,6 +358,8 @@ export function App(): JSX.Element {
                     onEdgeDoubleClick={onEdgeDoubleClick}
                     onAutoLayout={onAutoLayout}
                     onPaneClick={onPaneClick}
+                    onNodeContextMenu={onNodeContextMenu}
+                    revealTarget={revealTarget}
                   />
                 </DiagramInteractionContext.Provider>
               </ReactFlowProvider>
@@ -361,6 +402,15 @@ export function App(): JSX.Element {
           <SidebarRail side="right" onExpand={() => setDetailsVisible(true)} />
         )}
       </div>
+
+      {contextMenu.menu !== null && (
+        <ContextMenu
+          x={contextMenu.menu.x}
+          y={contextMenu.menu.y}
+          items={contextMenu.menu.items}
+          onClose={closeMenu}
+        />
+      )}
     </main>
   );
 }

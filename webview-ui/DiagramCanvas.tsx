@@ -34,6 +34,7 @@ import { HEADER_HEIGHT, NODE_WIDTH } from '../src/diagram/layout';
 import type { DiagramLayoutTable } from '../src/diagram/layoutFile';
 import { mergeFlowNodes, type NodePosition } from '../src/diagram/positions';
 import { FkEdge } from './FkEdge';
+import type { RevealTarget } from './hooks/useRevealModel';
 import { TableNode } from './TableNode';
 
 const nodeTypes: NodeTypes = { table: TableNode };
@@ -56,6 +57,10 @@ export interface DiagramCanvasProps {
   onEdgeDoubleClick: (event: ReactMouseEvent, edge: Edge) => void;
   onAutoLayout: () => void;
   onPaneClick: () => void;
+  /** Right-click on a node; the App decides the menu from `node.type` (spec 15). */
+  onNodeContextMenu: (event: ReactMouseEvent, node: Node) => void;
+  /** Centers the viewport on a table when this changes (spec 15). */
+  revealTarget: RevealTarget | null;
 }
 
 export function DiagramCanvas({
@@ -72,8 +77,10 @@ export function DiagramCanvas({
   onEdgeDoubleClick,
   onAutoLayout,
   onPaneClick,
+  onNodeContextMenu,
+  revealTarget,
 }: DiagramCanvasProps): JSX.Element {
-  const { fitView } = useReactFlow();
+  const { fitView, setCenter, getZoom } = useReactFlow();
   // Seed the node list from the current flow so the first paint already has
   // full node rects (the live edge pass runs during render, before the adopt
   // effect below); later flow changes flow through the effect.
@@ -226,6 +233,24 @@ export function DiagramCanvas({
     // this app (elementsSelectable is false), so there is nothing to apply.
   }, []);
 
+  // Spec 15: center on the requested table. Keyed on `rfNodes` too, so a reveal
+  // fired before the node exists (e.g. right after a filter change) lands as
+  // soon as it appears. Never zooms out: a user zoomed in past 0.8 stays there.
+  useEffect(() => {
+    if (revealTarget === null) {
+      return;
+    }
+    const node = rfNodes.find((candidate) => candidate.id === revealTarget.name);
+    if (node === undefined) {
+      return;
+    }
+    void setCenter(
+      node.position.x + (node.width ?? NODE_WIDTH) / 2,
+      node.position.y + (node.height ?? HEADER_HEIGHT) / 2,
+      { zoom: Math.max(getZoom(), 0.8), duration: 300 },
+    );
+  }, [revealTarget, rfNodes, setCenter, getZoom]);
+
   return (
     <ReactFlow
       nodes={liveNodes}
@@ -247,6 +272,7 @@ export function DiagramCanvas({
       onEdgeClick={onEdgeClick}
       onEdgeDoubleClick={onEdgeDoubleClick}
       onPaneClick={onPaneClick}
+      onNodeContextMenu={onNodeContextMenu}
       minZoom={0.1}
       maxZoom={2}
     >

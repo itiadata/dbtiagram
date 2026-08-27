@@ -7,6 +7,7 @@ import { parseModelYml, ModelYmlParseError } from '../dbt/parse';
 import { serializeModelYml } from '../dbt/serialize';
 import { isLayoutFilePath } from '../diagram/layoutFile';
 import type { ModelYmlFile } from '../dbt/types';
+import type { DeclarationPosition } from '../dbt/locate';
 
 export interface ModelYmlRecord {
   uri: vscode.Uri;
@@ -64,4 +65,34 @@ export async function loadModelYmlFiles(glob = '**/models/**/*.yml'): Promise<Mo
 /** Writes a model.yml file back to disk. */
 export async function writeModelYmlFile(uri: vscode.Uri, file: ModelYmlFile): Promise<void> {
   await vscode.workspace.fs.writeFile(uri, Buffer.from(serializeModelYml(file), 'utf8'));
+}
+
+/**
+ * Opens `uri` beside the diagram and selects the declaration at `position`
+ * (spec 15). A `null` position places the cursor at the top of the file. This
+ * is the only editor touch point in the extension.
+ */
+export async function revealInEditor(
+  uri: vscode.Uri,
+  position: DeclarationPosition | null,
+): Promise<void> {
+  const doc = await vscode.workspace.openTextDocument(uri);
+  const editor = await vscode.window.showTextDocument(doc, {
+    viewColumn: vscode.ViewColumn.Beside,
+    preserveFocus: false,
+    preview: true,
+  });
+
+  const selection =
+    position === null
+      ? new vscode.Selection(0, 0, 0, 0)
+      : new vscode.Selection(
+          position.line,
+          position.column,
+          position.line,
+          position.column + position.length,
+        );
+
+  editor.selection = selection;
+  editor.revealRange(selection, vscode.TextEditorRevealType.InCenterIfOutsideViewport);
 }

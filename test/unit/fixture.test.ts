@@ -3,6 +3,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { describe, expect, it } from 'vitest';
 import { parseModelYml } from '../../src/dbt/parse';
+import { findModelDeclaration } from '../../src/dbt/locate';
 import { serializeModelYml } from '../../src/dbt/serialize';
 import type { ModelDefinition } from '../../src/dbt/types';
 import { buildDiagram } from '../../src/diagram/graph';
@@ -129,5 +130,17 @@ describe('sample fixture (fixtures/sample-dbt)', () => {
 
     const known = new Set(loadFixtureModels().map((model) => model.name));
     expect(applyLayout(layout, known).missing).toEqual([]);
+  });
+
+  it('every fixture model is locatable in its own file (spec 15)', () => {
+    for (const file of listModelYmlFiles(fixtureModelsDir)) {
+      const content = fs.readFileSync(file, 'utf8');
+      const lines = content.split(/\r?\n/);
+      for (const model of parseModelYml(content, file).models) {
+        const position = findModelDeclaration(content, model.name);
+        expect(position, `${file}: ${model.name}`).not.toBeNull();
+        expect(lines[position?.line ?? 0]).toContain(model.name);
+      }
+    }
   });
 });

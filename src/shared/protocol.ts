@@ -55,4 +55,6 @@ export type MessageToExtension =
   /** Explicit "Save diagram" action; prompts for a path when none is active. */
   | { type: 'layout:save'; layout: DiagramLayout }
   /** Debounced live update; ignored when no layout is active. */
-  | { type: 'layout:changed'; layout: DiagramLayout };
+  | { type: 'layout:changed'; layout: DiagramLayout }
+  /** Open the model.yml declaring `model` and reveal its declaration (spec 15). */
+  | { type: 'model:openSource'; model: string };
