@@ -37,6 +37,12 @@ export type MessageToWebview =
       modelFiles: DiagramModelFile[];
     }
   | { type: 'diagram:error'; message: string }
+  /**
+   * Scope the file filter to exactly this model.yml (spec 14): the panel was
+   * opened from that file, so it starts showing only that file's models. Sent
+   * only for model-file sources, never for layouts or palette invocations.
+   */
+  | { type: 'filter:scope'; uri: string }
   /** A saved layout was opened: apply its visible tables and positions (spec 13). */
   | { type: 'layout:apply'; layout: DiagramLayout; missing: string[] }
   /** Which layout file the panel writes back to, if any (spec 13). */

@@ -5,6 +5,7 @@ import {
   filterGraph,
   matchesSearch,
   reconcileSelection,
+  scopeSelectionToFile,
 } from '../../../src/shared/filter';
 import type { DiagramModelFile } from '../../../src/shared/protocol';
 
@@ -127,5 +128,28 @@ describe('filterGraph', () => {
     const snapshot = JSON.stringify(graph);
     filterGraph(graph, new Set(['orders']));
     expect(JSON.stringify(graph)).toBe(snapshot);
+  });
+});
+
+describe('scopeSelectionToFile', () => {
+  it('checks exactly the given file and its models', () => {
+    const scoped = scopeSelectionToFile(files, 'C:/repo/models/orders.yml');
+    expect(scoped).not.toBeNull();
+    expect([...(scoped?.files ?? [])]).toEqual(['C:/repo/models/orders.yml']);
+    expect([...(scoped?.models ?? [])].sort()).toEqual(['order_items', 'orders']);
+  });
+
+  it('excludes the other files models', () => {
+    const scoped = scopeSelectionToFile(files, 'C:/repo/models/products.yml');
+    expect([...(scoped?.models ?? [])]).toEqual(['products']);
+    expect(scoped?.files.has('C:/repo/models/orders.yml')).toBe(false);
+  });
+
+  it('returns null for a file the webview does not know', () => {
+    expect(scopeSelectionToFile(files, 'C:/repo/models/missing.yml')).toBeNull();
+  });
+
+  it('returns null when there are no files at all', () => {
+    expect(scopeSelectionToFile([], 'C:/repo/models/orders.yml')).toBeNull();
   });
 });

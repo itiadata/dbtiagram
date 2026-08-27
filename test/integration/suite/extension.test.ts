@@ -102,7 +102,52 @@ suite('dbtiagram extension', () => {
       'the diagram webview should be created or revealed with a model file active',
     );
   });
+
+  // Spec 14: each source file gets its own diagram tab.
+  test('two different layout files open two diagram tabs', async () => {
+    const orders = vscode.Uri.file(
+      path.resolve(__dirname, '../../../../fixtures/sample-dbt/diagrams/orders.dbtiagram.yml'),
+    );
+    const customers = vscode.Uri.file(
+      path.resolve(__dirname, '../../../../fixtures/sample-dbt/diagrams/customers.dbtiagram.yml'),
+    );
+
+    await vscode.commands.executeCommand('dbtiagram.openLayout', orders);
+    await waitFor(() => diagramTabLabels().includes('dbt Diagram — orders'), 10_000);
+
+    await vscode.commands.executeCommand('dbtiagram.openLayout', customers);
+    const both = await waitFor(() => {
+      const labels = diagramTabLabels();
+      return (
+        labels.includes('dbt Diagram — orders') && labels.includes('dbt Diagram — customers')
+      );
+    }, 10_000);
+    assert.ok(
+      both,
+      `two different layout files must yield two diagram tabs, got ${JSON.stringify(
+        diagramTabLabels(),
+      )}`,
+    );
+
+    // Re-opening the same layout reveals its tab instead of adding another.
+    const before = diagramTabLabels().length;
+    await vscode.commands.executeCommand('dbtiagram.openLayout', customers);
+    await new Promise((resolve) => setTimeout(resolve, 1_000));
+    assert.strictEqual(
+      diagramTabLabels().length,
+      before,
+      're-opening the same layout must not create a second tab',
+    );
+  });
 });
+
+/** Labels of every open diagram tab. */
+function diagramTabLabels(): string[] {
+  return vscode.window.tabGroups.all
+    .flatMap((group) => group.tabs)
+    .map((tab) => tab.label)
+    .filter((label) => label.startsWith('dbt Diagram'));
+}
 
 function tabCount(): number {
   return vscode.window.tabGroups.all.flatMap((group) => group.tabs).length;
@@ -111,7 +156,7 @@ function tabCount(): number {
 function hasDiagramTab(): boolean {
   return vscode.window.tabGroups.all
     .flatMap((group) => group.tabs)
-    .some((tab) => tab.label === 'dbt Diagram');
+    .some((tab) => tab.label.startsWith('dbt Diagram'));
 }
 
 async function waitFor(predicate: () => boolean, timeoutMs: number): Promise<boolean> {

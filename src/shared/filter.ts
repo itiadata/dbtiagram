@@ -67,6 +67,25 @@ export function computeVisibleModels(
 }
 
 /**
+ * The filter selection for a diagram tab opened from a single model.yml
+ * (spec 14): exactly that file checked, with exactly its models checked.
+ *
+ * Returns `null` when the file is unknown to the webview (it produced no
+ * models, e.g. a parse failure), in which case the caller keeps spec 05's
+ * all-checked default rather than blanking the diagram.
+ */
+export function scopeSelectionToFile(
+  files: readonly DiagramModelFile[],
+  uri: string,
+): { files: Set<string>; models: Set<string> } | null {
+  const file = files.find((candidate) => candidate.uri === uri);
+  if (file === undefined) {
+    return null;
+  }
+  return { files: new Set([file.uri]), models: new Set(file.models) };
+}
+
+/**
  * Keeps the nodes whose id is visible and the edges whose source AND target
  * are both visible (an edge to a hidden table is dropped, mirroring
  * `buildDiagram`'s own "only known targets" rule).

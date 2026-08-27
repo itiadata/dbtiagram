@@ -31,13 +31,18 @@ import type { DiagramModelFile, MessageToExtension, MessageToWebview } from '../
 import { registerModelWatcher } from '../vscode/modelWatcher';
 import { promptForLayoutPath, readLayoutFile, writeLayoutFile } from '../vscode/layoutFiles';
 import { loadModelYmlFiles, readFileText, writeModelYmlFile } from '../vscode/project';
+import { diagramPanelKey, diagramPanelTitle, type DiagramSource } from './panelKey';
 
 /** Ignore text-change echoes of our own disk writes within this window. */
 const SELF_WRITE_IGNORE_MS = 250;
 
 export class DiagramPanel {
   public static readonly viewType = 'dbtiagram.diagramPanel';
-  public static current: DiagramPanel | undefined;
+  /**
+   * Open diagram tabs keyed by source identity (spec 14). Opening a source that
+   * already has a tab reveals it; anything else opens a new tab.
+   */
+  private static readonly panels = new Map<string, DiagramPanel>();
 
   private readonly panel: vscode.WebviewPanel;
   private readonly disposables: vscode.Disposable[] = [];
@@ -46,15 +51,23 @@ export class DiagramPanel {
   private readonly selfWrites = new Map<string, number>();
   /** The saved layout file this panel writes back to, if any (spec 13). */
   private activeLayout: { uri: vscode.Uri; name: string } | undefined;
+  /** What this tab was opened from, and its current registry key (spec 14). */
+  private source: DiagramSource;
+  private key: string;
 
   private constructor(
     panel: vscode.WebviewPanel,
     private readonly extensionUri: vscode.Uri,
     store: ModelStore,
+    source: DiagramSource,
+    key: string,
   ) {
     this.panel = panel;
     this.store = store;
+    this.source = source;
+    this.key = key;
     this.publish();
+    this.publishScope();
 
     this.disposables.push(
       ...registerModelWatcher({
@@ -80,24 +93,32 @@ export class DiagramPanel {
     panel.onDidDispose(() => this.dispose(), undefined, this.disposables);
   }
 
+  /**
+   * Reveals the tab already showing `source`, or opens a new one for it
+   * (spec 14). Revealing a layout tab re-reads its file so edits made on disk
+   * since it opened are picked up; revealing a model tab never re-scopes its
+   * filter, so the user's own selection survives.
+   */
   public static async createOrShow(
     extensionUri: vscode.Uri,
-    layoutUri?: vscode.Uri,
+    source: DiagramSource,
   ): Promise<void> {
-    const column = vscode.window.activeTextEditor?.viewColumn;
+    const key = diagramPanelKey(source);
 
-    if (DiagramPanel.current) {
-      DiagramPanel.current.panel.reveal(column);
-      if (layoutUri !== undefined) {
-        await DiagramPanel.current.openLayout(layoutUri);
+    const existing = DiagramPanel.panels.get(key);
+    if (existing !== undefined) {
+      existing.panel.reveal(existing.panel.viewColumn);
+      if (source.kind === 'layout') {
+        await existing.openLayout(vscode.Uri.file(source.fsPath));
       }
       return;
     }
 
+    // Diagrams always open split to the right of the file they came from.
     const panel = vscode.window.createWebviewPanel(
       DiagramPanel.viewType,
-      'dbt Diagram',
-      column ?? vscode.ViewColumn.One,
+      diagramPanelTitle(source),
+      vscode.ViewColumn.Beside,
       {
         enableScripts: true,
         retainContextWhenHidden: true,
@@ -112,13 +133,18 @@ export class DiagramPanel {
       result.failures.map((failure) => ({ uri: failure.uri.fsPath, error: failure.message })),
     );
 
-    const current = new DiagramPanel(panel, extensionUri, store);
-    DiagramPanel.current = current;
+    const current = new DiagramPanel(panel, extensionUri, store, source, key);
+    DiagramPanel.panels.set(key, current);
     panel.webview.html = current.getHtml();
 
-    if (layoutUri !== undefined) {
-      await current.openLayout(layoutUri);
+    if (source.kind === 'layout') {
+      await current.openLayout(vscode.Uri.file(source.fsPath));
     }
+  }
+
+  /** Every open diagram tab. */
+  public static all(): Iterable<DiagramPanel> {
+    return DiagramPanel.panels.values();
   }
 
   private static modelFileGlob(): string {
@@ -154,6 +180,18 @@ export class DiagramPanel {
       pendingErrors,
       modelFiles,
     });
+  }
+
+  /**
+   * Tells the webview to check only the model.yml this tab was opened from
+   * (spec 14). No-op for layout and palette sources, which keep their own
+   * defaults (the layout's tables / all files checked).
+   */
+  private publishScope(): void {
+    if (this.source.kind !== 'model') {
+      return;
+    }
+    this.postMessage({ type: 'filter:scope', uri: this.source.fsPath });
   }
 
   /** Reloads every model.yml file from disk, keeping last good data for broken files. */
@@ -227,6 +265,8 @@ export class DiagramPanel {
       case 'webview:ready':
         // The initial publish may have raced the webview's message listener.
         this.publish();
+        // The initial filter:scope raced it for the same reason (spec 14).
+        this.publishScope();
         // The initial layout:apply races it too, so a freshly opened panel
         // would otherwise fall back to the default (unfiltered, auto-laid-out)
         // view. Re-send it here, re-reading the file so any change written
@@ -272,6 +312,10 @@ export class DiagramPanel {
     }
 
     this.activeLayout = { uri, name: layout.name };
+    if (this.source.kind === 'layout') {
+      // The stored `name` can differ from the file's base name.
+      this.panel.title = diagramPanelTitle(this.source, layout.name);
+    }
     this.publish();
     this.postMessage({ type: 'layout:apply', layout, missing: this.missingModels(layout) });
     this.publishActiveLayout();
@@ -330,7 +374,32 @@ export class DiagramPanel {
     }
 
     this.activeLayout = { uri: target, name: named.name };
+    this.rekeyToLayout(target, named.name);
     this.publishActiveLayout();
+  }
+
+  /**
+   * After a diagram is saved for the first time, the tab becomes that layout's
+   * tab: it re-keys and re-titles itself so opening the file later reveals it
+   * (spec 14). When another tab already owns that key this one keeps its
+   * original key — both stay open and both write to the file, last write wins.
+   */
+  private rekeyToLayout(uri: vscode.Uri, name: string): void {
+    const source: DiagramSource = { kind: 'layout', fsPath: uri.fsPath };
+    const nextKey = diagramPanelKey(source);
+    this.panel.title = diagramPanelTitle(source, name);
+
+    if (nextKey === this.key) {
+      return;
+    }
+    if (DiagramPanel.panels.has(nextKey)) {
+      return;
+    }
+
+    DiagramPanel.panels.delete(this.key);
+    this.source = source;
+    this.key = nextKey;
+    DiagramPanel.panels.set(nextKey, this);
   }
 
   /** Debounced live write-back; a no-op while no layout is active. */
@@ -412,7 +481,10 @@ export class DiagramPanel {
   }
 
   private dispose(): void {
-    DiagramPanel.current = undefined;
+    // Only this tab's registration and watchers go; other tabs keep working.
+    if (DiagramPanel.panels.get(this.key) === this) {
+      DiagramPanel.panels.delete(this.key);
+    }
     for (const disposable of this.disposables) {
       disposable.dispose();
     }

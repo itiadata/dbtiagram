@@ -76,7 +76,7 @@
     "test": "npm run test:unit && npm run test:integration",
     "test:unit": "vitest run",
     "test:unit:watch": "vitest",
-    "test:integration": "npm run compile:test && node ./out/test/integration/runTests.js",
+    "test:integration": "npm run build && npm run compile:test && node ./out/test/integration/runTests.js",
     "compile:test": "tsc -p tsconfig.test.json",
     "package": "npm run build && vsce package"
   },

@@ -36,7 +36,12 @@ import {
 import { HEADER_HEIGHT, NODE_WIDTH, layoutDiagram } from '../src/diagram/layout';
 import { buildLayout, type DiagramLayoutTable } from '../src/diagram/layoutFile';
 import { mergeFlowNodes, type NodePosition } from '../src/diagram/positions';
-import { computeVisibleModels, filterGraph, reconcileSelection } from '../src/shared/filter';
+import {
+  computeVisibleModels,
+  filterGraph,
+  reconcileSelection,
+  scopeSelectionToFile,
+} from '../src/shared/filter';
 import type {
   DiagramModelFile,
   MessageToExtension,
@@ -122,6 +127,15 @@ export function App(): JSX.Element {
   // files/models (default checked) apart from ones the user unchecked.
   const previousFileUrisRef = useRef<string[]>([]);
   const previousModelNamesRef = useRef<string[]>([]);
+  // Spec 14: the freshest file metadata, readable synchronously by the
+  // `filter:scope` handler (which arrives as its own message event), and a
+  // latch making `layout:apply` win over any later scope message.
+  const modelFilesRef = useRef<DiagramModelFile[]>([]);
+  const layoutAppliedRef = useRef(false);
+  // Spec 13/14: guards the debounced layout write-back until the canvas has
+  // rendered at least one table, so opening a diagram can never truncate its
+  // file before the first render.
+  const writeArmedRef = useRef(false);
 
   // Spec 13: the saved layout this panel writes back to (null when none is
   // active), the positions to seed when a layout is applied, a tick that makes
@@ -165,6 +179,7 @@ export function App(): JSX.Element {
           );
           setError(null);
           setModelFiles(message.modelFiles);
+          modelFilesRef.current = message.modelFiles;
 
           const fileUris = message.modelFiles.map((file) => file.uri);
           const previousUris = previousFileUrisRef.current;
@@ -221,11 +236,24 @@ export function App(): JSX.Element {
           pendingRenameRef.current = null;
           break;
         }
+        // Spec 14: this tab was opened from a single model.yml, so it starts
+        // showing only that file's models. A layout always wins, and an unknown
+        // file leaves spec 05's all-checked default alone.
+        case 'filter:scope': {
+          if (layoutAppliedRef.current) break;
+          const scoped = scopeSelectionToFile(modelFilesRef.current, message.uri);
+          if (scoped === null) break;
+          setSelectedFiles(scoped.files);
+          setSelectedModels(scoped.models);
+          setFilterTick((tick) => tick + 1);
+          break;
+        }
         // Spec 13: a saved layout was opened. Its table list becomes the exact
         // visible set (every file is checked so file precedence can never hide
         // a layout table), and its coordinates seed the canvas.
         case 'layout:apply': {
           const names = message.layout.tables.map((table) => table.name);
+          layoutAppliedRef.current = true;
           setSelectedFiles(() => new Set(previousFileUrisRef.current));
           setSelectedModels(new Set(names));
           setSeedPositions(
@@ -636,6 +664,12 @@ export function App(): JSX.Element {
   // Spec 13: the canvas reports the live positions of the visible tables; they
   // are the single source for both the explicit save and the live write-back.
   const onPositionsChange = useCallback((tables: DiagramLayoutTable[]): void => {
+    // Arm the live write-back only once the canvas has actually rendered
+    // tables. Before that, `tablePositions` is still empty and a debounced
+    // write would truncate the opened layout file to `tables: []`.
+    if (tables.length > 0) {
+      writeArmedRef.current = true;
+    }
     setTablePositions((current) =>
       current.length === tables.length &&
       current.every(
@@ -660,6 +694,7 @@ export function App(): JSX.Element {
   // rewrites its file after a short debounce, with no further user action.
   useEffect(() => {
     if (activeLayout === null) return;
+    if (!writeArmedRef.current) return;
     const handle = window.setTimeout(() => {
       vscode.postMessage({
         type: 'layout:changed',
