@@ -25,6 +25,9 @@ up-to-date spec in `specs/features/`.
 | 11  | Sidebar visibility and resizable widths | Done |
 | 12  | Obstacle-aware FK edge routing with free side choice | Done |
 | 13  | Saved diagram layout files | Done |
+| 14  | Multiple diagram panels open side by side | Approved |
+| 15  | Locate a model from the sidebar list | Approved |
+| 16  | Sticky notes on the diagram | Approved |
 
 Status values: `draft` → `approved` → `implemented` → `done`.
 
