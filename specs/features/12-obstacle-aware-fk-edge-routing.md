@@ -248,6 +248,29 @@ So:
 - Nothing else changes: the routes themselves are already computed per edge and
   stay distinct.
 
+### 10. Any edit refreshes every node's handle bounds (Manual Verify iteration)
+
+Manual Verify (post-implementation, spec 19) found a further variant of the
+section 8 hazard: editing a column with **no** FK relationship at all — a pure
+rename, data type, or description change on an otherwise unrelated column —
+made every FK line in the diagram disappear.
+
+The cause is the same "stale cached handle bounds" mechanism, one level up.
+`mergeFlowNodes` (`src/diagram/positions.ts`) gives **every** node a brand-new
+`data`/`width`/`height` object on every `diagram:update`, not just the edited
+one (this is required — spec 04's live-grow behavior depends on it). But
+`TableNode`'s `useUpdateNodeInternals()` effect was keyed only on `handlesKey`
+(the sorted set of handle ids actually used by an edge), which is unchanged by
+an edit that touches no FK. So on such an edit, no node — not even the ones
+whose `data` object just changed — ever got its React Flow internals
+refreshed, and the previously-valid cached bounds went stale for the whole
+canvas.
+
+The fix: key the effect on `data` itself instead of `handlesKey`, so
+**any** edit that gives a node a new `data` object (i.e. every edit,
+diagram-wide, per the paragraph above) refreshes that node's handle bounds,
+whether or not the edit touched an FK.
+
 ## Scenarios
 
 ### A line between horizontally separated tables takes the direct path
@@ -323,6 +346,14 @@ Then a line is still drawn along the least-crossing path
 And no error is shown
 ```
 
+### Editing an unrelated column never drops an FK line
+
+```
+Given the dbt Diagram is open with an FK line between two tables
+When the user renames, retypes, or redescribes a column that is not part of any FK
+Then every FK line in the diagram is still drawn afterward
+```
+
 ## Acceptance Criteria
 
 - [ ] `routeEdge` is pure, deterministic, `vscode`-free, and chooses the side
@@ -358,6 +389,9 @@ And no error is shown
       obstacles, no-clean-route fallback, determinism, and the node-limit
       degradation; `flow` tests are updated; `npm test` and `npm run typecheck`
       pass.
+- [ ] `TableNode`'s `useUpdateNodeInternals()` effect is keyed on `data` (not
+      only `handlesKey`), so editing a column with no FK at all still
+      refreshes every node's cached handle bounds and no FK line disappears.
 
 ## Confirm at Approval
 

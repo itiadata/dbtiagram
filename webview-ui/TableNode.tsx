@@ -65,13 +65,22 @@ function TableNodeComponent({ id, data }: NodeProps<FlowNode>): JSX.Element {
   // FK lines is drawn" bug). `data.handles` therefore drives only visibility.
   const usedHandles = data.handles;
   const updateNodeInternals = useUpdateNodeInternals();
-  // The handle set never changes, but the shared-side dot offset moves a
-  // handle by 5px; refresh the cached bounds when the map changes so React
-  // Flow's endpoint coordinates catch up on the next frame.
-  const handlesKey = usedHandles === undefined ? '' : Object.keys(usedHandles).sort().join('|');
+  // Refresh React Flow's cached handle bounds whenever this node receives a
+  // new `data` object — which happens on EVERY diagram edit, not just one
+  // that adds/removes/moves an FK, because `mergeFlowNodes` (positions.ts)
+  // gives every node a brand-new `data`/`width`/`height` object on every
+  // `diagram:update` (spec 04's "refresh data/width/height" behavior). React
+  // Flow ties its handle-bounds cache to node identity, so without an
+  // explicit refresh here an edit to a column with no FK at all — same
+  // `handlesKey`, but a new `data` reference — leaves the cache stale and
+  // React Flow silently drops edges it can no longer resolve (the same
+  // "cached handle bounds" hazard spec 12 section 8 fixed for the
+  // conditionally-mounted-handle case). Keying on `data` itself, rather than
+  // only `handlesKey`, is what makes an edit anywhere in the diagram refresh
+  // every node's bounds, not just the node whose used-handle set changed.
   useEffect(() => {
     updateNodeInternals(id);
-  }, [id, handlesKey, updateNodeInternals]);
+  }, [id, data, updateNodeInternals]);
 
   const renderHandle = (
     column: string,

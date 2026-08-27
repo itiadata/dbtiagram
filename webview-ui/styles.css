@@ -1,7 +1,12 @@
 :root {
   color-scheme: light dark;
   --bg: var(--vscode-editor-background, #f5f5f5);
-  --card: var(--vscode-editorWidget-background, var(--vscode-sideBar-background, #ffffff));
+  --card: color-mix(
+    in srgb,
+    var(--vscode-editor-foreground, var(--vscode-foreground, #1f1f1f)) 4%,
+    var(--vscode-editorWidget-background, var(--vscode-sideBar-background, #ffffff))
+  );
+  --card-header: color-mix(in srgb, var(--vscode-editor-foreground, var(--vscode-foreground, #1f1f1f)) 6%, var(--card));
   --border: var(--vscode-widget-border, var(--vscode-editorWidget-border, #d0d0d0));
   --accent: var(--vscode-focusBorder, #2563eb);
   --accent-hover: var(--vscode-textLink-activeForeground, #1e40af);
@@ -802,6 +807,7 @@ body {
   justify-content: center;
   font-weight: 600;
   font-size: 13px;
+  background: var(--card-header);
   border-bottom: 1px solid var(--border);
   overflow: hidden;
   text-overflow: ellipsis;

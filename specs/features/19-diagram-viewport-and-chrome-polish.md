@@ -228,6 +228,18 @@ carry the theme). `color-scheme: light dark` stays.
 --error:        var(--vscode-errorForeground, #b91c1c)
 ```
 
+> **Manual Verify iteration:** in some themes `--vscode-editorWidget-background`
+> equals `--vscode-editor-background`, so the table card and the canvas behind
+> it (and the card and its own header) painted as the same flat color.
+> `--card` mixes in 4% of `--text` over that fallback chain, and a new
+> `--card-header` (6% of `--text` over `--card`) gives `.table-node__title` a
+> visibly distinct shade from the column rows below it:
+>
+> ```
+> --card:        color-mix(in srgb, var(--text) 4%, var(--vscode-editorWidget-background, var(--vscode-sideBar-background, #ffffff)))
+> --card-header: color-mix(in srgb, var(--text) 6%, var(--card))
+> ```
+
 Then append control-button rules (these must come after the imported React Flow
 stylesheet, i.e. at the end of `styles.css`):
 
@@ -299,6 +311,9 @@ from the Definition of Ready and is part of what is being approved here.**
 - [ ] A manual collapse persists until the selection next changes.
 - [ ] The `:root` palette reads VS Code theme variables and the
       `prefers-color-scheme` block is gone.
+- [ ] A table card is visibly distinct from the canvas background, and its
+      header row is visibly distinct from its column rows, even in themes
+      where `--vscode-editorWidget-background` equals `--vscode-editor-background`.
 - [ ] The zoom / fit / lock control buttons render with theme background and
       legible `currentColor` icons on a dark theme.
 - [ ] The header has no "Add note" button; `addNoteTick` and `onAddNoteAt` are
