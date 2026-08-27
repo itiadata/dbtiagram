@@ -1,7 +1,7 @@
 ---
 id: 19
 title: Diagram viewport and chrome polish
-status: approved
+status: done
 priority: medium
 created: 2026-08-27
 owner: unassigned
@@ -304,19 +304,19 @@ from the Definition of Ready and is part of what is being approved here.**
 
 ## Acceptance Criteria
 
-- [ ] Opening a diagram frames all table cards after measurement, at a legible zoom.
-- [ ] The details sidebar is collapsed when a diagram opens with nothing selected.
-- [ ] Selecting a table or column opens the details sidebar.
-- [ ] Clicking empty canvas clears the selection and collapses the details sidebar.
-- [ ] A manual collapse persists until the selection next changes.
-- [ ] The `:root` palette reads VS Code theme variables and the
+- [x] Opening a diagram frames all table cards after measurement, at a legible zoom.
+- [x] The details sidebar is collapsed when a diagram opens with nothing selected.
+- [x] Selecting a table or column opens the details sidebar.
+- [x] Clicking empty canvas clears the selection and collapses the details sidebar.
+- [x] A manual collapse persists until the selection next changes.
+- [x] The `:root` palette reads VS Code theme variables and the
       `prefers-color-scheme` block is gone.
-- [ ] A table card is visibly distinct from the canvas background, and its
+- [x] A table card is visibly distinct from the canvas background, and its
       header row is visibly distinct from its column rows, even in themes
       where `--vscode-editorWidget-background` equals `--vscode-editor-background`.
-- [ ] The zoom / fit / lock control buttons render with theme background and
+- [x] The zoom / fit / lock control buttons render with theme background and
       legible `currentColor` icons on a dark theme.
-- [ ] The header has no "Add note" button; `addNoteTick` and `onAddNoteAt` are
+- [x] The header has no "Add note" button; `addNoteTick` and `onAddNoteAt` are
       gone from `App.tsx` and `DiagramCanvas.tsx`.
-- [ ] Right-click "Add note here" still works.
-- [ ] `npm run verify` is green.
+- [x] Right-click "Add note here" still works.
+- [x] `npm run verify` is green.
