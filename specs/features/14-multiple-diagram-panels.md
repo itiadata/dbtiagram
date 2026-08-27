@@ -1,7 +1,7 @@
 ---
 id: 14
 title: One diagram tab per source file, scoped to that file
-status: implemented
+status: done
 priority: high
 created: 2026-08-27
 owner: unassigned
