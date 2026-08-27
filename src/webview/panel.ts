@@ -2,6 +2,9 @@
  * Extension-host side of the webview panel: owns the webview, the in-memory
  * model store, and persistence. Handles webview edit messages and live
  * model.yml changes from the workspace (spec 04).
+ *
+ * Since spec 17 this module holds panel lifecycle only: the document markup
+ * lives in `html.ts` and the layout message protocol in `layoutMessages.ts`.
  */
 import * as vscode from 'vscode';
 import { applyEdit } from '../dbt/edit';
@@ -18,19 +21,23 @@ import {
 } from '../dbt/modelStore';
 import type { ModelDefinition } from '../dbt/types';
 import { buildDiagram } from '../diagram/graph';
-import {
-  applyLayout,
-  defaultLayoutName,
-  isLayoutFilePath,
-  DiagramLayoutParseError,
-  type DiagramLayout,
-} from '../diagram/layoutFile';
+import { isLayoutFilePath, type DiagramLayout } from '../diagram/layoutFile';
 import { matchesGlob } from '../shared/glob';
 import { disambiguateFileLabels } from '../shared/labels';
 import type { DiagramModelFile, MessageToExtension, MessageToWebview } from '../shared/protocol';
 import { registerModelWatcher } from '../vscode/modelWatcher';
 import { promptForLayoutPath, readLayoutFile, writeLayoutFile } from '../vscode/layoutFiles';
 import { loadModelYmlFiles, readFileText, writeModelYmlFile } from '../vscode/project';
+import { buildWebviewHtml } from './html';
+import {
+  openLayout,
+  publishActiveLayout,
+  saveLayout,
+  sendActiveLayout,
+  writeActiveLayout,
+  type ActiveLayout,
+  type LayoutHost,
+} from './layoutMessages';
 import { diagramPanelKey, diagramPanelTitle, type DiagramSource } from './panelKey';
 
 /** Ignore text-change echoes of our own disk writes within this window. */
@@ -50,14 +57,13 @@ export class DiagramPanel {
   /** fsPath -> timestamp of our own disk writes, to ignore their echo. */
   private readonly selfWrites = new Map<string, number>();
   /** The saved layout file this panel writes back to, if any (spec 13). */
-  private activeLayout: { uri: vscode.Uri; name: string } | undefined;
+  private activeLayout: ActiveLayout | undefined;
   /** What this tab was opened from, and its current registry key (spec 14). */
   private source: DiagramSource;
   private key: string;
 
   private constructor(
     panel: vscode.WebviewPanel,
-    private readonly extensionUri: vscode.Uri,
     store: ModelStore,
     source: DiagramSource,
     key: string,
@@ -109,7 +115,7 @@ export class DiagramPanel {
     if (existing !== undefined) {
       existing.panel.reveal(existing.panel.viewColumn);
       if (source.kind === 'layout') {
-        await existing.openLayout(vscode.Uri.file(source.fsPath));
+        await openLayout(existing.layoutHost, source.fsPath);
       }
       return;
     }
@@ -133,12 +139,12 @@ export class DiagramPanel {
       result.failures.map((failure) => ({ uri: failure.uri.fsPath, error: failure.message })),
     );
 
-    const current = new DiagramPanel(panel, extensionUri, store, source, key);
+    const current = new DiagramPanel(panel, store, source, key);
     DiagramPanel.panels.set(key, current);
-    panel.webview.html = current.getHtml();
+    panel.webview.html = buildWebviewHtml(panel.webview, extensionUri);
 
     if (source.kind === 'layout') {
-      await current.openLayout(vscode.Uri.file(source.fsPath));
+      await openLayout(current.layoutHost, source.fsPath);
     }
   }
 
@@ -155,6 +161,33 @@ export class DiagramPanel {
 
   private get modelGlob(): string {
     return DiagramPanel.modelFileGlob();
+  }
+
+  /** Adapter handing the pure layout handlers everything they need. */
+  private get layoutHost(): LayoutHost {
+    return {
+      postMessage: (message) => this.postMessage(message),
+      getActiveLayout: () => this.activeLayout,
+      setActiveLayout: (active) => {
+        this.activeLayout = active;
+      },
+      readLayout: (fsPath) => readLayoutFile(vscode.Uri.file(fsPath)),
+      writeLayout: (fsPath, layout) => this.persistLayout(fsPath, layout),
+      promptForLayoutPath: async (defaultName) =>
+        (await promptForLayoutPath(defaultName))?.fsPath,
+      knownModelNames: () =>
+        new Set(
+          this.store.records.flatMap((record) => record.file.models.map((model) => model.name)),
+        ),
+      onLayoutOpened: (name) => {
+        if (this.source.kind === 'layout') {
+          // The stored `name` can differ from the file's base name.
+          this.panel.title = diagramPanelTitle(this.source, name);
+        }
+      },
+      onLayoutSaved: (fsPath, name) => this.rekeyToLayout(fsPath, name),
+      republish: () => this.publish(),
+    };
   }
 
   private publish(): void {
@@ -271,8 +304,8 @@ export class DiagramPanel {
         // would otherwise fall back to the default (unfiltered, auto-laid-out)
         // view. Re-send it here, re-reading the file so any change written
         // since the panel opened is picked up.
-        await this.sendActiveLayout();
-        this.publishActiveLayout();
+        await sendActiveLayout(this.layoutHost);
+        publishActiveLayout(this.layoutHost);
         return;
       case 'diagram:edit': {
         try {
@@ -286,96 +319,12 @@ export class DiagramPanel {
         return;
       }
       case 'layout:save':
-        await this.saveLayout(message.layout);
+        await saveLayout(this.layoutHost, message.layout);
         return;
       case 'layout:changed':
-        await this.writeActiveLayout(message.layout);
+        await writeActiveLayout(this.layoutHost, message.layout);
         return;
     }
-  }
-
-  /**
-   * Opens a saved layout file: parses it, reconciles it against the models that
-   * currently exist, and tells the webview to apply it (spec 13).
-   */
-  private async openLayout(uri: vscode.Uri): Promise<void> {
-    let layout: DiagramLayout;
-    try {
-      layout = await readLayoutFile(uri);
-    } catch (err) {
-      const detail = err instanceof DiagramLayoutParseError ? err.message : String(err);
-      this.postMessage({
-        type: 'diagram:error',
-        message: `Could not open ${defaultLayoutName(uri.fsPath)}: ${detail}`,
-      });
-      return;
-    }
-
-    this.activeLayout = { uri, name: layout.name };
-    if (this.source.kind === 'layout') {
-      // The stored `name` can differ from the file's base name.
-      this.panel.title = diagramPanelTitle(this.source, layout.name);
-    }
-    this.publish();
-    this.postMessage({ type: 'layout:apply', layout, missing: this.missingModels(layout) });
-    this.publishActiveLayout();
-  }
-
-  /**
-   * Re-reads the active layout from disk and re-applies it in the webview. Used
-   * on `webview:ready`, where the panel's first `layout:apply` may have raced
-   * the webview's message listener.
-   */
-  private async sendActiveLayout(): Promise<void> {
-    const active = this.activeLayout;
-    if (active === undefined) {
-      return;
-    }
-    try {
-      const layout = await readLayoutFile(active.uri);
-      this.activeLayout = { uri: active.uri, name: layout.name };
-      this.postMessage({ type: 'layout:apply', layout, missing: this.missingModels(layout) });
-    } catch {
-      // The file vanished or became invalid after it was opened; the diagram
-      // stays as it is and the next explicit open reports the error.
-    }
-  }
-
-  /** Layout entries naming models that no longer exist, in file order. */
-  private missingModels(layout: DiagramLayout): string[] {
-    const known = new Set(
-      this.store.records.flatMap((record) => record.file.models.map((model) => model.name)),
-    );
-    return applyLayout(layout, known).missing;
-  }
-
-  /**
-   * Handles the explicit "Save diagram" action: writes to the active layout, or
-   * prompts for a path when there is none. Cancelling the dialog is a no-op.
-   */
-  private async saveLayout(layout: DiagramLayout): Promise<void> {
-    let target = this.activeLayout?.uri;
-    if (target === undefined) {
-      target = await promptForLayoutPath(layout.name);
-      if (target === undefined) {
-        return;
-      }
-    }
-
-    const named: DiagramLayout = { ...layout, name: defaultLayoutName(target.fsPath) };
-    try {
-      await this.persistLayout(target, named);
-    } catch (err) {
-      this.postMessage({
-        type: 'diagram:error',
-        message: `Could not save diagram: ${err instanceof Error ? err.message : String(err)}`,
-      });
-      return;
-    }
-
-    this.activeLayout = { uri: target, name: named.name };
-    this.rekeyToLayout(target, named.name);
-    this.publishActiveLayout();
   }
 
   /**
@@ -384,8 +333,8 @@ export class DiagramPanel {
    * (spec 14). When another tab already owns that key this one keeps its
    * original key — both stay open and both write to the file, last write wins.
    */
-  private rekeyToLayout(uri: vscode.Uri, name: string): void {
-    const source: DiagramSource = { kind: 'layout', fsPath: uri.fsPath };
+  private rekeyToLayout(fsPath: string, name: string): void {
+    const source: DiagramSource = { kind: 'layout', fsPath };
     const nextKey = diagramPanelKey(source);
     this.panel.title = diagramPanelTitle(source, name);
 
@@ -402,35 +351,11 @@ export class DiagramPanel {
     DiagramPanel.panels.set(nextKey, this);
   }
 
-  /** Debounced live write-back; a no-op while no layout is active. */
-  private async writeActiveLayout(layout: DiagramLayout): Promise<void> {
-    const active = this.activeLayout;
-    if (active === undefined) {
-      return;
-    }
-    try {
-      await this.persistLayout(active.uri, { ...layout, name: active.name });
-    } catch (err) {
-      this.postMessage({
-        type: 'diagram:error',
-        message: `Could not update diagram: ${err instanceof Error ? err.message : String(err)}`,
-      });
-    }
-  }
-
-  private async persistLayout(uri: vscode.Uri, layout: DiagramLayout): Promise<void> {
-    await writeLayoutFile(uri, layout);
+  private async persistLayout(fsPath: string, layout: DiagramLayout): Promise<void> {
+    await writeLayoutFile(vscode.Uri.file(fsPath), layout);
     // Layout files never enter the model pipeline, but keeping the guard local
     // preserves the invariant if the glob ever changes.
-    this.selfWrites.set(uri.fsPath, Date.now());
-  }
-
-  private publishActiveLayout(): void {
-    this.postMessage({
-      type: 'layout:active',
-      path: this.activeLayout?.uri.fsPath ?? null,
-      name: this.activeLayout?.name ?? null,
-    });
+    this.selfWrites.set(fsPath, Date.now());
   }
 
   private async applyEditAndPersist(edit: ModelEdit): Promise<void> {
@@ -454,32 +379,6 @@ export class DiagramPanel {
     void this.panel.webview.postMessage(message);
   }
 
-  private getHtml(): string {
-    const webview = this.panel.webview;
-    const appUri = webview.asWebviewUri(
-      vscode.Uri.joinPath(this.extensionUri, 'dist', 'webview', 'app.js'),
-    );
-    const cssUri = webview.asWebviewUri(
-      vscode.Uri.joinPath(this.extensionUri, 'dist', 'webview', 'app.css'),
-    );
-    const nonce = getNonce();
-
-    return `<!DOCTYPE html>
-<html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src ${webview.cspSource} data:; style-src ${webview.cspSource} 'unsafe-inline'; script-src 'nonce-${nonce}';" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <link href="${cssUri}" rel="stylesheet" />
-    <title>dbt Diagram</title>
-  </head>
-  <body>
-    <div id="root"></div>
-    <script nonce="${nonce}" src="${appUri}"></script>
-  </body>
-</html>`;
-  }
-
   private dispose(): void {
     // Only this tab's registration and watchers go; other tabs keep working.
     if (DiagramPanel.panels.get(this.key) === this) {
@@ -490,15 +389,6 @@ export class DiagramPanel {
     }
     this.panel.dispose();
   }
-}
-
-function getNonce(): string {
-  const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
-  let nonce = '';
-  for (let i = 0; i < 32; i += 1) {
-    nonce += chars.charAt(Math.floor(Math.random() * chars.length));
-  }
-  return nonce;
 }
 
 /** The first workspace folder, used as the root for VS Code-style file labels. */

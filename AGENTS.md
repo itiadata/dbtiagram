@@ -40,7 +40,10 @@ The extension has **no runtime AI dependency** — it works fully offline.
 - `npm run build` — bundle extension host + webview with esbuild into `dist/`.
 - `npm run watch` — incremental rebuild on source change.
 - `npm run typecheck` — `tsc --noEmit` (strict).
-- `npm run test:unit` — Vitest unit suites (fast, no Electron host).
+- `npm run verify` — typecheck + unit suites. **This is the routine inner loop**;
+  it never launches the Electron host. Use it while iterating.
+- `npm run test:unit` — Vitest unit suites (fast, no Electron host). Pass a
+  filter to run a single suite: `npm run test:unit -- edit/column`.
 - `npm run test:integration` — Mocha integration suites in a real VS Code host
   (downloads/caches a VS Code build on first run).
 - `npm test` — unit + integration.
@@ -83,6 +86,13 @@ committed `.certs/` bundle only adds trust and is harmless.
    Write/extend the unit test alongside (or just before) the logic it verifies.
 4. **Self-Verification.** Before declaring a task complete, run `npm test` and
    resolve every failure. Type errors are failures too — run `npm run typecheck`.
+5. **Small Modules.** Soft cap of **400 lines per file** under `src/` and
+   `webview-ui/`, and **600 lines** under `test/unit/`. When a file approaches the
+   cap, split it along a responsibility seam and keep the original module path
+   working via an `index.ts` re-export. Oversized files are the main driver of
+   wasted context on every task (see `specs/features/17-modular-source-layout.md`).
+6. **Never read `package-lock.json` directly.** It is tens of thousands of lines.
+   Use `npm ls <pkg>`, `npm view <pkg> version`, or read `package.json` instead.
 
 ## Git & Version Control
 

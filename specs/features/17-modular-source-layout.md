@@ -1,7 +1,7 @@
 ---
 id: 17
 title: Modular source layout and fast feedback loop
-status: approved
+status: implemented
 priority: high
 created: 2026-08-27
 owner: unassigned
@@ -77,21 +77,31 @@ slow and its output noisy.
 ### `webview-ui/App.tsx`
 
 - `App()` retains only state ownership and composition.
-- `DiagramCanvas`, `SidebarRail`, and `SidebarResizer` move to their own files
-  under `webview-ui/`.
-- Extension-host message handling, selection state, and layout persistence each
-  move into a dedicated hook under `webview-ui/hooks/`.
+- `DiagramCanvas` moves to its own file; `SidebarRail` and `SidebarResizer`
+  move together into `webview-ui/SidebarChrome.tsx`.
+- Behavior moves into dedicated hooks under `webview-ui/hooks/`:
+  `useHostMessages` (the inbound message listener), `useSelection` (selection,
+  focused FK, pending renames), `useDiagramFilter` (spec 05/13/14 filtering),
+  `useLayoutPersistence` (spec 13 save + live write-back),
+  `useDraftForeignKeys` (spec 09 drafts), and `useEdgeHighlighting` (hover).
+- `acquireVsCodeApi()` may be called only once per webview, so the handle moves
+  to `webview-ui/host.ts`, which exposes a typed `postToHost`.
 - Sidebar width constants and `clampSidebarWidth` move to
   `webview-ui/sidebar-constants.ts`.
-- `App` stays the module's default public export used by `index.tsx`.
+- `App` stays the module's public export used by `index.tsx`.
+- Memo dependency lists must reference the individual stable callbacks returned
+  by the hooks, never the hook result objects (which are new on every render),
+  so `interaction` keeps its identity and `TableNode` re-render behavior is
+  unchanged.
 
 ### `test/unit/dbt/edit.test.ts`
 
 - Split to mirror the `src/dbt/edit/` modules, one suite file per handler module
   under `test/unit/dbt/edit/`.
-- Repeated inline YAML/model literals are replaced by factory helpers in
-  `test/unit/helpers/models.ts` (e.g. a builder producing a `ModelDefinition`
-  with overridable columns and constraints).
+- The shared base model set and virtual-block reader move to
+  `test/unit/helpers/models.ts`. Suites that build their own local fixtures keep
+  them: replacing those would change what the test asserts, which this
+  mechanical split explicitly must not do.
 - **Assertion count and coverage must not decrease**; this is a mechanical move,
   not a rewrite. No test may be deleted without being reproduced elsewhere.
 
@@ -100,8 +110,9 @@ slow and its output noisy.
 - Add `npm run verify` = `npm run typecheck && npm run test:unit` as the routine
   inner-loop command. `npm test` keeps its current meaning (unit + integration)
   and remains mandatory before every commit.
-- Configure Vitest with a `dot` reporter and bounded diff output so a failing run
-  reports the failure without dumping the whole suite.
+- Configure Vitest with a `dot` reporter and a bounded
+  `chaiConfig.truncateThreshold` so a failing run reports the mismatch without
+  dumping whole model objects.
 - Record in `AGENTS.md`: a soft cap of **400 lines per source file**, the
   `npm run verify` inner loop, and a note never to read `package-lock.json`
   directly (use `npm ls <pkg>`).
@@ -176,7 +187,7 @@ And no file under test/unit/ exceeds 600 lines
 - [ ] No file under `src/` or `webview-ui/` exceeds 400 lines; none under
       `test/unit/` exceeds 600 lines.
 - [ ] `npm run verify` exists and runs typecheck + unit tests only.
-- [ ] Vitest uses a compact reporter with bounded diff output.
+- [ ] Vitest uses a compact reporter with a bounded assertion-diff threshold.
 - [ ] `AGENTS.md` documents the size cap, `npm run verify`, and the
       `package-lock.json` rule.
 - [ ] `npm test` and `npm run typecheck` are green; product behavior is
