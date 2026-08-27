@@ -1,7 +1,7 @@
 ---
 id: 18
 title: Plan-time implementation contracts for split planning/implementation models
-status: implemented
+status: done
 priority: high
 created: 2026-08-27
 owner: unassigned

@@ -35,7 +35,7 @@ up-to-date spec in `specs/features/`.
 | 15  | Locate a model from the sidebar list | Approved |
 | 16  | Sticky notes on the diagram | Approved |
 | 17  | Modular source layout and fast feedback loop | Done |
-| 18  | Plan-time implementation contracts | Implemented |
+| 18  | Plan-time implementation contracts | Done |
 
 Status values: `draft` → `approved` → `implemented` → `done`.
 
