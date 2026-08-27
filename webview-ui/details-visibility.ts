@@ -35,3 +35,36 @@ export function nextDetailsVisible(
   if (key === previousKey) return previous;
   return key !== null;
 }
+
+/**
+ * Details-sidebar visibility paired with the selection key it was decided for.
+ *
+ * Keeping the two together as one value is what makes the transition below safe
+ * inside a React state updater: spec 19 originally kept the previous key in a
+ * ref that was overwritten *before* the lazy updater ran, so the updater always
+ * saw "selection unchanged" and the pane never opened (spec 21).
+ */
+export interface DetailsVisibility {
+  readonly visible: boolean;
+  readonly key: SelectionKey;
+}
+
+/** Starting state: collapsed, anchored to the selection present at mount. */
+export function initialDetailsVisibility(selection: Selection): DetailsVisibility {
+  return { visible: false, key: selectionKey(selection) };
+}
+
+/**
+ * Advances the state for the current selection. Pure and idempotent: applying
+ * it twice with the same selection yields the same state, so it is safe inside
+ * a React state updater and under StrictMode double-invocation. An unchanged
+ * selection returns `previous` itself, so a no-op update cannot re-render.
+ */
+export function advanceDetailsVisibility(
+  previous: DetailsVisibility,
+  selection: Selection,
+): DetailsVisibility {
+  const key = selectionKey(selection);
+  if (key === previous.key) return previous;
+  return { visible: nextDetailsVisible(previous.visible, key, previous.key), key };
+}

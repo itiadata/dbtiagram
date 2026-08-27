@@ -90,7 +90,8 @@ lines** under `test/unit/` (see `specs/features/17-modular-source-layout.md`).
 | `webview-ui/FkEdge.tsx` | webview | Custom FK edge renderer with hover-friendly interaction width. | `FkEdge`, `roundedPath` |
 | `webview-ui/ContextMenu.tsx` | webview | Reusable portal-rendered context menu with disabled and checkable items (spec 15). | `ContextMenu`, `ContextMenuItem`, `ContextMenuProps` |
 | `webview-ui/context-menu-position.ts` | webview (pure) | Viewport flip/clamp geometry for the context menu (spec 15). | `placeMenu`, `MenuBox`, `MenuPoint`, `MenuPlacement` |
-| `webview-ui/details-visibility.ts` | webview (pure) | Details sidebar visibility policy: opens/closes with the selection, manual collapse sticks until it next changes (spec 19). | `selectionKey`, `nextDetailsVisible`, `SelectionKey` |
+| `webview-ui/details-visibility.ts` | webview (pure) | Details sidebar visibility policy: opens/closes with the selection, manual collapse sticks until it next changes (spec 19); `{visible,key}` transition that keeps the policy safe inside a React state updater (spec 21). | `selectionKey`, `nextDetailsVisible`, `SelectionKey`, `DetailsVisibility`, `initialDetailsVisibility`, `advanceDetailsVisibility` |
+| `webview-ui/initial-fit.ts` | webview (pure) | Whether the one-off post-measurement corrective `fitView` should still run — skipped once fitted or once the user has touched the canvas (spec 21). | `shouldRunInitialFit` |
 | `webview-ui/FilterSidebar.tsx` | webview | Left sidebar: file/model filtering, search, locate. | `FilterSidebar` |
 | `webview-ui/DetailsSidebar.tsx` | webview | Right sidebar: edit the selected model or column. | `DetailsSidebar`, `SelectedEntity` |
 | `webview-ui/PrimaryKeySection.tsx` | webview | Primary key editing UI inside the details sidebar. | `PrimaryKeySection` |

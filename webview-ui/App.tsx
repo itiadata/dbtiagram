@@ -5,7 +5,7 @@
  * Since spec 17 the behavior lives in focused hooks (`hooks/`) and the canvas
  * and sidebar chrome are their own components; this file is composition only.
  */
-import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent } from 'react';
+import { useCallback, useEffect, useMemo, useState, type MouseEvent as ReactMouseEvent } from 'react';
 import { ReactFlowProvider, type Edge, type Node } from '@xyflow/react';
 import type { ModelEdit } from '../src/dbt/edit';
 import type { ForeignKeyDescriptor } from '../src/dbt/types';
@@ -16,7 +16,7 @@ import { filterGraph } from '../src/shared/filter';
 import { DetailsSidebar, type SelectedEntity } from './DetailsSidebar';
 import { DiagramCanvas } from './DiagramCanvas';
 import { ContextMenu } from './ContextMenu';
-import { nextDetailsVisible, selectionKey } from './details-visibility';
+import { advanceDetailsVisibility, initialDetailsVisibility } from './details-visibility';
 import {
   DiagramInteractionContext,
   type DiagramInteractionContextValue,
@@ -43,7 +43,8 @@ export function App(): JSX.Element {
   // Spec 11: sidebar visibility and widths are plain webview state — they
   // survive panel hide/reveal (retainContextWhenHidden) and reset on reopen.
   const [filterVisible, setFilterVisible] = useState(true);
-  const [detailsVisible, setDetailsVisible] = useState(false);
+  const [details, setDetails] = useState(() => initialDetailsVisibility(null));
+  const detailsVisible = details.visible;
   const [filterWidth, setFilterWidth] = useState(SIDEBAR_DEFAULT_WIDTH);
   const [detailsWidth, setDetailsWidth] = useState(SIDEBAR_DEFAULT_WIDTH);
 
@@ -64,12 +65,11 @@ export function App(): JSX.Element {
 
   // Spec 19: the details sidebar's visibility is a pure function of whether
   // the selection changed and, if so, to what — a manual collapse survives
-  // until the selection next changes.
-  const previousSelectionKeyRef = useRef(selectionKey(selection.selection));
+  // until the selection next changes. Spec 21: visibility and the key it was
+  // decided for advance together as one piece of state, so the transition reads
+  // only from `previous` and stays correct whenever React invokes the updater.
   useEffect(() => {
-    const key = selectionKey(selection.selection);
-    setDetailsVisible((previous) => nextDetailsVisible(previous, key, previousSelectionKeyRef.current));
-    previousSelectionKeyRef.current = key;
+    setDetails((previous) => advanceDetailsVisibility(previous, selection.selection));
   }, [selection.selection]);
 
   useHostMessages({
@@ -469,10 +469,13 @@ export function App(): JSX.Element {
             onRemoveLastPair={(fk) => {
               if (selectedTableId !== null) drafts.removeLastPair(selectedTableId, fk);
             }}
-            onCollapse={() => setDetailsVisible(false)}
+            onCollapse={() => setDetails((previous) => ({ ...previous, visible: false }))}
           />
         ) : (
-          <SidebarRail side="right" onExpand={() => setDetailsVisible(true)} />
+          <SidebarRail
+            side="right"
+            onExpand={() => setDetails((previous) => ({ ...previous, visible: true }))}
+          />
         )}
       </div>
 

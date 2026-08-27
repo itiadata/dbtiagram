@@ -5,6 +5,7 @@
 import {
   useCallback,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -36,6 +37,7 @@ import type { DiagramLayoutTable } from '../src/diagram/layoutFile';
 import { mergeFlowNodes, type NodePosition } from '../src/diagram/positions';
 import { FkEdge } from './FkEdge';
 import type { RevealTarget } from './hooks/useRevealModel';
+import { shouldRunInitialFit } from './initial-fit';
 import { NoteNode } from './NoteNode';
 import { TableNode } from './TableNode';
 
@@ -105,6 +107,10 @@ export function DiagramCanvas({
   const lastIdsRef = useRef<string[]>([]);
   const lastSeedTickRef = useRef(seedTick);
   const didInitialFitRef = useRef(false);
+  // Spec 21: set on the first pointerdown anywhere on the canvas, in the
+  // capture phase so it is recorded before React Flow's drag handling and
+  // before any child's `stopPropagation`. Read only by the corrective fit.
+  const userInteractedRef = useRef(false);
   const nodesInitialized = useNodesInitialized();
 
   // Adopt each new diagram without disturbing the layout: existing nodes keep
@@ -155,8 +161,14 @@ export function DiagramCanvas({
   // viewport once — a ref guard keeps this to a single fit for the life of
   // the panel, so later measurement churn (e.g. a card growing after an
   // inline edit) never refits and disturbs an in-progress pan/zoom (spec 04).
-  useEffect(() => {
-    if (!nodesInitialized || didInitialFitRef.current) {
+  //
+  // Spec 21: this runs in a *layout* effect so the corrected viewport is
+  // committed before the browser paints the un-fitted one — the user can never
+  // see, and so never click, a layout that is about to shift. Should the fit
+  // still be pending once the user has touched the canvas, it is abandoned
+  // outright rather than yanking a card out from under an in-flight click.
+  useLayoutEffect(() => {
+    if (!shouldRunInitialFit(nodesInitialized, didInitialFitRef.current, userInteractedRef.current)) {
       return;
     }
     didInitialFitRef.current = true;
@@ -331,7 +343,15 @@ export function DiagramCanvas({
   );
 
   return (
-    <div className="canvas__surface" ref={containerRef} onKeyDown={onKeyDown} role="presentation">
+    <div
+      className="canvas__surface"
+      ref={containerRef}
+      onKeyDown={onKeyDown}
+      onPointerDownCapture={() => {
+        userInteractedRef.current = true;
+      }}
+      role="presentation"
+    >
     <ReactFlow
       nodes={renderedNodes}
       edges={liveStyledEdges}
