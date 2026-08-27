@@ -28,7 +28,7 @@ up-to-date spec in `specs/features/`.
 | 14  | One diagram tab per source file, scoped to that file | Done |
 | 15  | Locate a model from the sidebar list | Approved |
 | 16  | Sticky notes on the diagram | Approved |
-| 17  | Modular source layout and fast feedback loop | Approved |
+| 17  | Modular source layout and fast feedback loop | Done |
 
 Status values: `draft` → `approved` → `implemented` → `done`.
 

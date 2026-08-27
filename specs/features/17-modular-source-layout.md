@@ -1,7 +1,7 @@
 ---
 id: 17
 title: Modular source layout and fast feedback loop
-status: implemented
+status: done
 priority: high
 created: 2026-08-27
 owner: unassigned
