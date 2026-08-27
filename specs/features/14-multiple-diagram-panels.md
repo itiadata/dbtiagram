@@ -158,7 +158,17 @@ resolves to the group next to the *active* one, a second diagram opened from a
 model.yml in the left group joins the existing diagram group as a sibling tab
 rather than creating a third column.
 
-### 6. Tests
+### 6. Layout write-back guard
+
+Spec 13's debounced `layout:changed` write fires 400 ms after `layout:active`
+arrives, using the canvas's reported table positions. On a freshly opened tab
+those positions are still empty, so the write could truncate the layout file to
+`tables: []` before the first render. The webview therefore **arms** the live
+write-back only once the canvas has reported at least one table; a user who
+later unchecks everything still writes an empty list, because arming has already
+happened.
+
+### 7. Tests
 
 - `test/unit/webview/panelKey.test.ts`: `diagramPanelKey` is stable for the same
   path, differs across paths, distinguishes kinds (`model:/a/x.yml` !==
@@ -288,6 +298,8 @@ And opening order-marts.dbtiagram.yml from the editor title bar reveals that
 - [ ] A `model.yml` edit made in one tab is reflected in every other open tab
       through the existing watcher path, with no layout loss.
 - [ ] Saving a previously unsaved diagram re-keys and re-titles its tab.
+- [ ] Opening a saved diagram never truncates its layout file before the canvas
+      has rendered.
 - [ ] `src/webview/panelKey.ts` is pure (no `vscode` import) and covered by
       sub-second Vitest unit tests.
 - [ ] `npm test` and `npm run typecheck` pass; `src/dbt/*` and `src/diagram/*`
