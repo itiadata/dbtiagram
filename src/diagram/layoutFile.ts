@@ -22,11 +22,30 @@ export interface DiagramLayoutTable {
   y: number;
 }
 
+/** A free-text sticky note pinned to the canvas (spec 16). */
+export interface DiagramNote {
+  id: string;
+  text: string;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  /** How the note renders when the diagram is opened. Runtime toggles never change it. */
+  collapsedByDefault: boolean;
+}
+
+export const NOTE_DEFAULT_WIDTH = 220;
+export const NOTE_DEFAULT_HEIGHT = 120;
+export const NOTE_MIN_WIDTH = 120;
+export const NOTE_MIN_HEIGHT = 64;
+
 /** The full contents of a saved diagram layout file. */
 export interface DiagramLayout {
   version: typeof LAYOUT_VERSION;
   name: string;
   tables: DiagramLayoutTable[];
+  /** Always present in memory; `[]` when the file has no notes. */
+  notes: DiagramNote[];
 }
 
 export class DiagramLayoutParseError extends Error {
@@ -67,10 +86,12 @@ export function stripLayoutSuffix(name: string): string {
 /**
  * Builds a layout from the currently visible tables. Tables are sorted by name
  * and coordinates rounded to integers so repeated writes produce minimal diffs.
+ * Notes (spec 16) get the same treatment, sorted by id.
  */
 export function buildLayout(
   name: string,
   visible: readonly { name: string; x: number; y: number }[],
+  notes: readonly DiagramNote[] = [],
 ): DiagramLayout {
   const tables = visible
     .map((table) => ({
@@ -79,16 +100,57 @@ export function buildLayout(
       y: Math.round(table.y),
     }))
     .sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0));
-  return { version: LAYOUT_VERSION, name, tables };
+  const sortedNotes = notes
+    .map((note) => ({
+      ...note,
+      x: Math.round(note.x),
+      y: Math.round(note.y),
+      width: Math.round(note.width),
+      height: Math.round(note.height),
+    }))
+    .sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
+  return { version: LAYOUT_VERSION, name, tables, notes: sortedNotes };
 }
 
-/** Serializes a layout deterministically (fixed key order, sorted tables). */
+/**
+ * A default-sized empty note at the given canvas point. `id` is supplied by the
+ * caller so this stays pure (id generation lives in the webview).
+ */
+export function createNote(x: number, y: number, id: string): DiagramNote {
+  return {
+    id,
+    text: '',
+    x,
+    y,
+    width: NOTE_DEFAULT_WIDTH,
+    height: NOTE_DEFAULT_HEIGHT,
+    collapsedByDefault: false,
+  };
+}
+
+/**
+ * Serializes a layout deterministically (fixed key order, sorted entries). The
+ * `notes` key is omitted entirely when there are none, so files written before
+ * spec 16 are not churned by an empty array.
+ */
 export function serializeDiagramLayout(layout: DiagramLayout): string {
-  return stringify({
+  const root: Record<string, unknown> = {
     version: layout.version,
     name: layout.name,
     tables: layout.tables.map((table) => ({ name: table.name, x: table.x, y: table.y })),
-  });
+  };
+  if (layout.notes.length > 0) {
+    root.notes = layout.notes.map((note) => ({
+      id: note.id,
+      text: note.text,
+      x: note.x,
+      y: note.y,
+      width: note.width,
+      height: note.height,
+      collapsedByDefault: note.collapsedByDefault,
+    }));
+  }
+  return stringify(root);
 }
 
 /**
@@ -150,7 +212,78 @@ export function parseDiagramLayout(text: string, fallbackName: string): DiagramL
   }
 
   const name = typeof raw.name === 'string' && raw.name !== '' ? raw.name : fallbackName;
-  return { version: LAYOUT_VERSION, name, tables };
+  return { version: LAYOUT_VERSION, name, tables, notes: parseNotes(raw.notes, fallbackName) };
+}
+
+/**
+ * Parses the optional `notes` key (spec 16). Missing means "no notes", so files
+ * written before spec 16 load unchanged; anything present but malformed is a
+ * hard error rather than a silently dropped note.
+ */
+function parseNotes(raw: unknown, fallbackName: string): DiagramNote[] {
+  if (raw === undefined || raw === null) {
+    return [];
+  }
+  if (!Array.isArray(raw)) {
+    throw new DiagramLayoutParseError(fallbackName, 'Diagram file "notes" must be an array');
+  }
+
+  const seen = new Set<string>();
+  const notes: DiagramNote[] = [];
+  for (const entry of raw) {
+    if (!isRecord(entry)) {
+      throw new DiagramLayoutParseError(fallbackName, 'Every entry in "notes" must be a mapping');
+    }
+    const { id, text, x, y, width, height, collapsedByDefault } = entry;
+    if (typeof id !== 'string' || id === '') {
+      throw new DiagramLayoutParseError(fallbackName, 'Every note entry needs an "id"');
+    }
+    if (text !== undefined && text !== null && typeof text !== 'string') {
+      throw new DiagramLayoutParseError(fallbackName, `Note "${id}" needs a string "text"`);
+    }
+    if (!isFiniteNumber(x) || !isFiniteNumber(y)) {
+      throw new DiagramLayoutParseError(
+        fallbackName,
+        `Note "${id}" needs numeric "x" and "y" coordinates`,
+      );
+    }
+    const hasWidth = width !== undefined && width !== null;
+    const hasHeight = height !== undefined && height !== null;
+    if ((hasWidth && !isFiniteNumber(width)) || (hasHeight && !isFiniteNumber(height))) {
+      throw new DiagramLayoutParseError(
+        fallbackName,
+        `Note "${id}" needs numeric "width" and "height"`,
+      );
+    }
+    if (
+      collapsedByDefault !== undefined &&
+      collapsedByDefault !== null &&
+      typeof collapsedByDefault !== 'boolean'
+    ) {
+      throw new DiagramLayoutParseError(
+        fallbackName,
+        `Note "${id}" needs a boolean "collapsedByDefault"`,
+      );
+    }
+    // Duplicates keep the first entry, mirroring the table rule above.
+    if (seen.has(id)) {
+      continue;
+    }
+    seen.add(id);
+    notes.push({
+      id,
+      text: typeof text === 'string' ? text : '',
+      x,
+      y,
+      // A note smaller than the minimum would be unusable, so sizes are clamped
+      // rather than rejected.
+      width: Math.max(hasWidth ? (width as number) : NOTE_DEFAULT_WIDTH, NOTE_MIN_WIDTH),
+      height: Math.max(hasHeight ? (height as number) : NOTE_DEFAULT_HEIGHT, NOTE_MIN_HEIGHT),
+      collapsedByDefault: collapsedByDefault === true,
+    });
+  }
+
+  return notes;
 }
 
 /** The result of reconciling a layout against the models that actually exist. */
@@ -161,6 +294,8 @@ export interface AppliedLayout {
   positions: Map<string, NodePosition>;
   /** Layout entries naming models that no longer exist, in file order. */
   missing: string[];
+  /** Passed through untouched — notes reference nothing in the workspace. */
+  notes: DiagramNote[];
 }
 
 /**
@@ -184,7 +319,7 @@ export function applyLayout(
     positions.set(table.name, { x: table.x, y: table.y });
   }
 
-  return { visible, positions, missing };
+  return { visible, positions, missing, notes: layout.notes };
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

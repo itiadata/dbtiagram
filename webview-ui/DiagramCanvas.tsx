@@ -35,9 +35,10 @@ import type { DiagramLayoutTable } from '../src/diagram/layoutFile';
 import { mergeFlowNodes, type NodePosition } from '../src/diagram/positions';
 import { FkEdge } from './FkEdge';
 import type { RevealTarget } from './hooks/useRevealModel';
+import { NoteNode } from './NoteNode';
 import { TableNode } from './TableNode';
 
-const nodeTypes: NodeTypes = { table: TableNode };
+const nodeTypes: NodeTypes = { table: TableNode, note: NoteNode };
 // The obstacle-aware FK edge (spec 12) — it draws the routed polyline.
 const edgeTypes: EdgeTypes = { [FK_EDGE_TYPE]: FkEdge };
 
@@ -61,6 +62,16 @@ export interface DiagramCanvasProps {
   onNodeContextMenu: (event: ReactMouseEvent, node: Node) => void;
   /** Centers the viewport on a table when this changes (spec 15). */
   revealTarget: RevealTarget | null;
+  /** Sticky note nodes, rendered behind the tables (spec 16). */
+  noteNodes: Node[];
+  noteIds: ReadonlySet<string>;
+  onNoteNodeChanges: (changes: NodeChange[]) => void;
+  /** Right-click on empty canvas; opens the "Add note here" menu (spec 16). */
+  onPaneContextMenu: (event: ReactMouseEvent, flowPoint: { x: number; y: number }) => void;
+  onDeleteSelectedNotes: () => void;
+  /** Bumped by the "Add note" toolbar button; creates a note at the center. */
+  addNoteTick: number;
+  onAddNoteAt: (x: number, y: number) => void;
 }
 
 export function DiagramCanvas({
@@ -79,8 +90,17 @@ export function DiagramCanvas({
   onPaneClick,
   onNodeContextMenu,
   revealTarget,
+  noteNodes,
+  noteIds,
+  onNoteNodeChanges,
+  onPaneContextMenu,
+  onDeleteSelectedNotes,
+  addNoteTick,
+  onAddNoteAt,
 }: DiagramCanvasProps): JSX.Element {
-  const { fitView, setCenter, getZoom } = useReactFlow();
+  const { fitView, setCenter, getZoom, screenToFlowPosition } = useReactFlow();
+  const containerRef = useRef<HTMLDivElement | null>(null);
+  const lastAddNoteTickRef = useRef(addNoteTick);
   // Seed the node list from the current flow so the first paint already has
   // full node rects (the live edge pass runs during render, before the adopt
   // effect below); later flow changes flow through the effect.
@@ -223,9 +243,28 @@ export function DiagramCanvas({
     [liveEdges, appEdgesById],
   );
 
-  const onNodesChange = useCallback((changes: NodeChange[]): void => {
-    setRfNodes((current) => applyNodeChanges(changes, current));
-  }, []);
+  // Spec 16: notes are React Flow nodes too, but they live in their own state
+  // and must never enter `rfNodes` — the routing, fit and position-report
+  // passes above all assume tables only. Changes are partitioned by id;
+  // changes without an id (e.g. viewport-level) go to the table branch.
+  const onNodesChange = useCallback(
+    (changes: NodeChange[]): void => {
+      const noteChanges: NodeChange[] = [];
+      const tableChanges: NodeChange[] = [];
+      for (const change of changes) {
+        const id = 'id' in change ? change.id : undefined;
+        if (id !== undefined && noteIds.has(id)) noteChanges.push(change);
+        else tableChanges.push(change);
+      }
+      if (noteChanges.length > 0) {
+        onNoteNodeChanges(noteChanges);
+      }
+      if (tableChanges.length > 0) {
+        setRfNodes((current) => applyNodeChanges(tableChanges, current));
+      }
+    },
+    [noteIds, onNoteNodeChanges],
+  );
 
   const onEdgesChange = useCallback((_changes: EdgeChange[]): void => {
     // Edges are fully derived here: geometry from the live node positions,
@@ -251,9 +290,61 @@ export function DiagramCanvas({
     );
   }, [revealTarget, rfNodes, setCenter, getZoom]);
 
+  // Spec 16: Delete/Backspace removes the selected notes. Ignored while the
+  // caret is in a text field, so editing a note's text never deletes it.
+  const onKeyDown = useCallback(
+    (event: React.KeyboardEvent<HTMLDivElement>): void => {
+      if (event.key !== 'Delete' && event.key !== 'Backspace') {
+        return;
+      }
+      const target = event.target as HTMLElement | null;
+      const tag = target?.tagName;
+      if (tag === 'INPUT' || tag === 'TEXTAREA' || target?.isContentEditable === true) {
+        return;
+      }
+      onDeleteSelectedNotes();
+    },
+    [onDeleteSelectedNotes],
+  );
+
+  // Spec 16: the "Add note" toolbar button lives outside ReactFlowProvider, so
+  // it bumps a tick and the canvas — which can translate screen to canvas
+  // coordinates — places the note at the center of the visible viewport.
+  useEffect(() => {
+    if (addNoteTick === lastAddNoteTickRef.current) {
+      return;
+    }
+    lastAddNoteTickRef.current = addNoteTick;
+    const rect = containerRef.current?.getBoundingClientRect();
+    if (rect === undefined) {
+      return;
+    }
+    const point = screenToFlowPosition({
+      x: rect.left + rect.width / 2,
+      y: rect.top + rect.height / 2,
+    });
+    onAddNoteAt(point.x, point.y);
+  }, [addNoteTick, screenToFlowPosition, onAddNoteAt]);
+
+  const onPaneContextMenuInternal = useCallback(
+    (event: ReactMouseEvent | MouseEvent): void => {
+      event.preventDefault();
+      const point = screenToFlowPosition({ x: event.clientX, y: event.clientY });
+      onPaneContextMenu(event as ReactMouseEvent, point);
+    },
+    [screenToFlowPosition, onPaneContextMenu],
+  );
+
+  // Notes paint first so a note can never hide a table card (spec 16).
+  const renderedNodes = useMemo(
+    () => [...noteNodes, ...liveNodes.map((node) => ({ ...node, zIndex: 1 }))],
+    [noteNodes, liveNodes],
+  );
+
   return (
+    <div className="canvas__surface" ref={containerRef} onKeyDown={onKeyDown} role="presentation">
     <ReactFlow
-      nodes={liveNodes}
+      nodes={renderedNodes}
       edges={liveStyledEdges}
       onNodesChange={onNodesChange}
       onEdgesChange={onEdgesChange}
@@ -273,6 +364,7 @@ export function DiagramCanvas({
       onEdgeDoubleClick={onEdgeDoubleClick}
       onPaneClick={onPaneClick}
       onNodeContextMenu={onNodeContextMenu}
+      onPaneContextMenu={onPaneContextMenuInternal}
       minZoom={0.1}
       maxZoom={2}
     >
@@ -284,5 +376,6 @@ export function DiagramCanvas({
         </button>
       </Panel>
     </ReactFlow>
+    </div>
   );
 }

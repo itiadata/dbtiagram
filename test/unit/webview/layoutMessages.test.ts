@@ -24,6 +24,7 @@ const layout: DiagramLayout = {
   version: LAYOUT_VERSION,
   name: 'orders',
   tables: [{ name: 'orders', x: 10, y: 20 }],
+  notes: [],
 };
 
 interface StubHost extends LayoutHost {

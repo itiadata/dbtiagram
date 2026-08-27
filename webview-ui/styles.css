@@ -1066,3 +1066,76 @@ body {
   width: 10px;
   flex-shrink: 0;
 }
+
+/* Spec 16: sticky notes. The surface wrapper exists so the canvas can catch
+   Delete/Backspace keydowns bubbling out of the React Flow pane. */
+.canvas__surface {
+  width: 100%;
+  height: 100%;
+}
+
+.note {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  box-sizing: border-box;
+  border: 1px solid color-mix(in srgb, #d4b106 60%, var(--border));
+  border-radius: 4px;
+  background: color-mix(in srgb, #ffe58f 22%, var(--card));
+  color: var(--text);
+  overflow: hidden;
+}
+
+.react-flow__node.selected > .note {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 1px var(--accent);
+}
+
+.note__header {
+  flex-shrink: 0;
+  padding: 3px 6px;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  opacity: 0.65;
+  cursor: grab;
+  background: color-mix(in srgb, #d4b106 16%, transparent);
+  user-select: none;
+}
+
+.note__text {
+  flex: 1;
+  min-height: 0;
+  resize: none;
+  border: none;
+  outline: none;
+  padding: 6px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+/* Bottom-right resize grip, drawn as two stacked corner rules. */
+.note__grip {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  width: 14px;
+  height: 14px;
+  cursor: nwse-resize;
+  background:
+    linear-gradient(135deg, transparent 50%, color-mix(in srgb, var(--text) 45%, transparent) 50%);
+}
+
+.note--collapsed {
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  align-items: center;
+  justify-content: center;
+  font-size: 15px;
+  line-height: 1;
+  cursor: pointer;
+}

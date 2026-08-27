@@ -46,7 +46,7 @@ lines** under `test/unit/` (see `specs/features/17-modular-source-layout.md`).
 | `src/diagram/positions.ts` | pure | Position bookkeeping: overlap avoidance and merging user-moved positions into freshly built nodes. | `avoidOverlap`, `mergeFlowNodes`, `rectsOverlap`, `NodePosition`, `NodeRect`, `OVERLAP_PADDING`, `OVERLAP_STEP_Y` |
 | `src/diagram/routing.ts` | pure | Obstacle-aware orthogonal edge routing with free side choice. | `routeEdge`, `Route`, `RouteRequest`, `RouteEndpoint`, `RouteSide`, `Point`, `STUB_PX`, `ROUTE_MARGIN`, `OBSTACLE_PENALTY`, `BEND_PENALTY`, `ROUTING_NODE_LIMIT` |
 | `src/diagram/flow.ts` | pure | Convert the diagram graph into React Flow nodes/edges and route them; owns handle-id conventions. | `buildFlowElements`, `routeEdges`, `columnSourceHandle`, `columnTargetHandle`, `columnRowIndexLookup`, `FlowNode`, `FlowEdge`, `FlowElements`, `HandleSide`, `FK_EDGE_TYPE`, `EDGE_INTERACTION_WIDTH` |
-| `src/diagram/layoutFile.ts` | pure | The saved `.dbtiagram` layout file format: build, serialize, parse, apply. | `buildLayout`, `serializeDiagramLayout`, `parseDiagramLayout`, `applyLayout`, `isLayoutFilePath`, `defaultLayoutName`, `stripLayoutSuffix`, `DiagramLayout`, `DiagramLayoutTable`, `AppliedLayout`, `DiagramLayoutParseError`, `LAYOUT_FILE_SUFFIX`, `LAYOUT_VERSION` |
+| `src/diagram/layoutFile.ts` | pure | The saved `.dbtiagram` layout file format: build, serialize, parse, apply, including sticky notes (spec 16). | `buildLayout`, `serializeDiagramLayout`, `parseDiagramLayout`, `applyLayout`, `createNote`, `isLayoutFilePath`, `defaultLayoutName`, `stripLayoutSuffix`, `DiagramLayout`, `DiagramLayoutTable`, `DiagramNote`, `AppliedLayout`, `DiagramLayoutParseError`, `LAYOUT_FILE_SUFFIX`, `LAYOUT_VERSION`, `NOTE_DEFAULT_WIDTH`, `NOTE_DEFAULT_HEIGHT`, `NOTE_MIN_WIDTH`, `NOTE_MIN_HEIGHT` |
 
 ## `src/shared/` — host ↔ webview shared code
 
@@ -86,6 +86,7 @@ lines** under `test/unit/` (see `specs/features/17-modular-source-layout.md`).
 | `webview-ui/App.tsx` | webview | Top-level composition: state hooks, sidebars, canvas. | `App` |
 | `webview-ui/DiagramCanvas.tsx` | webview | React Flow canvas: nodes, edges, pan/zoom, node drag. | `DiagramCanvas`, `DiagramCanvasProps` |
 | `webview-ui/TableNode.tsx` | webview | Custom React Flow node rendering a table with its column rows and handles. | `TableNode` |
+| `webview-ui/NoteNode.tsx` | webview | Custom React Flow node rendering a sticky note: resizable rectangle, textarea, or collapsed icon (spec 16). | `NoteNode`, `NoteNodeData` |
 | `webview-ui/FkEdge.tsx` | webview | Custom FK edge renderer with hover-friendly interaction width. | `FkEdge`, `roundedPath` |
 | `webview-ui/ContextMenu.tsx` | webview | Reusable portal-rendered context menu with disabled and checkable items (spec 15). | `ContextMenu`, `ContextMenuItem`, `ContextMenuProps` |
 | `webview-ui/context-menu-position.ts` | webview (pure) | Viewport flip/clamp geometry for the context menu (spec 15). | `placeMenu`, `MenuBox`, `MenuPoint`, `MenuPlacement` |
@@ -105,6 +106,7 @@ lines** under `test/unit/` (see `specs/features/17-modular-source-layout.md`).
 | `webview-ui/hooks/useSelection.ts` | webview | Current model/column selection state. | `useSelection`, `Selection`, `SelectionState` |
 | `webview-ui/hooks/useContextMenu.ts` | webview | Open/close state (point + items) for the shared context menu (spec 15). | `useContextMenu`, `ContextMenuState` |
 | `webview-ui/hooks/useRevealModel.ts` | webview | "Reveal in diagram" target state and callback (spec 15). | `useRevealModel`, `RevealTarget`, `RevealModelState` |
+| `webview-ui/hooks/useNotes.ts` | webview | Sticky note state: persisted notes, runtime collapse map, node projection, mutations (spec 16). | `useNotes`, `NotesState` |
 | `webview-ui/hooks/useDiagramFilter.ts` | webview | Filter sidebar state on top of `src/shared/filter.ts`. | `useDiagramFilter`, `DiagramFilterState` |
 | `webview-ui/hooks/useDraftForeignKeys.ts` | webview | Track in-progress FK edits that are not yet persistable. | `useDraftForeignKeys`, `DraftForeignKeysState` |
 | `webview-ui/hooks/useEdgeHighlighting.ts` | webview | Hover/selection highlighting of FK edges and handle dots. | `useEdgeHighlighting`, `EdgeHighlightingState` |

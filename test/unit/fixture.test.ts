@@ -132,6 +132,19 @@ describe('sample fixture (fixtures/sample-dbt)', () => {
     expect(applyLayout(layout, known).missing).toEqual([]);
   });
 
+  it('the fixture diagram notes parse with sane values (spec 16)', () => {
+    const layoutPath = path.resolve(fixtureModelsDir, '../diagrams/orders.dbtiagram.yml');
+    const layout = parseDiagramLayout(fs.readFileSync(layoutPath, 'utf8'), 'orders');
+
+    expect(layout.notes).toHaveLength(2);
+    for (const note of layout.notes) {
+      expect(note.id).not.toBe('');
+      expect(note.width).toBeGreaterThanOrEqual(120);
+      expect(note.height).toBeGreaterThanOrEqual(64);
+    }
+    expect(layout.notes.filter((note) => note.collapsedByDefault)).toHaveLength(1);
+  });
+
   it('every fixture model is locatable in its own file (spec 15)', () => {
     for (const file of listModelYmlFiles(fixtureModelsDir)) {
       const content = fs.readFileSync(file, 'utf8');

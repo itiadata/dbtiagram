@@ -10,3 +10,20 @@ tables:
   - name: orders
     x: 400
     y: 60
+notes:
+  - id: n-a1b2c3
+    text: |-
+      Grain: one row per order.
+      customers -> orders -> order_items.
+    x: 40
+    y: 300
+    width: 260
+    height: 120
+    collapsedByDefault: false
+  - id: n-d4e5f6
+    text: order_items is the fact table; everything else is a dimension.
+    x: 760
+    y: 300
+    width: 220
+    height: 120
+    collapsedByDefault: true

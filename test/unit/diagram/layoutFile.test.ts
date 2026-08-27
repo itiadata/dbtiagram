@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   applyLayout,
   buildLayout,
+  createNote,
   defaultLayoutName,
   DiagramLayoutParseError,
   isLayoutFilePath,
@@ -18,6 +19,7 @@ const sample: DiagramLayout = {
     { name: 'order_items', x: 520, y: 40 },
     { name: 'orders', x: 120, y: 40 },
   ],
+  notes: [],
 };
 
 describe('isLayoutFilePath', () => {
@@ -75,6 +77,7 @@ describe('buildLayout', () => {  it('sorts tables by name and rounds coordinates
         { name: 'customers', x: -0, y: 10 },
         { name: 'orders', x: 120, y: 40 },
       ],
+      notes: [],
     });
   });
 });
@@ -102,7 +105,12 @@ describe('serializeDiagramLayout / parseDiagramLayout', () => {
       'version: 1\nname: x\nzoom: 3\ntables:\n  - name: orders\n    x: 1\n    y: 2\n    color: red\n',
       'fallback',
     );
-    expect(layout).toEqual({ version: 1, name: 'x', tables: [{ name: 'orders', x: 1, y: 2 }] });
+    expect(layout).toEqual({
+      version: 1,
+      name: 'x',
+      tables: [{ name: 'orders', x: 1, y: 2 }],
+      notes: [],
+    });
   });
 
   it('keeps the first of duplicate table names', () => {
@@ -144,10 +152,156 @@ describe('applyLayout', () => {
         { name: 'orders', x: 10, y: 20 },
         { name: 'gone', x: 0, y: 0 },
       ],
+      notes: [],
     };
     const applied = applyLayout(layout, new Set(['orders']));
     expect([...applied.visible]).toEqual(['orders']);
     expect(applied.missing).toEqual(['legacy_orders', 'gone']);
     expect(applied.positions.has('legacy_orders')).toBe(false);
+  });
+
+  it('passes notes through and still reconciles tables', () => {
+    const notes = [
+      {
+        id: 'n-1',
+        text: 'Grain: one row per order.',
+        x: 10,
+        y: 20,
+        width: 240,
+        height: 140,
+        collapsedByDefault: false,
+      },
+    ];
+    const layout: DiagramLayout = {
+      version: 1,
+      name: 'x',
+      tables: [
+        { name: 'orders', x: 10, y: 20 },
+        { name: 'ghost', x: 0, y: 0 },
+      ],
+      notes,
+    };
+
+    const applied = applyLayout(layout, new Set(['orders']));
+
+    expect([...applied.visible]).toEqual(['orders']);
+    expect(applied.missing).toEqual(['ghost']);
+    expect(applied.notes).toEqual(notes);
+  });
+});
+
+describe('notes (spec 16)', () => {
+  const note = {
+    id: 'n-1',
+    text: 'Grain: one row per order.',
+    x: 10,
+    y: 20,
+    width: 240,
+    height: 140,
+    collapsedByDefault: false,
+  };
+
+  it('round-trips a layout with notes', () => {
+    const layout: DiagramLayout = { version: 1, name: 'd', tables: [], notes: [note] };
+    expect(parseDiagramLayout(serializeDiagramLayout(layout), 'd')).toEqual(layout);
+  });
+
+  it('parses a file with no notes key as an empty array', () => {
+    expect(parseDiagramLayout('version: 1\nname: d\ntables: []\n', 'd').notes).toEqual([]);
+  });
+
+  it('omits the notes key when there are none', () => {
+    expect(serializeDiagramLayout(buildLayout('d', []))).not.toContain('notes');
+  });
+
+  it('sorts notes by id and rounds coordinates and sizes', () => {
+    const layout = buildLayout(
+      'd',
+      [],
+      [
+        { ...note, id: 'n-b', x: 10.6, y: 20.4, width: 200.5, height: 100.4 },
+        { ...note, id: 'n-a' },
+      ],
+    );
+
+    expect(layout.notes.map((entry) => entry.id)).toEqual(['n-a', 'n-b']);
+    expect(layout.notes[1]).toMatchObject({ x: 11, y: 20, width: 201, height: 100 });
+  });
+
+  it('defaults a missing collapsedByDefault to false', () => {
+    const layout = parseDiagramLayout(
+      'version: 1\nname: d\ntables: []\nnotes:\n  - id: n-1\n    x: 1\n    y: 2\n',
+      'd',
+    );
+    expect(layout.notes[0]?.collapsedByDefault).toBe(false);
+  });
+
+  it('defaults missing width and height', () => {
+    const layout = parseDiagramLayout(
+      'version: 1\nname: d\ntables: []\nnotes:\n  - id: n-1\n    x: 1\n    y: 2\n',
+      'd',
+    );
+    expect(layout.notes[0]).toMatchObject({ width: 220, height: 120 });
+  });
+
+  it('clamps below-minimum sizes', () => {
+    const layout = parseDiagramLayout(
+      'version: 1\nname: d\ntables: []\nnotes:\n  - id: n-1\n    x: 1\n    y: 2\n    width: 10\n    height: 10\n',
+      'd',
+    );
+    expect(layout.notes[0]).toMatchObject({ width: 120, height: 64 });
+  });
+
+  it('keeps the first of duplicate note ids', () => {
+    const layout = parseDiagramLayout(
+      'version: 1\nname: d\ntables: []\nnotes:\n  - id: n-1\n    text: first\n    x: 1\n    y: 2\n  - id: n-1\n    text: second\n    x: 9\n    y: 9\n',
+      'd',
+    );
+    expect(layout.notes).toHaveLength(1);
+    expect(layout.notes[0]?.text).toBe('first');
+  });
+
+  it.each([
+    ['a non-array notes key', 'version: 1\nname: d\ntables: []\nnotes: nope\n', 'Diagram file "notes" must be an array'],
+    [
+      'a note entry that is not a mapping',
+      'version: 1\nname: d\ntables: []\nnotes:\n  - x\n',
+      'Every entry in "notes" must be a mapping',
+    ],
+    [
+      'a note with no id',
+      'version: 1\nname: d\ntables: []\nnotes:\n  - x: 1\n    y: 2\n',
+      'Every note entry needs an "id"',
+    ],
+    [
+      'a non-string text',
+      'version: 1\nname: d\ntables: []\nnotes:\n  - id: n-1\n    text: 5\n    x: 1\n    y: 2\n',
+      'Note "n-1" needs a string "text"',
+    ],
+    [
+      'non-finite coordinates',
+      'version: 1\nname: d\ntables: []\nnotes:\n  - id: n-1\n    x: a\n    y: 2\n',
+      'Note "n-1" needs numeric "x" and "y" coordinates',
+    ],
+    [
+      'a non-boolean collapsedByDefault',
+      'version: 1\nname: d\ntables: []\nnotes:\n  - id: n-1\n    x: 1\n    y: 2\n    collapsedByDefault: yes please\n',
+      'Note "n-1" needs a boolean "collapsedByDefault"',
+    ],
+  ])('rejects %s', (_label, text, message) => {
+    expect(() => parseDiagramLayout(text, 'd')).toThrow(DiagramLayoutParseError);
+    expect(() => parseDiagramLayout(text, 'd')).toThrow(message);
+  });
+
+  it('createNote returns a default-sized empty note', () => {
+    expect(createNote(30, 40, 'n-7')).toEqual({
+      id: 'n-7',
+      text: '',
+      x: 30,
+      y: 40,
+      width: 220,
+      height: 120,
+      collapsedByDefault: false,
+    });
   });
 });

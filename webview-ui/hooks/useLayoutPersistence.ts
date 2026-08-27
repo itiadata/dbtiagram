@@ -4,7 +4,7 @@
  * the debounced live write-back.
  */
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { buildLayout, type DiagramLayoutTable } from '../../src/diagram/layoutFile';
+import { buildLayout, type DiagramLayoutTable, type DiagramNote } from '../../src/diagram/layoutFile';
 import type { NodePosition } from '../../src/diagram/positions';
 import { postToHost } from '../host';
 import type { LayoutActiveMessage, LayoutApplyMessage } from './useHostMessages';
@@ -25,7 +25,7 @@ export interface LayoutPersistenceState {
   applyActiveLayout: (message: LayoutActiveMessage) => void;
 }
 
-export function useLayoutPersistence(): LayoutPersistenceState {
+export function useLayoutPersistence(notes: readonly DiagramNote[] = []): LayoutPersistenceState {
   const [activeLayout, setActiveLayout] = useState<{ path: string; name: string } | null>(null);
   const [seedPositions, setSeedPositions] = useState<Map<string, NodePosition> | null>(null);
   const [seedTick, setSeedTick] = useState(0);
@@ -83,23 +83,25 @@ export function useLayoutPersistence(): LayoutPersistenceState {
   const onSaveDiagram = useCallback((): void => {
     postToHost({
       type: 'layout:save',
-      layout: buildLayout(activeLayout?.name ?? 'mydiagram', tablePositions),
+      layout: buildLayout(activeLayout?.name ?? 'mydiagram', tablePositions, notes),
     });
-  }, [activeLayout, tablePositions]);
+  }, [activeLayout, tablePositions, notes]);
 
   // Live write-back: once a layout is active, every drag or visibility change
   // rewrites its file after a short debounce, with no further user action.
+  // Notes (spec 16) ride along; the runtime collapse state deliberately does
+  // not, so peeking into a note never writes to disk.
   useEffect(() => {
     if (activeLayout === null) return;
     if (!writeArmedRef.current) return;
     const handle = window.setTimeout(() => {
       postToHost({
         type: 'layout:changed',
-        layout: buildLayout(activeLayout.name, tablePositions),
+        layout: buildLayout(activeLayout.name, tablePositions, notes),
       });
     }, WRITE_DEBOUNCE_MS);
     return () => window.clearTimeout(handle);
-  }, [activeLayout, tablePositions]);
+  }, [activeLayout, tablePositions, notes]);
 
   return {
     activeLayout,

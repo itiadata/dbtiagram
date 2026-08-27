@@ -29,6 +29,7 @@ import { useDraftForeignKeys } from './hooks/useDraftForeignKeys';
 import { useEdgeHighlighting } from './hooks/useEdgeHighlighting';
 import { useHostMessages } from './hooks/useHostMessages';
 import { useLayoutPersistence } from './hooks/useLayoutPersistence';
+import { useNotes } from './hooks/useNotes';
 import { useSelection } from './hooks/useSelection';
 import { SidebarRail, SidebarResizer } from './SidebarChrome';
 import { SIDEBAR_DEFAULT_WIDTH } from './sidebar-constants';
@@ -48,7 +49,8 @@ export function App(): JSX.Element {
   const revealDetails = useCallback((): void => setDetailsVisible(true), []);
   const selection = useSelection(revealDetails);
   const filter = useDiagramFilter();
-  const layout = useLayoutPersistence();
+  const notes = useNotes();
+  const layout = useLayoutPersistence(notes.notes);
   // Stable callbacks pulled out of the hook results: memo dependency lists must
   // reference these, never the freshly-built hook result objects, or every
   // render would invalidate `interaction` and re-render every TableNode.
@@ -78,7 +80,10 @@ export function App(): JSX.Element {
       selection.clearPendingRename();
     },
     onFilterScope: (uri) => filter.applyScope(uri),
-    onLayoutApply: (message) => filter.applyLayoutTables(layout.applyLayout(message)),
+    onLayoutApply: (message) => {
+      filter.applyLayoutTables(layout.applyLayout(message));
+      notes.applyLayoutNotes(message.layout.notes);
+    },
     onLayoutActive: (message) => layout.applyActiveLayout(message),
   });
 
@@ -183,19 +188,82 @@ export function App(): JSX.Element {
     postToHost({ type: 'model:openSource', model });
   }, []);
 
+  // Spec 16: React Flow tags each rendered node with its id, so focusing a
+  // note's editor after it is created (or via "Edit text") needs no extra
+  // plumbing through the node data. The frame wait lets the node mount first.
+  const focusNoteText = useCallback((id: string): void => {
+    requestAnimationFrame(() => {
+      const textarea = document.querySelector<HTMLTextAreaElement>(
+        `.react-flow__node[data-id="${id}"] .note__text`,
+      );
+      textarea?.focus();
+    });
+  }, []);
+
+  const [addNoteTick, setAddNoteTick] = useState(0);
+
+  // The canvas resolves the viewport center and calls back with canvas coords.
+  const onAddNoteAt = useCallback(
+    (x: number, y: number): void => {
+      focusNoteText(notes.addNote(x, y));
+    },
+    [notes, focusNoteText],
+  );
+
+  const onPaneContextMenu = useCallback(
+    (event: ReactMouseEvent, flowPoint: { x: number; y: number }): void => {
+      openMenu(event.clientX, event.clientY, [
+        {
+          label: 'Add note here',
+          onSelect: () => focusNoteText(notes.addNote(flowPoint.x, flowPoint.y)),
+        },
+      ]);
+    },
+    [openMenu, notes, focusNoteText],
+  );
+
+  const onDeleteSelectedNotes = useCallback((): void => {
+    for (const id of notes.selectedNoteIds) {
+      notes.deleteNote(id);
+    }
+  }, [notes]);
+
   // Spec 15: only table cards carry a menu; other node types (notes) are
   // handled by their own features.
   const onNodeContextMenu = useCallback(
     (event: ReactMouseEvent, node: Node): void => {
       event.preventDefault();
-      if (node.type !== 'table') {
+      if (node.type === 'table') {
+        openMenu(event.clientX, event.clientY, [
+          { label: 'Open in model.yml', onSelect: () => onOpenModelSource(node.id) },
+        ]);
         return;
       }
+      if (node.type !== 'note') {
+        return;
+      }
+      // Spec 16: Collapse/Expand is runtime only; "Collapsed by default" is the
+      // persisted choice, so both appear side by side.
+      const note = notes.notes.find((candidate) => candidate.id === node.id);
+      if (note === undefined) {
+        return;
+      }
+      const collapsed = notes.isCollapsed(note.id);
       openMenu(event.clientX, event.clientY, [
-        { label: 'Open in model.yml', onSelect: () => onOpenModelSource(node.id) },
+        { label: 'Edit text', onSelect: () => focusNoteText(note.id) },
+        {
+          label: collapsed ? 'Expand' : 'Collapse',
+          onSelect: () => notes.toggleCollapsedNow(note.id),
+        },
+        {
+          label: 'Collapsed by default',
+          checked: note.collapsedByDefault,
+          onSelect: () => notes.setCollapsedByDefault(note.id, !note.collapsedByDefault),
+        },
+        { label: 'Delete', onSelect: () => notes.deleteNote(note.id) },
       ]);
     },
-    [openMenu, onOpenModelSource],
+    [openMenu, onOpenModelSource, notes],
   );
 
   const current = selection.selection;
@@ -294,6 +362,15 @@ export function App(): JSX.Element {
             <span className="app__status">{statusText}</span>
             <button
               type="button"
+              className="panel-button"
+              onClick={() => setAddNoteTick((tick) => tick + 1)}
+              disabled={graph === null}
+              title="Add a sticky note at the center of the view"
+            >
+              Add note
+            </button>
+            <button
+              type="button"
               className="panel-button app__save"
               onClick={layout.onSaveDiagram}
               disabled={graph === null}
@@ -360,6 +437,13 @@ export function App(): JSX.Element {
                     onPaneClick={onPaneClick}
                     onNodeContextMenu={onNodeContextMenu}
                     revealTarget={revealTarget}
+                    noteNodes={notes.noteNodes}
+                    noteIds={notes.noteIds}
+                    onNoteNodeChanges={notes.applyNoteNodeChanges}
+                    onPaneContextMenu={onPaneContextMenu}
+                    onDeleteSelectedNotes={onDeleteSelectedNotes}
+                    addNoteTick={addNoteTick}
+                    onAddNoteAt={onAddNoteAt}
                   />
                 </DiagramInteractionContext.Provider>
               </ReactFlowProvider>
