@@ -824,6 +824,24 @@ body {
   position: relative;
 }
 
+/* Spec 26: crosshair cursor while the "draw a foreign key" gesture is active. */
+.canvas__surface--fk-create {
+  cursor: crosshair;
+}
+
+/* Spec 26: the mouse-follow preview line drawn while a source column is
+   picked but no target has been clicked yet. */
+.fk-draw-line-layer {
+  overflow: visible;
+  pointer-events: none;
+}
+
+.fk-draw-line {
+  stroke: var(--accent);
+  stroke-width: 1.5;
+  stroke-dasharray: 5 4;
+}
+
 /* ---- Table node cards ---- */
 
 .table-node {

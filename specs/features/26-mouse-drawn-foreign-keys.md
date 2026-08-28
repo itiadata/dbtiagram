@@ -1,7 +1,7 @@
 ---
 id: 26
 title: Draw a foreign key with the mouse
-status: draft
+status: implemented
 priority: medium
 created: 2026-08-28
 owner: unassigned

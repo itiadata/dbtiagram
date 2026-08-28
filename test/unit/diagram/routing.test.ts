@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   ROUTE_MARGIN,
   ROUTING_NODE_LIMIT,
+  chooseSide,
   routeEdge,
   type Point,
   type RouteRequest,
@@ -175,5 +176,19 @@ describe('routeEdge (spec 12)', () => {
     expect(ROUTING_NODE_LIMIT).toBe(200);
     const result = route(card('a', 0, 0), card('b', 800, 0), []);
     expect(result.points).toHaveLength(2);
+  });
+});
+
+describe('chooseSide (spec 26)', () => {
+  it('picks left when the point is left of center', () => {
+    expect(chooseSide(100, 40)).toBe('left');
+  });
+
+  it('picks right when the point is right of center', () => {
+    expect(chooseSide(100, 160)).toBe('right');
+  });
+
+  it('ties go right', () => {
+    expect(chooseSide(100, 100)).toBe('right');
   });
 });

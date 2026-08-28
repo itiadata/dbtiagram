@@ -32,6 +32,7 @@ import { useContextMenu } from './hooks/useContextMenu';
 import { useRevealModel } from './hooks/useRevealModel';
 import { useDraftForeignKeys } from './hooks/useDraftForeignKeys';
 import { useEdgeHighlighting } from './hooks/useEdgeHighlighting';
+import { useFkCreateMode } from './hooks/useFkCreateMode';
 import { useHostMessages } from './hooks/useHostMessages';
 import { useLayoutPersistence } from './hooks/useLayoutPersistence';
 import { useNotes } from './hooks/useNotes';
@@ -57,6 +58,7 @@ export function App(): JSX.Element {
   const filter = useDiagramFilter();
   const notes = useNotes();
   const columnDisplay = useColumnDisplay();
+  const fkCreate = useFkCreateMode();
   const layout = useLayoutPersistence(notes.notes, {
     defaultMode: columnDisplay.defaultMode,
     overrides: columnDisplay.overrides,
@@ -174,6 +176,39 @@ export function App(): JSX.Element {
 
   const drafts = useDraftForeignKeys(onEdit);
 
+  // Spec 26: column clicks route through the FK-draw gesture first; when the
+  // mode is inactive `handleColumnClick` returns null and the click falls
+  // through to ordinary selection, byte-identical to before this feature.
+  const onColumnSelectOrDraw = useCallback(
+    (model: string, column: string): void => {
+      const outcome = fkCreate.handleColumnClick(model, column);
+      if (outcome === null) {
+        onColumnSelect(model, column);
+        return;
+      }
+      if (outcome.completed !== undefined) {
+        const { source, target } = outcome.completed;
+        onEdit({
+          kind: 'createForeignKey',
+          model: source.model,
+          target: target.model,
+          columns: [source.column],
+          toColumns: [target.column],
+          virtual: false,
+        });
+        onTableSelect(source.model);
+        setFocusedFk({
+          to: `ref('${target.model}')`,
+          target: target.model,
+          columns: [source.column],
+          toColumns: [target.column],
+          virtual: false,
+        });
+      }
+    },
+    [fkCreate, onColumnSelect, onEdit, onTableSelect, setFocusedFk],
+  );
+
   // Feature 07: a defined onEdgeClick is what keeps React Flow from tagging
   // every edge `inactive` (inactive = !selectable && !onClick), whose base CSS
   // rule pointer-events: none killed edge hover after spec 06. Clicking an FK
@@ -252,6 +287,25 @@ export function App(): JSX.Element {
       textarea?.focus();
     });
   }, []);
+
+  // Spec 26: the top-left "Add note" toolbar button — the toolbar path spec
+  // 16 described but never wired up. Same addNote + focusNoteText pair as the
+  // "Add note here" context-menu item, just centered on the viewport.
+  const onAddNoteAt = useCallback(
+    (point: { x: number; y: number }): void => {
+      focusNoteText(notes.addNote(point.x, point.y));
+    },
+    [notes, focusNoteText],
+  );
+
+  // Spec 26: clicking empty canvas cancels an in-progress FK gesture, exactly
+  // like Escape, in addition to the existing pane-click deselection.
+  const onPaneClickWithFkCancel = useCallback((): void => {
+    if (fkCreate.state.active) {
+      fkCreate.cancel();
+    }
+    onPaneClick();
+  }, [fkCreate, onPaneClick]);
 
   const onPaneContextMenu = useCallback(
     (event: ReactMouseEvent, flowPoint: { x: number; y: number }): void => {
@@ -336,6 +390,11 @@ export function App(): JSX.Element {
   );
 
   const current = selection.selection;
+  // Spec 26: while the FK gesture has a source picked, that column renders
+  // selected too (reuses TableNode's existing selected-row styling), taking
+  // priority over the ordinary selection.
+  const fkPickedSource =
+    fkCreate.state.active && fkCreate.state.source !== null ? fkCreate.state.source : null;
   const interaction: DiagramInteractionContextValue = useMemo(
     () => ({
       highlightedColumns: highlighting.highlightedColumns,
@@ -343,11 +402,12 @@ export function App(): JSX.Element {
       onColumnLeave: highlighting.onColumnLeave,
       selectedTableId: current !== null && current.kind === 'table' ? current.id : null,
       selectedColumnRef:
-        current !== null && current.kind === 'column'
+        fkPickedSource ??
+        (current !== null && current.kind === 'column'
           ? { model: current.model, column: current.column }
-          : null,
+          : null),
       onTableSelect,
-      onColumnSelect,
+      onColumnSelect: onColumnSelectOrDraw,
       onEdit,
       onColumnContextMenu,
     }),
@@ -356,8 +416,9 @@ export function App(): JSX.Element {
       highlighting.onColumnHover,
       highlighting.onColumnLeave,
       current,
+      fkPickedSource,
       onTableSelect,
-      onColumnSelect,
+      onColumnSelectOrDraw,
       onEdit,
       onColumnContextMenu,
     ],
@@ -458,6 +519,7 @@ export function App(): JSX.Element {
           </header>
 
           {error !== null && <div className="banner banner--error">{error}</div>}
+          {fkCreate.hint !== null && <div className="banner banner--info">{fkCreate.hint}</div>}
           {layout.layoutMissing.length > 0 && (
             <div className="banner banner--info">
               <strong>
@@ -510,7 +572,7 @@ export function App(): JSX.Element {
                     columnExists={columnExists}
                     columnDisplayDefault={columnDisplay.defaultMode}
                     onColumnDisplayDefaultChange={columnDisplay.setDefaultMode}
-                    onPaneClick={onPaneClick}
+                    onPaneClick={onPaneClickWithFkCancel}
                     onNodeContextMenu={onNodeContextMenu}
                     revealTarget={revealTarget}
                     noteNodes={notes.noteNodes}
@@ -518,6 +580,11 @@ export function App(): JSX.Element {
                     onNoteNodeChanges={notes.applyNoteNodeChanges}
                     onPaneContextMenu={onPaneContextMenu}
                     onDeleteSelectedNotes={onDeleteSelectedNotes}
+                    onAddNoteAt={onAddNoteAt}
+                    fkSource={fkPickedSource}
+                    fkCreateActive={fkCreate.state.active}
+                    onStartFkCreate={fkCreate.start}
+                    onCancelFkCreate={fkCreate.cancel}
                   />
                 </DiagramInteractionContext.Provider>
               </ReactFlowProvider>

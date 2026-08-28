@@ -16,6 +16,7 @@ import {
   Controls,
   Panel,
   ReactFlow,
+  ViewportPortal,
   applyNodeChanges,
   useNodesInitialized,
   useReactFlow,
@@ -33,7 +34,8 @@ import {
   type FlowElements,
   type HandleSide,
 } from '../src/diagram/flow';
-import { HEADER_HEIGHT, NODE_WIDTH } from '../src/diagram/layout';
+import { HEADER_HEIGHT, NODE_WIDTH, columnRowCenterY } from '../src/diagram/layout';
+import { chooseSide } from '../src/diagram/routing';
 import { COLUMN_DISPLAY_OPTIONS, type ColumnDisplayMode } from '../src/diagram/columnDisplay';
 import type { DiagramLayoutTable } from '../src/diagram/layoutFile';
 import { mergeFlowNodes, type NodePosition } from '../src/diagram/positions';
@@ -81,6 +83,13 @@ export interface DiagramCanvasProps {
   /** Right-click on empty canvas; opens the "Add note here" menu (spec 16). */
   onPaneContextMenu: (event: ReactMouseEvent, flowPoint: { x: number; y: number }) => void;
   onDeleteSelectedNotes: () => void;
+  /** Creates a note at the given flow point (spec 26's "Add note" toolbar button). */
+  onAddNoteAt: (point: { x: number; y: number }) => void;
+  /** The column picked as the FK gesture's source, or null (spec 26). */
+  fkSource: { model: string; column: string } | null;
+  fkCreateActive: boolean;
+  onStartFkCreate: () => void;
+  onCancelFkCreate: () => void;
 }
 
 export function DiagramCanvas({
@@ -107,6 +116,11 @@ export function DiagramCanvas({
   onNoteNodeChanges,
   onPaneContextMenu,
   onDeleteSelectedNotes,
+  onAddNoteAt,
+  fkSource,
+  fkCreateActive,
+  onStartFkCreate,
+  onCancelFkCreate,
 }: DiagramCanvasProps): JSX.Element {
   const { fitView, setCenter, getZoom, screenToFlowPosition } = useReactFlow();
   const containerRef = useRef<HTMLDivElement | null>(null);
@@ -348,6 +362,54 @@ export function DiagramCanvas({
     [screenToFlowPosition, onPaneContextMenu],
   );
 
+  const onAddNote = useCallback((): void => {
+    const rect = containerRef.current?.getBoundingClientRect();
+    if (rect === undefined) return;
+    const center = screenToFlowPosition({
+      x: rect.left + rect.width / 2,
+      y: rect.top + rect.height / 2,
+    });
+    onAddNoteAt(center);
+  }, [screenToFlowPosition, onAddNoteAt]);
+
+  // Spec 26: while the FK gesture has a source picked, track the live mouse
+  // position in flow coordinates so the preview line can follow the pointer.
+  // A no-op handler otherwise avoids a re-render per mouse move when the mode
+  // is off.
+  const [fkMousePoint, setFkMousePoint] = useState<{ x: number; y: number } | null>(null);
+  const trackingFkPreview = fkCreateActive && fkSource !== null;
+  useEffect(() => {
+    if (!trackingFkPreview) {
+      setFkMousePoint(null);
+    }
+  }, [trackingFkPreview]);
+  const onSurfaceMouseMove = useCallback(
+    (event: ReactMouseEvent<HTMLDivElement>): void => {
+      if (!trackingFkPreview) return;
+      setFkMousePoint(screenToFlowPosition({ x: event.clientX, y: event.clientY }));
+    },
+    [trackingFkPreview, screenToFlowPosition],
+  );
+
+  // The FK preview line's source anchor: the picked column's row, on the side
+  // facing the current mouse position (spec 26).
+  const fkPreviewLine = useMemo(() => {
+    if (!trackingFkPreview || fkSource === null || fkMousePoint === null) {
+      return null;
+    }
+    const node = rfNodes.find((candidate) => candidate.id === fkSource.model);
+    if (node === undefined) {
+      return null;
+    }
+    const rowIndex = columnIndexOf(fkSource.model, fkSource.column);
+    const width = node.width ?? NODE_WIDTH;
+    const y = node.position.y + (rowIndex !== undefined ? columnRowCenterY(rowIndex) : HEADER_HEIGHT / 2);
+    const centerX = node.position.x + width / 2;
+    const side = chooseSide(centerX, fkMousePoint.x);
+    const x = node.position.x + (side === 'right' ? width : 0);
+    return { from: { x, y }, to: fkMousePoint };
+  }, [trackingFkPreview, fkSource, fkMousePoint, rfNodes, columnIndexOf]);
+
   // Notes paint first so a note can never hide a table card (spec 16).
   const renderedNodes = useMemo(
     () => [...noteNodes, ...liveNodes.map((node) => ({ ...node, zIndex: 1 }))],
@@ -356,9 +418,12 @@ export function DiagramCanvas({
 
   return (
     <div
-      className="canvas__surface"
+      className={
+        fkCreateActive ? 'canvas__surface canvas__surface--fk-create' : 'canvas__surface'
+      }
       ref={containerRef}
       onKeyDown={onKeyDown}
+      onMouseMove={onSurfaceMouseMove}
       onPointerDownCapture={() => {
         userInteractedRef.current = true;
       }}
@@ -391,6 +456,24 @@ export function DiagramCanvas({
     >
       <Background gap={16} size={1} />
       <Controls />
+      <Panel position="top-left">
+        <div className="canvas-toolbar">
+          <button
+            type="button"
+            className="panel-button panel-button--secondary"
+            onClick={onAddNote}
+          >
+            Add note
+          </button>
+          <button
+            type="button"
+            className="panel-button panel-button--secondary"
+            onClick={fkCreateActive ? onCancelFkCreate : onStartFkCreate}
+          >
+            {fkCreateActive ? 'Cancel' : 'Add foreign key'}
+          </button>
+        </div>
+      </Panel>
       <Panel position="top-right">
         <div className="canvas-toolbar">
           <button
@@ -414,6 +497,19 @@ export function DiagramCanvas({
           </select>
         </div>
       </Panel>
+      {fkPreviewLine !== null && (
+        <ViewportPortal>
+          <svg className="fk-draw-line-layer">
+            <line
+              className="fk-draw-line"
+              x1={fkPreviewLine.from.x}
+              y1={fkPreviewLine.from.y}
+              x2={fkPreviewLine.to.x}
+              y2={fkPreviewLine.to.y}
+            />
+          </svg>
+        </ViewportPortal>
+      )}
     </ReactFlow>
     </div>
   );

@@ -60,6 +60,16 @@ export const ROUTING_NODE_LIMIT = 200;
 /** Half-pixel slack so a line that merely grazes a card's margin is not "crossing" it. */
 const EPSILON = 0.5;
 
+/**
+ * Picks the anchor side for a point relative to a card's horizontal center
+ * (spec 26): `'left'` when `pointX` is strictly left of `centerX`, `'right'`
+ * otherwise (ties go to `'right'`). Used by the mouse-follow FK-draw preview
+ * line to pick which side of the source card it leaves from.
+ */
+export function chooseSide(centerX: number, pointX: number): RouteSide {
+  return pointX < centerX ? 'left' : 'right';
+}
+
 /** Side combinations, in the deterministic tie-break order (spec 12, section 4). */
 const SIDE_COMBINATIONS: readonly { sourceSide: RouteSide; targetSide: RouteSide }[] = [
   { sourceSide: 'right', targetSide: 'left' },
