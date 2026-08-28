@@ -48,7 +48,7 @@ export function defaultMatrixColumns(
     base.push({ id: 'model', label: 'Model', visible: true, batchEditable: false });
   }
   base.push(
-    { id: 'name', label: 'Name', visible: true, batchEditable: false },
+    { id: 'name', label: 'Column', visible: true, batchEditable: false },
     { id: 'dataType', label: 'Data type', visible: true, batchEditable: true },
     { id: 'description', label: 'Description', visible: true, batchEditable: true },
     { id: 'primaryKey', label: 'Primary key', visible: true, batchEditable: true },
@@ -118,4 +118,24 @@ export function applyStoredPrefs(
 /** Converts the current column defs to the shape persisted per scope. */
 export function toStoredPrefs(columns: readonly MatrixColumnDef[]): StoredMatrixColumnPref[] {
   return columns.map((column) => ({ id: column.id, visible: column.visible }));
+}
+
+/**
+ * Merges a freshly written preference set (`next`, from the currently open
+ * scope/model) with the previously persisted one (`previous`), so a column
+ * this model/scope doesn't currently show (e.g. a meta key only some models
+ * have) is never dropped from what gets persisted: `next`'s entries take
+ * priority and order for the ids they contain; every `previous` entry whose
+ * id is not in `next` is appended afterward, preserving its old relative
+ * order. This is what lets column visibility/order for a meta key survive
+ * switching to a model that doesn't have that key and back (spec 27).
+ */
+export function mergeStoredPrefs(
+  next: readonly StoredMatrixColumnPref[],
+  previous: readonly StoredMatrixColumnPref[] | undefined,
+): StoredMatrixColumnPref[] {
+  if (previous === undefined) return [...next];
+  const nextKeys = new Set(next.map((pref) => matrixColumnIdKey(pref.id)));
+  const carried = previous.filter((pref) => !nextKeys.has(matrixColumnIdKey(pref.id)));
+  return [...next, ...carried];
 }

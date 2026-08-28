@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   applyStoredPrefs,
   defaultMatrixColumns,
+  mergeStoredPrefs,
   reorderColumn,
   toggleColumnVisible,
   type MatrixColumnDef,
@@ -71,5 +72,38 @@ describe('applyStoredPrefs', () => {
 
   it('returns defaults unchanged when stored is undefined', () => {
     expect(applyStoredPrefs(defaults, undefined)).toBe(defaults);
+  });
+});
+
+describe('mergeStoredPrefs', () => {
+  it('carries forward previous entries not present in next, preserving their order', () => {
+    const previous = [
+      { id: 'name' as const, visible: true },
+      { id: { meta: 'confidentiality' }, visible: false },
+      { id: { meta: 'GDPR' }, visible: true },
+    ];
+    // A model without any meta keys only ever writes back these two ids.
+    const next = [
+      { id: 'name' as const, visible: true },
+      { id: 'dataType' as const, visible: false },
+    ];
+    const merged = mergeStoredPrefs(next, previous);
+    expect(merged).toEqual([
+      { id: 'name', visible: true },
+      { id: 'dataType', visible: false },
+      { id: { meta: 'confidentiality' }, visible: false },
+      { id: { meta: 'GDPR' }, visible: true },
+    ]);
+  });
+
+  it('returns next unchanged when previous is undefined', () => {
+    const next = [{ id: 'name' as const, visible: true }];
+    expect(mergeStoredPrefs(next, undefined)).toEqual(next);
+  });
+
+  it('lets next override a previously stored id (order and visibility)', () => {
+    const previous = [{ id: 'name' as const, visible: false }];
+    const next = [{ id: 'name' as const, visible: true }];
+    expect(mergeStoredPrefs(next, previous)).toEqual([{ id: 'name', visible: true }]);
   });
 });

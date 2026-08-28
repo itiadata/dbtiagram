@@ -11,6 +11,7 @@
 import { useCallback, useState } from 'react';
 import type { MessageToExtension } from '../../src/shared/protocol';
 import {
+  mergeStoredPrefs,
   type MatrixColumnDef,
   type MatrixColumnId,
   type MatrixScope,
@@ -71,13 +72,15 @@ export function useFieldsMatrix(
     (next: MatrixColumnDef[]) => {
       setColumnsState(next);
       if (target === null) return;
-      post({
-        type: 'matrix:setColumnPrefs',
-        scope: target.scope,
-        columns: next.map((column) => ({ id: column.id, visible: column.visible })),
-      });
+      const nextStored = next.map((column) => ({ id: column.id, visible: column.visible }));
+      // Carry forward any previously configured column (e.g. a meta key this
+      // model/scope doesn't currently show) instead of dropping it, so
+      // switching models never loses its remembered visibility/order (spec 27).
+      const merged = mergeStoredPrefs(nextStored, storedPrefs[target.scope]);
+      setStoredPrefs((current) => ({ ...current, [target.scope]: merged }));
+      post({ type: 'matrix:setColumnPrefs', scope: target.scope, columns: merged });
     },
-    [target, post],
+    [target, post, storedPrefs],
   );
 
   const applyColumnPrefs = useCallback((scope: MatrixScope, stored: StoredMatrixColumnPref[]) => {

@@ -75,7 +75,7 @@ given the setting and whether a reusable separate-window tab group was found (sp
 | `src/shared/matrixColumns.ts` | shared | Grid column definitions for the "fields matrix" (spec 27): defaults, 
 show/hide, reorder, and merging with stored preferences. Used by both the webview and the extension host. | 
 `MatrixScope`, `MatrixColumnId`, `MatrixColumnDef`, `StoredMatrixColumnPref`, `defaultMatrixColumns`, 
-`toggleColumnVisible`, `reorderColumn`, `applyStoredPrefs`, `toStoredPrefs` |
+`toggleColumnVisible`, `reorderColumn`, `applyStoredPrefs`, `toStoredPrefs`, `mergeStoredPrefs` |
 
 ## `src/vscode/` — VS Code API wrappers
 
