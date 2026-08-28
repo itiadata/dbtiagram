@@ -56,6 +56,8 @@ lines** under `test/unit/` (see `specs/features/17-modular-source-layout.md`).
 | `src/shared/filter.ts` | shared | File/model filtering and selection reconciliation for the filter sidebar. | `filterGraph`, `computeVisibleModels`, `reconcileSelection`, `scopeSelectionToFile`, `matchesSearch` |
 | `src/shared/glob.ts` | shared | Minimal glob matching used for model file discovery patterns. | `matchesGlob`, `globToRegExp`, `normalizePathForGlob` |
 | `src/shared/labels.ts` | shared | Disambiguate display labels for files that share a base name. | `disambiguateFileLabels`, `FileLabelMap` |
+| `src/shared/openBehavior.ts` | shared | The "Open new diagrams" setting's type, default and UI option text (spec 23). | `OpenBehavior`, `DEFAULT_OPEN_BEHAVIOR`, `OpenBehaviorOption`, `OPEN_BEHAVIOR_OPTIONS` |
+| `src/shared/openBehaviorPlacement.ts` | shared (pure) | Pure four-way placement decision for a new diagram panel, given the setting and whether a reusable separate-window tab group was found (spec 23). | `decidePlacement`, `PlacementDecision`, `ReuseTarget` |
 
 ## `src/vscode/` — VS Code API wrappers
 
@@ -66,6 +68,7 @@ lines** under `test/unit/` (see `specs/features/17-modular-source-layout.md`).
 | `src/vscode/editorButton.ts` | pure | Decision logic for whether the editor-title button shows for a document. | `shouldShowButton`, `isDiagramLayoutFile`, `modelFileContextKey`, `layoutFileContextKey` |
 | `src/vscode/editorButtonContext.ts` | vscode-facing | Registers the editor-title button and keeps its `when`-clause context keys in sync. | `registerEditorTitleButton` |
 | `src/vscode/layoutFiles.ts` | vscode-facing | Read/write `.dbtiagram` layout files and prompt the user for a save path. | `readLayoutFile`, `writeLayoutFile`, `promptForLayoutPath` |
+| `src/vscode/openBehaviorWindows.ts` | vscode-facing | Resolves where a new diagram panel should be created for the current `OpenBehavior`, and tracks this extension's separate-window tab groups for "Separate window (reuse)" (spec 23). | `resolvePlacement`, `untrackPanel`, `PanelPlacement` |
 
 ## `src/webview/` — extension-host side of the panel
 
@@ -89,10 +92,12 @@ lines** under `test/unit/` (see `specs/features/17-modular-source-layout.md`).
 | `webview-ui/NoteNode.tsx` | webview | Custom React Flow node rendering a sticky note: resizable rectangle, textarea, or collapsed icon (spec 16). | `NoteNode`, `NoteNodeData` |
 | `webview-ui/FkEdge.tsx` | webview | Custom FK edge renderer with hover-friendly interaction width. | `FkEdge`, `roundedPath` |
 | `webview-ui/ContextMenu.tsx` | webview | Reusable portal-rendered context menu with disabled and checkable items (spec 15). | `ContextMenu`, `ContextMenuItem`, `ContextMenuProps` |
+| `webview-ui/SettingsPanel.tsx` | webview | "Open new diagrams" settings overlay: option list with descriptions, radio selection, dismiss conventions matching `ContextMenu` (spec 23). | `SettingsPanel`, `SettingsPanelProps` |
 | `webview-ui/context-menu-position.ts` | webview (pure) | Viewport flip/clamp geometry for the context menu (spec 15). | `placeMenu`, `MenuBox`, `MenuPoint`, `MenuPlacement` |
 | `webview-ui/details-visibility.ts` | webview (pure) | Details sidebar visibility policy: opens/closes with the selection, manual collapse sticks until it next changes (spec 19); `{visible,key}` transition that keeps the policy safe inside a React state updater (spec 21). | `selectionKey`, `nextDetailsVisible`, `SelectionKey`, `DetailsVisibility`, `initialDetailsVisibility`, `advanceDetailsVisibility` |
 | `webview-ui/initial-fit.ts` | webview (pure) | Whether the one-off post-measurement corrective `fitView` should still run — skipped once fitted or once the user has touched the canvas (spec 21). | `shouldRunInitialFit` |
 | `webview-ui/layout-dirty.ts` | webview (pure) | Compares a current layout snapshot against the last-saved one to drive the manual-save header button's dirty state (spec 22). | `isLayoutDirty`, `LayoutSnapshot` |
+| `webview-ui/settings-state.ts` | webview (pure) | Pure reducer applying a `settings:current` value without forcing the settings overlay open (spec 23). | `applySettingsCurrent`, `SettingsPanelState` |
 | `webview-ui/FilterSidebar.tsx` | webview | Left sidebar: file/model filtering, search, locate. | `FilterSidebar` |
 | `webview-ui/DetailsSidebar.tsx` | webview | Right sidebar: edit the selected model or column. | `DetailsSidebar`, `SelectedEntity` |
 | `webview-ui/PrimaryKeySection.tsx` | webview | Primary key editing UI inside the details sidebar. | `PrimaryKeySection` |
@@ -106,6 +111,7 @@ lines** under `test/unit/` (see `specs/features/17-modular-source-layout.md`).
 | `webview-ui/vscode.d.ts` | webview | Ambient declaration for `acquireVsCodeApi`. | — |
 | `webview-ui/styles.css` | webview | Webview styling, themed from VS Code CSS variables. | — |
 | `webview-ui/hooks/useHostMessages.ts` | webview | Subscribe to host → webview messages and dispatch to handlers. | `useHostMessages`, `HostMessageHandlers`, `DiagramUpdateMessage`, `LayoutApplyMessage`, `LayoutActiveMessage` |
+| `webview-ui/hooks/useSettings.ts` | webview | Settings overlay state: current `OpenBehavior`, open/close, and posting `settings:setOpenBehavior` (spec 23). | `useSettings`, `SettingsState` |
 | `webview-ui/hooks/useSelection.ts` | webview | Current model/column selection state. | `useSelection`, `Selection`, `SelectionState` |
 | `webview-ui/hooks/useContextMenu.ts` | webview | Open/close state (point + items) for the shared context menu (spec 15). | `useContextMenu`, `ContextMenuState` |
 | `webview-ui/hooks/useRevealModel.ts` | webview | "Reveal in diagram" target state and callback (spec 15). | `useRevealModel`, `RevealTarget`, `RevealModelState` |

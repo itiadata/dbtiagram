@@ -22,6 +22,7 @@ import {
   type DiagramInteractionContextValue,
 } from './diagram-interaction-context';
 import { FilterSidebar } from './FilterSidebar';
+import { SettingsPanel } from './SettingsPanel';
 import { postToHost } from './host';
 import { useDiagramFilter } from './hooks/useDiagramFilter';
 import { useContextMenu } from './hooks/useContextMenu';
@@ -32,6 +33,7 @@ import { useHostMessages } from './hooks/useHostMessages';
 import { useLayoutPersistence } from './hooks/useLayoutPersistence';
 import { useNotes } from './hooks/useNotes';
 import { useSelection } from './hooks/useSelection';
+import { useSettings } from './hooks/useSettings';
 import { SidebarRail, SidebarResizer } from './SidebarChrome';
 import { SIDEBAR_DEFAULT_WIDTH } from './sidebar-constants';
 
@@ -52,6 +54,7 @@ export function App(): JSX.Element {
   const filter = useDiagramFilter();
   const notes = useNotes();
   const layout = useLayoutPersistence(notes.notes);
+  const settings = useSettings();
   // Stable callbacks pulled out of the hook results: memo dependency lists must
   // reference these, never the freshly-built hook result objects, or every
   // render would invalidate `interaction` and re-render every TableNode.
@@ -95,6 +98,7 @@ export function App(): JSX.Element {
       notes.applyLayoutNotes(message.layout.notes);
     },
     onLayoutActive: (message) => layout.applyActiveLayout(message),
+    onSettingsCurrent: (openBehavior) => settings.applyCurrent(openBehavior),
   });
 
   const visibleGraph = useMemo(
@@ -362,6 +366,15 @@ export function App(): JSX.Element {
             <span className="app__status">{statusText}</span>
             <button
               type="button"
+              className="panel-button app__settings"
+              onClick={settings.openPanel}
+              title="Settings"
+              aria-label="Settings"
+            >
+              ⚙
+            </button>
+            <button
+              type="button"
               className="panel-button app__save"
               onClick={layout.onSaveDiagram}
               disabled={activeLayout === null ? graph === null : !layout.dirty}
@@ -487,6 +500,13 @@ export function App(): JSX.Element {
           y={contextMenu.menu.y}
           items={contextMenu.menu.items}
           onClose={closeMenu}
+        />
+      )}
+      {settings.open && (
+        <SettingsPanel
+          value={settings.openBehavior}
+          onChange={settings.setOpenBehavior}
+          onClose={settings.closePanel}
         />
       )}
     </main>

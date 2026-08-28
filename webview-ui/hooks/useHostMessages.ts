@@ -8,6 +8,7 @@
 import { useEffect, useRef } from 'react';
 import { postToHost } from '../host';
 import type { MessageToWebview } from '../../src/shared/protocol';
+import type { OpenBehavior } from '../../src/shared/openBehavior';
 
 export type DiagramUpdateMessage = Extract<MessageToWebview, { type: 'diagram:update' }>;
 export type LayoutApplyMessage = Extract<MessageToWebview, { type: 'layout:apply' }>;
@@ -19,6 +20,7 @@ export interface HostMessageHandlers {
   onFilterScope: (uri: string) => void;
   onLayoutApply: (message: LayoutApplyMessage) => void;
   onLayoutActive: (message: LayoutActiveMessage) => void;
+  onSettingsCurrent: (openBehavior: OpenBehavior) => void;
 }
 
 export function useHostMessages(handlers: HostMessageHandlers): void {
@@ -44,6 +46,9 @@ export function useHostMessages(handlers: HostMessageHandlers): void {
           break;
         case 'layout:active':
           current.onLayoutActive(message);
+          break;
+        case 'settings:current':
+          current.onSettingsCurrent(message.openBehavior);
           break;
       }
     };

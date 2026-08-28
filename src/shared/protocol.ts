@@ -5,6 +5,7 @@
 import type { DiagramGraph } from '../diagram/graph';
 import type { DiagramLayout } from '../diagram/layoutFile';
 import type { ModelEdit } from '../dbt/edit';
+import type { OpenBehavior } from './openBehavior';
 
 /** A model.yml file whose most recent parse failed (last good data shown). */
 export interface DiagramPendingError {
@@ -46,7 +47,13 @@ export type MessageToWebview =
   /** A saved layout was opened: apply its visible tables and positions (spec 13). */
   | { type: 'layout:apply'; layout: DiagramLayout; missing: string[] }
   /** Which layout file the panel writes back to, if any (spec 13). */
-  | { type: 'layout:active'; path: string | null; name: string | null };
+  | { type: 'layout:active'; path: string | null; name: string | null }
+  /**
+   * The current "Open new diagrams" setting (spec 23), sent on ready and
+   * whenever `dbtiagram.openBehavior` changes, so every open panel's
+   * settings overlay reflects the latest value.
+   */
+  | { type: 'settings:current'; openBehavior: OpenBehavior };
 
 /** Messages sent from the webview to the extension host. */
 export type MessageToExtension =
@@ -61,4 +68,6 @@ export type MessageToExtension =
    */
   | { type: 'layout:pending'; layout: DiagramLayout; dirty: boolean }
   /** Open the model.yml declaring `model` and reveal its declaration (spec 15). */
-  | { type: 'model:openSource'; model: string };
+  | { type: 'model:openSource'; model: string }
+  /** Persist a new "Open new diagrams" choice as a VS Code user setting (spec 23). */
+  | { type: 'settings:setOpenBehavior'; openBehavior: OpenBehavior };

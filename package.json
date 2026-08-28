@@ -61,11 +61,23 @@
           "default": "**/models/**/*.yml",
           "description": "Glob pattern used to discover dbt model.yml files in the workspace."
         },
-        "dbtiagram.watchModelFiles": {
-          "type": "boolean",
-          "default": true,
-          "description": "Reload the diagram automatically when model.yml files change on disk."
-        }
+          "dbtiagram.watchModelFiles": {
+            "type": "boolean",
+            "default": true,
+            "description": "Reload the diagram automatically when model.yml files change on disk."
+          },
+          "dbtiagram.openBehavior": {
+            "type": "string",
+            "enum": ["newTab", "splitTab", "reuseWindow", "newWindow"],
+            "enumDescriptions": [
+              "Opens in the same editor group as the last focused tab.",
+              "Opens beside the last focused tab (default, current behavior).",
+              "Opens in its own window the first time; later diagrams are added as tabs to that same window while it stays open.",
+              "Every diagram always opens in its own new window."
+            ],
+            "default": "splitTab",
+            "description": "How new diagram tabs open. Can also be changed from the settings panel inside the diagram."
+          }
       }
     }
   },

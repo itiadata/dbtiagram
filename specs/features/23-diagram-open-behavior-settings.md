@@ -1,7 +1,7 @@
 ---
 id: 23
 title: Diagram open-behavior settings panel
-status: approved
+status: implemented
 priority: medium
 created: 2026-08-28
 owner: unassigned

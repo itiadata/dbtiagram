@@ -24,8 +24,10 @@ import { buildDiagram } from '../diagram/graph';
 import { isLayoutFilePath, type DiagramLayout } from '../diagram/layoutFile';
 import { matchesGlob } from '../shared/glob';
 import { disambiguateFileLabels } from '../shared/labels';
+import { DEFAULT_OPEN_BEHAVIOR, type OpenBehavior } from '../shared/openBehavior';
 import type { DiagramModelFile, MessageToExtension, MessageToWebview } from '../shared/protocol';
 import { registerModelWatcher } from '../vscode/modelWatcher';
+import { resolvePlacement, untrackPanel } from '../vscode/openBehaviorWindows';
 import { promptForLayoutPath, readLayoutFile, writeLayoutFile } from '../vscode/layoutFiles';
 import { loadModelYmlFiles, readFileText, revealInEditor, writeModelYmlFile } from '../vscode/project';
 import { buildWebviewHtml } from './html';
@@ -101,6 +103,16 @@ export class DiagramPanel {
     );
 
     panel.onDidDispose(() => void this.dispose(), undefined, this.disposables);
+
+    // Spec 23: every open panel's settings overlay reflects the newest value
+    // as soon as any of them changes it.
+    this.disposables.push(
+      vscode.workspace.onDidChangeConfiguration((event) => {
+        if (event.affectsConfiguration('dbtiagram.openBehavior')) {
+          this.postMessage({ type: 'settings:current', openBehavior: DiagramPanel.openBehavior() });
+        }
+      }),
+    );
   }
 
   /**
@@ -124,11 +136,13 @@ export class DiagramPanel {
       return;
     }
 
-    // Diagrams always open split to the right of the file they came from.
+    // Where the new tab/window lands is governed by dbtiagram.openBehavior
+    // (spec 23); the default (`splitTab`) matches spec 14's fixed behavior.
+    const placement = resolvePlacement(DiagramPanel.openBehavior());
     const panel = vscode.window.createWebviewPanel(
       DiagramPanel.viewType,
       diagramPanelTitle(source),
-      vscode.ViewColumn.Beside,
+      placement.showOptions,
       {
         enableScripts: true,
         retainContextWhenHidden: true,
@@ -150,6 +164,8 @@ export class DiagramPanel {
     if (source.kind === 'layout') {
       await openLayout(current.layoutHost, source.fsPath);
     }
+
+    await placement.afterCreate(panel);
   }
 
   /** Every open diagram tab. */
@@ -161,6 +177,12 @@ export class DiagramPanel {
     return vscode.workspace
       .getConfiguration('dbtiagram')
       .get<string>('modelFileGlob', '**/models/**/*.yml');
+  }
+
+  private static openBehavior(): OpenBehavior {
+    return vscode.workspace
+      .getConfiguration('dbtiagram')
+      .get<OpenBehavior>('openBehavior', DEFAULT_OPEN_BEHAVIOR);
   }
 
   private get modelGlob(): string {
@@ -318,6 +340,7 @@ export class DiagramPanel {
         // since the panel opened is picked up.
         await sendActiveLayout(this.layoutHost);
         publishActiveLayout(this.layoutHost);
+        this.postMessage({ type: 'settings:current', openBehavior: DiagramPanel.openBehavior() });
         return;
       case 'diagram:edit': {
         try {
@@ -338,6 +361,11 @@ export class DiagramPanel {
         return;
       case 'model:openSource':
         await openModelSource(this.openSourceHost, message.model);
+        return;
+      case 'settings:setOpenBehavior':
+        await vscode.workspace
+          .getConfiguration('dbtiagram')
+          .update('openBehavior', message.openBehavior, vscode.ConfigurationTarget.Global);
         return;
     }
   }
@@ -440,6 +468,7 @@ export class DiagramPanel {
     if (DiagramPanel.panels.get(this.key) === this) {
       DiagramPanel.panels.delete(this.key);
     }
+    untrackPanel(this.panel);
     for (const disposable of this.disposables) {
       disposable.dispose();
     }
