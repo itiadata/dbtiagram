@@ -55,8 +55,14 @@ export function ContextMenu({ x, y, items, onClose }: ContextMenuProps): JSX.Ele
       }
     };
     const onPointerDown = (event: PointerEvent): void => {
-      const element = ref.current;
-      if (element !== null && event.target instanceof globalThis.Node && element.contains(event.target)) {
+      // Submenus render as separate `createPortal` trees (siblings in
+      // `document.body`, not DOM descendants of the root `<ul>`), so a plain
+      // `ref.contains` check here would treat every click inside an open
+      // submenu as "outside" and close the whole menu on pointerdown — before
+      // the button's click handler ever runs. Checking `.closest('.context-menu')`
+      // recognizes a click anywhere inside the root OR a submenu flyout.
+      const target = event.target;
+      if (target instanceof Element && target.closest('.context-menu') !== null) {
         return;
       }
       onClose();
@@ -101,34 +107,59 @@ interface ContextMenuRowProps {
 
 /**
  * One `<li>` of the menu. A leaf item behaves as before (`onSelect` then
- * `onClose`); an item with `items` toggles an inline flyout anchored to its
- * own rect instead, via the same `placeMenu` flip/clamp geometry the root
- * menu uses (spec 24).
+ * `onClose`); an item with `items` opens an inline flyout anchored to its own
+ * rect on HOVER (mouseenter), closing when the pointer leaves both the row
+ * and the flyout, via the same `placeMenu` flip/clamp geometry the root menu
+ * uses (spec 24). A short close delay lets the pointer cross the visual gap
+ * between the row and the flyout without flickering shut.
  */
 function ContextMenuRow({ item, onClose }: ContextMenuRowProps): JSX.Element {
   const rowRef = useRef<HTMLLIElement | null>(null);
-  const [submenuOpen, setSubmenuOpen] = useState(false);
+  const [rowHovered, setRowHovered] = useState(false);
+  const [submenuHovered, setSubmenuHovered] = useState(false);
+  const closeTimerRef = useRef<number | null>(null);
   const hasSubmenu = item.items !== undefined && item.items.length > 0;
+  const submenuOpen = hasSubmenu && (rowHovered || submenuHovered);
+
+  const clearCloseTimer = (): void => {
+    if (closeTimerRef.current !== null) {
+      window.clearTimeout(closeTimerRef.current);
+      closeTimerRef.current = null;
+    }
+  };
+
+  useEffect(() => clearCloseTimer, []);
 
   return (
-    <li ref={rowRef} role="none" className="context-menu__row">
+    <li
+      ref={rowRef}
+      role="none"
+      className="context-menu__row"
+      onMouseEnter={() => {
+        clearCloseTimer();
+        setRowHovered(true);
+      }}
+      onMouseLeave={() => {
+        clearCloseTimer();
+        closeTimerRef.current = window.setTimeout(() => setRowHovered(false), 150);
+      }}
+    >
       <button
         type="button"
         role="menuitem"
         className="context-menu__item"
         aria-disabled={item.disabled === true ? 'true' : undefined}
         aria-haspopup={hasSubmenu ? 'true' : undefined}
+        aria-expanded={hasSubmenu ? submenuOpen : undefined}
         disabled={item.disabled === true}
         title={item.title}
         onClick={
-          item.disabled === true
+          item.disabled === true || hasSubmenu
             ? undefined
-            : hasSubmenu
-              ? () => setSubmenuOpen((open) => !open)
-              : () => {
-                  item.onSelect?.();
-                  onClose();
-                }
+            : () => {
+                item.onSelect?.();
+                onClose();
+              }
         }
       >
         <span className="context-menu__check">{item.checked === true ? '✓' : ''}</span>
@@ -140,6 +171,14 @@ function ContextMenuRow({ item, onClose }: ContextMenuRowProps): JSX.Element {
           items={item.items ?? []}
           anchor={rowRef.current}
           onClose={onClose}
+          onMouseEnter={() => {
+            clearCloseTimer();
+            setSubmenuHovered(true);
+          }}
+          onMouseLeave={() => {
+            clearCloseTimer();
+            closeTimerRef.current = window.setTimeout(() => setSubmenuHovered(false), 150);
+          }}
         />
       )}
     </li>
@@ -150,10 +189,18 @@ interface ContextSubmenuProps {
   items: ContextMenuItem[];
   anchor: HTMLLIElement | null;
   onClose: () => void;
+  onMouseEnter: () => void;
+  onMouseLeave: () => void;
 }
 
 /** The flyout `<ul>` for a submenu, placed relative to its parent item's rect. */
-function ContextSubmenu({ items, anchor, onClose }: ContextSubmenuProps): JSX.Element | null {
+function ContextSubmenu({
+  items,
+  anchor,
+  onClose,
+  onMouseEnter,
+  onMouseLeave,
+}: ContextSubmenuProps): JSX.Element | null {
   const ref = useRef<HTMLUListElement | null>(null);
   const [placement, setPlacement] = useState<MenuPlacement | null>(null);
 
@@ -183,6 +230,8 @@ function ContextSubmenu({ items, anchor, onClose }: ContextSubmenuProps): JSX.El
       className="context-menu context-menu--submenu"
       role="menu"
       style={placement === null ? { visibility: 'hidden' } : { left: placement.left, top: placement.top }}
+      onMouseEnter={onMouseEnter}
+      onMouseLeave={onMouseLeave}
     >
       {items.map((item) => (
         <ContextMenuRow key={item.label} item={item} onClose={onClose} />

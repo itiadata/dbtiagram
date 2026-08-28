@@ -164,14 +164,14 @@ And the Auto-layout button uses a neutral (not accent) color
 | `webview-ui/hooks/useColumnDisplay.ts` | create | Wraps `column-display-state.ts` as webview state; exposes `effectiveMode(table)`, `setTableMode`, `setDefaultMode`, `applySeed`. |
 | `webview-ui/layout-dirty.ts` | modify | `LayoutSnapshot` and `isLayoutDirty` also compare `defaultColumnDisplay` and each table's `columnDisplay`, so a display-only change marks the diagram dirty. |
 | `webview-ui/hooks/useLayoutPersistence.ts` | modify | Threads the column-display state into every `buildLayout` call (save, pending-sync, dirty comparison). |
-| `webview-ui/ColumnDisplaySection.tsx` | create | The details-pane section (4 radio options) rendered between Description and Primary key. |
+| `webview-ui/ColumnDisplaySection.tsx` | create | The details-pane section: a `<select>` dropdown (matching the toolbar selector) rendered between Description and Primary key. |
 | `webview-ui/DetailsSidebar.tsx` | modify | Renders `ColumnDisplaySection` for the table entity; new props for effective mode + change handler. |
-| `webview-ui/ContextMenu.tsx` | modify | `ContextMenuItem` gains optional `items?: ContextMenuItem[]` (submenu); a parent item with children opens a flyout instead of closing the menu on click. |
+| `webview-ui/ContextMenu.tsx` | modify | `ContextMenuItem` gains optional `items?: ContextMenuItem[]` (submenu); a parent item with children opens a flyout on HOVER instead of a click, and the outside-click detector recognizes clicks inside a submenu portal (not just the root menu's own DOM subtree). |
 | `webview-ui/context-menu-position.ts` | modify | Reuses/extends `placeMenu` so a submenu flyout is placed relative to its parent item and flips off-screen the same way the root menu does. |
 | `webview-ui/DiagramCanvas.tsx` | modify | Top-right `Panel` becomes a grouped toolbar: the Auto-layout button (now a neutral/secondary style) plus a new column-display `<select>` bound to the diagram default. |
 | `webview-ui/TableNode.tsx` | modify | Renders the filtered `data.columns` (unchanged rendering code, smaller input array); adds the `HEADER_ANCHOR` handle (header-positioned, default styling, distinct from the red `--broken` one). |
 | `webview-ui/App.tsx` | modify | Wires `useColumnDisplay`; passes the per-table mode lookup into `buildFlowElements`/`layoutDiagram`; adds the "Show columns" submenu to the table right-click menu; passes toolbar props to `DiagramCanvas` and section props to `DetailsSidebar`; seeds column-display state from `layout:apply`. |
-| `webview-ui/styles.css` | modify | Styles for: the grouped toolbar, the secondary Auto-layout button, the header-anchor handle, the details-pane radio section, and the context-menu submenu flyout. |
+| `webview-ui/styles.css` | modify | Styles for: the grouped toolbar, the secondary Auto-layout button, the header-anchor handle, and the context-menu submenu flyout. |
 | `test/unit/diagram/columnDisplay.test.ts` | create | Unit tests for `displayedColumns` per mode and mode validation. |
 | `test/unit/diagram/graph.test.ts` | modify | Adds cases asserting `foreignKeyColumns` on both the referencing and the referenced table. |
 | `test/unit/diagram/layout.test.ts` | modify | Adds a case asserting `layoutDiagram` sizes a card by its displayed (not full) column count when a mode lookup is passed. |
@@ -326,11 +326,19 @@ export interface ContextMenuItem {
    `defaultColumnDisplay` and per-table `columnDisplay`, or toggling a display
    mode would silently not offer to save.
 9. **Context menu submenu** (scenario n/a — UI mechanics for "table right-click
-   menu"): clicking a `ContextMenuItem` with `items` toggles an inline flyout
-   `<ul>` anchored to that item's rect (via `placeMenu`, reusing the same
-   flip/clamp geometry as the root menu) instead of invoking `onSelect` or
-   closing the menu; clicking a leaf item inside the submenu behaves exactly
-   like today (`onSelect` then `onClose` of the WHOLE menu, submenu included).
+   menu"): a `ContextMenuItem` with `items` opens an inline flyout `<ul>` on
+   HOVER (mouseenter of the row, with a short close delay on mouseleave so the
+   pointer can cross the visual gap into the flyout), anchored to that item's
+   rect via `placeSubmenu` — the same flip/clamp idea `placeMenu` uses for the
+   root menu — instead of invoking `onSelect`. Because a submenu flyout is a
+   separate `createPortal` tree (a sibling of the root `<ul>` in
+   `document.body`, not a DOM descendant of it), the root menu's
+   outside-pointerdown-closes-the-menu detector checks
+   `target.closest('.context-menu')` rather than the root `<ul>`'s own `ref`,
+   so a click inside an open submenu is recognized as "inside" and does not
+   close the menu before the click handler runs. Clicking a leaf item inside
+   the submenu behaves exactly like today (`onSelect` then `onClose` of the
+   WHOLE menu, submenu included).
 10. **Auto-layout button restyle**: a new `.panel-button--secondary` class
     (neutral background using `--card`/`--border`, no `--accent`) replaces the
     default `.panel-button` accent look specifically on the Auto-layout

@@ -12,21 +12,19 @@ export interface ColumnDisplaySectionProps {
 
 export function ColumnDisplaySection({ mode, onChange }: ColumnDisplaySectionProps): JSX.Element {
   return (
-    <div className="details__field">
+    <label className="details__field">
       <span className="details__label">Columns shown</span>
-      <div className="column-display" role="radiogroup" aria-label="Columns shown">
+      <select
+        className="details__input"
+        value={mode}
+        onChange={(event) => onChange(event.target.value as ColumnDisplayMode)}
+      >
         {COLUMN_DISPLAY_OPTIONS.map((option) => (
-          <label key={option.value} className="column-display__option">
-            <input
-              type="radio"
-              name="column-display"
-              checked={mode === option.value}
-              onChange={() => onChange(option.value)}
-            />
+          <option key={option.value} value={option.value}>
             {option.label}
-          </label>
+          </option>
         ))}
-      </div>
-    </div>
+      </select>
+    </label>
   );
 }
