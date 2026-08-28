@@ -46,25 +46,25 @@ describe('diagramPanelKey', () => {
 describe('diagramPanelTitle', () => {
   it('uses the layout name for a layout source', () => {
     expect(diagramPanelTitle({ kind: 'layout', fsPath: '/r/orders.dbtiagram.yml' }, 'orders')).toBe(
-      'dbt Diagram — orders',
+      'orders — dbt Diagram',
     );
   });
 
   it('falls back to the base name minus the layout suffix', () => {
     expect(diagramPanelTitle({ kind: 'layout', fsPath: '/r/finance.dbtiagram.yml' })).toBe(
-      'dbt Diagram — finance',
+      'finance — dbt Diagram',
     );
   });
 
   it('uses the file base name for a model source', () => {
     expect(diagramPanelTitle({ kind: 'model', fsPath: '/r/models/core/schema.yml' })).toBe(
-      'dbt Diagram — schema.yml',
+      'schema.yml — dbt Diagram',
     );
   });
 
   it('handles Windows separators', () => {
     expect(diagramPanelTitle({ kind: 'model', fsPath: 'C:\\r\\models\\schema.yml' })).toBe(
-      'dbt Diagram — schema.yml',
+      'schema.yml — dbt Diagram',
     );
   });
 

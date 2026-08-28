@@ -69,6 +69,14 @@ export function resolvePlacement(behavior: OpenBehavior): PanelPlacement {
         afterCreate: async (panel) => {
           panel.reveal();
           await vscode.commands.executeCommand('workbench.action.moveEditorToNewWindow');
+          // Best-effort (spec 23): compacts the just-created window's own
+          // chrome. `enableCompactAuxiliaryWindow` targets whichever window
+          // currently has focus, which is the new one right after the move.
+          try {
+            await vscode.commands.executeCommand('workbench.action.enableCompactAuxiliaryWindow');
+          } catch {
+            // Older VS Code builds may not have this command; degrade silently.
+          }
           if (decision.shouldTrack) {
             const group = findGroupForPanel(panel);
             if (group !== undefined) {

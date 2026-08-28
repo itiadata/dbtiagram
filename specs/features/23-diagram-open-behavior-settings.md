@@ -45,6 +45,12 @@ have no way to change it short of manually moving the tab every time.
      created (lazily).
   4. **Always separate window** — every diagram always opens in its own new
      OS-level window, never reusing one.
+- Every freshly created separate window (options 3's first open and option 4,
+  always) has VS Code's built-in **Compact Mode**
+  (`workbench.action.enableCompactAuxiliaryWindow`) enabled automatically, so
+  it starts with a minimized title bar/menu — best-effort, like the rest of
+  the window-placement mechanics; the user can toggle it back off per-window
+  via VS Code's own Layout Control menu, which this feature does not fight.
 - Each option is described in the UI in one short sentence (text above).
 - The setting is stored as a VS Code **user setting**
   (`dbtiagram.openBehavior`, `ConfigurationTarget.Global`) — the same
@@ -166,6 +172,7 @@ And the main window's editor layout is unchanged
 Given the setting is "Always separate window"
 When the user opens two different diagrams, one after another
 Then each opens in its own new, separate VS Code window
+And each of those windows has Compact Mode enabled automatically
 ```
 
 ### Reopening an already-open source is unaffected
@@ -269,7 +276,14 @@ export function SettingsPanel(props: SettingsPanelProps): JSX.Element;
   `workbench.action.moveEditorToNewWindow` against the panel (VS Code moves
   the currently active editor tab; the panel must be `.reveal()`ed/active
   first). No tracking is recorded — the next `newWindow` open always makes
-  another new window.
+  another new window. Immediately after the move, `afterCreate` also runs
+  `workbench.action.enableCompactAuxiliaryWindow` (best-effort, ignored if it
+  throws) so the new OS window's own chrome (title bar/menu) is compacted —
+  it targets whichever window currently has focus, which is the just-created
+  one right after the move. `reuseWindow`'s fallback path shares this
+  `afterCreate` code, so a freshly created reuse window is compacted too;
+  reusing an already-open one is not touched again (it was already compacted
+  when first created, and the user may have toggled it back off since).
 - **`reuseWindow`** → `resolvePlacement` first calls a helper that scans
   `vscode.window.tabGroups.all` for a tab group previously recorded by this
   module (`openBehaviorWindows.ts` keeps a small in-memory
@@ -332,7 +346,8 @@ thin wrapper. Flag this split back to the user if it changes the Files table.
 - [ ] The current selection is pre-selected and persists in
       `dbtiagram.openBehavior` (`ConfigurationTarget.Global`) across restarts.
 - [ ] "New tab" opens in the active group; "Split and new tab" is unchanged
-      from today; "Always separate window" opens a new OS window every time.
+      from today; "Always separate window" opens a new OS window every time,
+      with Compact Mode enabled on it automatically.
 - [ ] "Separate window (reuse)" opens a new window the first time and adds
       subsequent diagrams as tabs to that same window while it stays open,
       falling back to a fresh window if it was closed.

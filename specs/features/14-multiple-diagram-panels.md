@@ -58,9 +58,12 @@ file scoping.
   spec 05's "all files checked by default" for **button-opened model tabs only**;
   layout-opened tabs (spec 13's layout wins) and palette-opened tabs are
   unchanged.
-- **Per-tab title** so the tabs are distinguishable:
-  - layout source → `dbt Diagram — <layout name>`
-  - model source → `dbt Diagram — <file base name>`
+- **Per-tab title** so the tabs are distinguishable, with the distinguishing
+  name **first** so it is what shows in a narrow tab or in the taskbar/
+  Alt-Tab/window-list entry (amended after spec 23 introduced separate
+  windows, where this matters most):
+  - layout source → `<layout name> — dbt Diagram`
+  - model source → `<file base name> — dbt Diagram`
   - palette source → `dbt Diagram`
 - **Independent lifecycle**: closing one tab disposes only its own watchers and
   listeners; the others keep rendering, keep receiving live model.yml updates
@@ -190,7 +193,7 @@ happened.
 Given models/core/schema.yml defines customers
 And models/marts/schema.yml defines orders
 When the user opens the diagram from models/core/schema.yml
-Then a diagram tab titled "dbt Diagram — schema.yml" opens
+Then a diagram tab titled "schema.yml — dbt Diagram" opens
 And only models/core/schema.yml is checked in the "Model yml files" filter
 And only customers is on the canvas
 And models/marts/schema.yml is listed in the filter, unchecked
@@ -231,7 +234,7 @@ And FK edges between the two files' models are drawn
 Given a workspace with orders.dbtiagram.yml and finance.dbtiagram.yml
 And the user opened orders.dbtiagram.yml as a diagram
 When the user opens finance.dbtiagram.yml from the editor title bar
-Then a second diagram tab opens titled "dbt Diagram — finance"
+Then a second diagram tab opens titled "finance — dbt Diagram"
 And it shows exactly finance's tables at their stored positions
 And the orders diagram tab is still open and unchanged
 When the user opens orders.dbtiagram.yml again
@@ -273,7 +276,7 @@ And neither tab's node positions are lost
 ```
 Given a diagram opened from a model.yml with no active layout
 When the user clicks "Save diagram" and names it "order-marts"
-Then the tab title becomes "dbt Diagram — order-marts"
+Then the tab title becomes "order-marts — dbt Diagram"
 And opening order-marts.dbtiagram.yml from the editor title bar reveals that
   same tab instead of opening a new one
 ```
@@ -317,3 +320,13 @@ And opening order-marts.dbtiagram.yml from the editor title bar reveals that
   stay open and both write to that file (last write wins).
 - **(d) No restore across restarts.** *(Confirmed as specced.)* Diagram tabs
   disappear on VS Code reload (no `WebviewPanelSerializer`), same as today.
+
+## Amendments
+
+- **Title order flipped (post spec 23).** The distinguishing name now comes
+  first (`<name> — dbt Diagram`, was `dbt Diagram — <name>`), so it is what's
+  visible in a narrow tab, the OS taskbar, or Alt-Tab — this matters more once
+  spec 23 lets diagrams open in their own separate window.
+- **(b) superseded.** Placement is no longer always `ViewColumn.Beside`; spec
+  23's `dbtiagram.openBehavior` setting governs it (`splitTab` remains the
+  default, matching this note's original intent).

@@ -40,7 +40,10 @@ export function diagramPanelKey(
 /**
  * The tab title for a source: the layout name or the file's base name, so two
  * open diagrams are distinguishable. `layoutName` overrides the derived name
- * once the layout file has been read (or re-named by a save).
+ * once the layout file has been read (or re-named by a save). The
+ * distinguishing name comes first (spec 23 amendment) so it's what shows in a
+ * narrow tab, the OS taskbar, or Alt-Tab — this matters more once diagrams can
+ * open in their own separate window.
  */
 export function diagramPanelTitle(source: DiagramSource, layoutName?: string): string {
   switch (source.kind) {
@@ -49,10 +52,10 @@ export function diagramPanelTitle(source: DiagramSource, layoutName?: string): s
         layoutName !== undefined && layoutName !== ''
           ? layoutName
           : stripLayoutSuffix(baseName(source.fsPath));
-      return `${BASE_TITLE} — ${name}`;
+      return `${name} — ${BASE_TITLE}`;
     }
     case 'model':
-      return `${BASE_TITLE} — ${baseName(source.fsPath)}`;
+      return `${baseName(source.fsPath)} — ${BASE_TITLE}`;
     case 'adhoc':
       return BASE_TITLE;
   }

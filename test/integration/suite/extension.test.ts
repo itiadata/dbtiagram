@@ -113,13 +113,13 @@ suite('dbtiagram extension', () => {
     );
 
     await vscode.commands.executeCommand('dbtiagram.openLayout', orders);
-    await waitFor(() => diagramTabLabels().includes('dbt Diagram — orders'), 10_000);
+    await waitFor(() => diagramTabLabels().includes('orders — dbt Diagram'), 10_000);
 
     await vscode.commands.executeCommand('dbtiagram.openLayout', customers);
     const both = await waitFor(() => {
       const labels = diagramTabLabels();
       return (
-        labels.includes('dbt Diagram — orders') && labels.includes('dbt Diagram — customers')
+        labels.includes('orders — dbt Diagram') && labels.includes('customers — dbt Diagram')
       );
     }, 10_000);
     assert.ok(
@@ -146,7 +146,7 @@ function diagramTabLabels(): string[] {
   return vscode.window.tabGroups.all
     .flatMap((group) => group.tabs)
     .map((tab) => tab.label)
-    .filter((label) => label.startsWith('dbt Diagram'));
+    .filter((label) => label.endsWith('dbt Diagram'));
 }
 
 function tabCount(): number {
@@ -156,7 +156,7 @@ function tabCount(): number {
 function hasDiagramTab(): boolean {
   return vscode.window.tabGroups.all
     .flatMap((group) => group.tabs)
-    .some((tab) => tab.label.startsWith('dbt Diagram'));
+    .some((tab) => tab.label.endsWith('dbt Diagram'));
 }
 
 async function waitFor(predicate: () => boolean, timeoutMs: number): Promise<boolean> {
