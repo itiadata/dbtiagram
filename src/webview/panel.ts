@@ -35,7 +35,7 @@ import {
   publishActiveLayout,
   saveLayout,
   sendActiveLayout,
-  writeActiveLayout,
+  cachePendingLayout,
   type ActiveLayout,
   type LayoutHost,
 } from './layoutMessages';
@@ -59,6 +59,9 @@ export class DiagramPanel {
   private readonly selfWrites = new Map<string, number>();
   /** The saved layout file this panel writes back to, if any (spec 13). */
   private activeLayout: ActiveLayout | undefined;
+  /** The webview's latest (unsaved) layout, cached in memory (spec 22). */
+  private pendingLayout: DiagramLayout | undefined;
+  private pendingDirty = false;
   /** What this tab was opened from, and its current registry key (spec 14). */
   private source: DiagramSource;
   private key: string;
@@ -97,7 +100,7 @@ export class DiagramPanel {
       this.disposables,
     );
 
-    panel.onDidDispose(() => this.dispose(), undefined, this.disposables);
+    panel.onDidDispose(() => void this.dispose(), undefined, this.disposables);
   }
 
   /**
@@ -188,6 +191,14 @@ export class DiagramPanel {
       },
       onLayoutSaved: (fsPath, name) => this.rekeyToLayout(fsPath, name),
       republish: () => this.publish(),
+      setPendingLayout: (layout, dirty) => {
+        this.pendingLayout = layout;
+        this.pendingDirty = dirty;
+      },
+      getPendingLayout: () =>
+        this.pendingLayout === undefined
+          ? undefined
+          : { layout: this.pendingLayout, dirty: this.pendingDirty },
     };
   }
 
@@ -322,8 +333,8 @@ export class DiagramPanel {
       case 'layout:save':
         await saveLayout(this.layoutHost, message.layout);
         return;
-      case 'layout:changed':
-        await writeActiveLayout(this.layoutHost, message.layout);
+      case 'layout:pending':
+        cachePendingLayout(this.layoutHost, message.layout, message.dirty);
         return;
       case 'model:openSource':
         await openModelSource(this.openSourceHost, message.model);
@@ -400,7 +411,31 @@ export class DiagramPanel {
     void this.panel.webview.postMessage(message);
   }
 
-  private dispose(): void {
+  private async dispose(): Promise<void> {
+    // Spec 22: this panel is a plain WebviewPanel, so `onDidDispose` fires
+    // after the tab has already closed — there is no way to block the close
+    // pending user input. This modal is the closest available approximation:
+    // if there is a dirty cached layout, offer to write it now.
+    if (this.pendingDirty && this.pendingLayout !== undefined && this.activeLayout !== undefined) {
+      const active = this.activeLayout;
+      const pending = this.pendingLayout;
+      const choice = await vscode.window.showWarningMessage(
+        `"${active.name}" has unsaved diagram changes. Save them before closing?`,
+        { modal: true },
+        'Save',
+        "Don't Save",
+      );
+      if (choice === 'Save') {
+        try {
+          await writeLayoutFile(vscode.Uri.file(active.fsPath), { ...pending, name: active.name });
+        } catch (err) {
+          void vscode.window.showErrorMessage(
+            `Could not save diagram: ${err instanceof Error ? err.message : String(err)}`,
+          );
+        }
+      }
+    }
+
     // Only this tab's registration and watchers go; other tabs keep working.
     if (DiagramPanel.panels.get(this.key) === this) {
       DiagramPanel.panels.delete(this.key);

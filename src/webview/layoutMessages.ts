@@ -40,6 +40,10 @@ export interface LayoutHost {
   onLayoutSaved(fsPath: string, name: string): void;
   /** Re-publishes the diagram to the webview. */
   republish(): void;
+  /** Caches the webview's latest (unsaved) layout in host memory (spec 22). */
+  setPendingLayout(layout: DiagramLayout, dirty: boolean): void;
+  /** Reads back the cached pending layout, if any (spec 22). */
+  getPendingLayout(): { layout: DiagramLayout; dirty: boolean } | undefined;
 }
 
 /** Layout entries naming models that no longer exist, in file order. */
@@ -75,6 +79,7 @@ export async function openLayout(host: LayoutHost, fsPath: string): Promise<void
 
   host.setActiveLayout({ fsPath, name: layout.name });
   host.onLayoutOpened(layout.name);
+  host.setPendingLayout(layout, false);
   host.republish();
   host.postMessage({ type: 'layout:apply', layout, missing: missingModels(host, layout) });
   publishActiveLayout(host);
@@ -126,24 +131,11 @@ export async function saveLayout(host: LayoutHost, layout: DiagramLayout): Promi
 
   host.setActiveLayout({ fsPath: target, name: named.name });
   host.onLayoutSaved(target, named.name);
+  host.setPendingLayout(named, false);
   publishActiveLayout(host);
 }
 
-/** Debounced live write-back; a no-op while no layout is active. */
-export async function writeActiveLayout(
-  host: LayoutHost,
-  layout: DiagramLayout,
-): Promise<void> {
-  const active = host.getActiveLayout();
-  if (active === undefined) {
-    return;
-  }
-  try {
-    await host.writeLayout(active.fsPath, { ...layout, name: active.name });
-  } catch (err) {
-    host.postMessage({
-      type: 'diagram:error',
-      message: `Could not update diagram: ${err instanceof Error ? err.message : String(err)}`,
-    });
-  }
+/** Caches the webview's latest (unsaved) layout in host memory; never touches disk. */
+export function cachePendingLayout(host: LayoutHost, layout: DiagramLayout, dirty: boolean): void {
+  host.setPendingLayout(layout, dirty);
 }

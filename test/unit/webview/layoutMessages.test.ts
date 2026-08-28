@@ -14,7 +14,7 @@ import {
   publishActiveLayout,
   saveLayout,
   sendActiveLayout,
-  writeActiveLayout,
+  cachePendingLayout,
   type ActiveLayout,
   type LayoutHost,
 } from '../../../src/webview/layoutMessages';
@@ -33,6 +33,7 @@ interface StubHost extends LayoutHost {
   opened: string[];
   saved: Array<{ fsPath: string; name: string }>;
   republished: number;
+  pending: Array<{ layout: DiagramLayout; dirty: boolean }>;
 }
 
 function createHost(overrides: Partial<LayoutHost> = {}): StubHost {
@@ -40,13 +41,16 @@ function createHost(overrides: Partial<LayoutHost> = {}): StubHost {
   const writes: Array<{ fsPath: string; layout: DiagramLayout }> = [];
   const opened: string[] = [];
   const saved: Array<{ fsPath: string; name: string }> = [];
+  const pending: Array<{ layout: DiagramLayout; dirty: boolean }> = [];
   let active: ActiveLayout | undefined;
+  let pendingLayout: { layout: DiagramLayout; dirty: boolean } | undefined;
   const host: StubHost = {
     posted,
     writes,
     opened,
     saved,
     republished: 0,
+    pending,
     postMessage: (message) => {
       posted.push(message);
     },
@@ -69,6 +73,11 @@ function createHost(overrides: Partial<LayoutHost> = {}): StubHost {
     republish: () => {
       host.republished += 1;
     },
+    setPendingLayout: (nextLayout, dirty) => {
+      pendingLayout = { layout: nextLayout, dirty };
+      pending.push({ layout: nextLayout, dirty });
+    },
+    getPendingLayout: () => pendingLayout,
     ...overrides,
   };
   return host;
@@ -175,6 +184,15 @@ describe('saveLayout', () => {
     expect(host.writes.map((w) => w.fsPath)).toEqual(['/w/orders.dbtiagram.yml']);
   });
 
+  it('clears the pending cache on success', async () => {
+    const host = createHost();
+    host.setActiveLayout({ fsPath: '/w/orders.dbtiagram.yml', name: 'orders' });
+    host.setPendingLayout(layout, true);
+    await saveLayout(host, layout);
+
+    expect(host.getPendingLayout()).toEqual({ layout, dirty: false });
+  });
+
   it('reports write failures to the webview', async () => {
     const host = createHost({
       writeLayout: async () => {
@@ -190,35 +208,13 @@ describe('saveLayout', () => {
   });
 });
 
-describe('writeActiveLayout', () => {
-  it('does nothing while no layout is active', async () => {
+describe('cachePendingLayout', () => {
+  it('calls host.setPendingLayout with the given layout and dirty flag', () => {
     const host = createHost();
-    await writeActiveLayout(host, layout);
-    expect(host.writes).toEqual([]);
-  });
+    cachePendingLayout(host, layout, true);
 
-  it('keeps the active layout name rather than the incoming one', async () => {
-    const host = createHost();
-    host.setActiveLayout({ fsPath: '/w/orders.dbtiagram.yml', name: 'kept' });
-    await writeActiveLayout(host, { ...layout, name: 'incoming' });
-
-    expect(host.writes).toEqual([
-      { fsPath: '/w/orders.dbtiagram.yml', layout: { ...layout, name: 'kept' } },
-    ]);
-  });
-
-  it('reports write failures to the webview', async () => {
-    const host = createHost({
-      writeLayout: async () => {
-        throw new Error('EBUSY');
-      },
-    });
-    host.setActiveLayout({ fsPath: '/w/orders.dbtiagram.yml', name: 'orders' });
-    await writeActiveLayout(host, layout);
-
-    expect(host.posted).toEqual([
-      { type: 'diagram:error', message: 'Could not update diagram: EBUSY' },
-    ]);
+    expect(host.pending).toEqual([{ layout, dirty: true }]);
+    expect(host.getPendingLayout()).toEqual({ layout, dirty: true });
   });
 });
 

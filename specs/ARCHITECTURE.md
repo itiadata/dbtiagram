@@ -71,11 +71,11 @@ lines** under `test/unit/` (see `specs/features/17-modular-source-layout.md`).
 
 | Path | Layer | Responsibility | Key exports |
 |------|-------|----------------|-------------|
-| `src/webview/panel.ts` | vscode-facing | The diagram panel: lifecycle, message pump, model store wiring, write-back. | `DiagramPanel` |
+| `src/webview/panel.ts` | vscode-facing | The diagram panel: lifecycle, message pump, model store wiring, write-back, in-memory pending-layout cache and close-time save prompt (spec 22). | `DiagramPanel` |
 | `src/webview/html.ts` | vscode-facing | Build the webview HTML shell (CSP, nonce, asset URIs). | `buildWebviewHtml` |
 | `src/webview/panelKey.ts` | pure | One panel per source file: key and title derivation. | `diagramPanelKey`, `diagramPanelTitle`, `DiagramSource`, `defaultCaseInsensitive` |
 | `src/webview/openSource.ts` | pure | Orchestrates "Open in model.yml" against a host port: resolve, read, locate, reveal or report (spec 15). | `openModelSource`, `OpenSourceHost` |
-| `src/webview/layoutMessages.ts` | pure | Layout-related message handling against a small `LayoutHost` port, so it stays testable. | `publishActiveLayout`, `openLayout`, `sendActiveLayout`, `saveLayout`, `writeActiveLayout`, `ActiveLayout`, `LayoutHost` |
+| `src/webview/layoutMessages.ts` | pure | Layout-related message handling against a small `LayoutHost` port, so it stays testable. Manual save (spec 22): `cachePendingLayout` only caches the webview's latest layout in host memory, never writes to disk. | `publishActiveLayout`, `openLayout`, `sendActiveLayout`, `saveLayout`, `cachePendingLayout`, `ActiveLayout`, `LayoutHost` |
 | `src/extension.ts` | vscode-facing | `activate` / `deactivate` only — command registration and disposal. | `activate`, `deactivate` |
 
 ## `webview-ui/` — React front-end (webview)
@@ -92,6 +92,7 @@ lines** under `test/unit/` (see `specs/features/17-modular-source-layout.md`).
 | `webview-ui/context-menu-position.ts` | webview (pure) | Viewport flip/clamp geometry for the context menu (spec 15). | `placeMenu`, `MenuBox`, `MenuPoint`, `MenuPlacement` |
 | `webview-ui/details-visibility.ts` | webview (pure) | Details sidebar visibility policy: opens/closes with the selection, manual collapse sticks until it next changes (spec 19); `{visible,key}` transition that keeps the policy safe inside a React state updater (spec 21). | `selectionKey`, `nextDetailsVisible`, `SelectionKey`, `DetailsVisibility`, `initialDetailsVisibility`, `advanceDetailsVisibility` |
 | `webview-ui/initial-fit.ts` | webview (pure) | Whether the one-off post-measurement corrective `fitView` should still run — skipped once fitted or once the user has touched the canvas (spec 21). | `shouldRunInitialFit` |
+| `webview-ui/layout-dirty.ts` | webview (pure) | Compares a current layout snapshot against the last-saved one to drive the manual-save header button's dirty state (spec 22). | `isLayoutDirty`, `LayoutSnapshot` |
 | `webview-ui/FilterSidebar.tsx` | webview | Left sidebar: file/model filtering, search, locate. | `FilterSidebar` |
 | `webview-ui/DetailsSidebar.tsx` | webview | Right sidebar: edit the selected model or column. | `DetailsSidebar`, `SelectedEntity` |
 | `webview-ui/PrimaryKeySection.tsx` | webview | Primary key editing UI inside the details sidebar. | `PrimaryKeySection` |
@@ -112,7 +113,7 @@ lines** under `test/unit/` (see `specs/features/17-modular-source-layout.md`).
 | `webview-ui/hooks/useDiagramFilter.ts` | webview | Filter sidebar state on top of `src/shared/filter.ts`. | `useDiagramFilter`, `DiagramFilterState` |
 | `webview-ui/hooks/useDraftForeignKeys.ts` | webview | Track in-progress FK edits that are not yet persistable. | `useDraftForeignKeys`, `DraftForeignKeysState` |
 | `webview-ui/hooks/useEdgeHighlighting.ts` | webview | Hover/selection highlighting of FK edges and handle dots. | `useEdgeHighlighting`, `EdgeHighlightingState` |
-| `webview-ui/hooks/useLayoutPersistence.ts` | webview | Node positions ↔ layout file messages, including the write-back arming guard. | `useLayoutPersistence`, `LayoutPersistenceState` |
+| `webview-ui/hooks/useLayoutPersistence.ts` | webview | Node positions ↔ layout file messages: seeding on open, the explicit save, and a debounced sync of the pending (unsaved) layout to the host's in-memory cache, plus the dirty flag driving the header button (spec 22). | `useLayoutPersistence`, `LayoutPersistenceState` |
 
 ## Tests
 

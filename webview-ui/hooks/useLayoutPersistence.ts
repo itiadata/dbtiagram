@@ -1,15 +1,18 @@
 /**
- * Saved diagram layout state (spec 13): the active layout, the positions
+ * Saved diagram layout state (spec 13/22): the active layout, the positions
  * seeded when one is opened, the live table positions, the explicit save, and
- * the debounced live write-back.
+ * a debounced sync of the pending (unsaved) layout to the extension host's
+ * in-memory cache — used for the close-time save prompt, never written to
+ * disk by itself (spec 22).
  */
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { buildLayout, type DiagramLayoutTable, type DiagramNote } from '../../src/diagram/layoutFile';
 import type { NodePosition } from '../../src/diagram/positions';
 import { postToHost } from '../host';
+import { isLayoutDirty, type LayoutSnapshot } from '../layout-dirty';
 import type { LayoutActiveMessage, LayoutApplyMessage } from './useHostMessages';
 
-/** Debounce before the live write-back rewrites the active layout file. */
+/** Debounce before the pending layout cache-sync message is posted. */
 const WRITE_DEBOUNCE_MS = 400;
 
 export interface LayoutPersistenceState {
@@ -23,6 +26,8 @@ export interface LayoutPersistenceState {
   /** Seeds positions from an opened layout; returns its table names. */
   applyLayout: (message: LayoutApplyMessage) => string[];
   applyActiveLayout: (message: LayoutActiveMessage) => void;
+  /** True when the current tables/notes differ from the last-saved/opened snapshot. */
+  dirty: boolean;
 }
 
 export function useLayoutPersistence(notes: readonly DiagramNote[] = []): LayoutPersistenceState {
@@ -31,10 +36,14 @@ export function useLayoutPersistence(notes: readonly DiagramNote[] = []): Layout
   const [seedTick, setSeedTick] = useState(0);
   const [tablePositions, setTablePositions] = useState<DiagramLayoutTable[]>([]);
   const [layoutMissing, setLayoutMissing] = useState<string[]>([]);
-  // Spec 13/14: guards the debounced layout write-back until the canvas has
+  // Spec 13/14: guards the debounced pending-layout sync until the canvas has
   // rendered at least one table, so opening a diagram can never truncate its
-  // file before the first render.
+  // host-side cache before the first render.
   const writeArmedRef = useRef(false);
+  // Spec 22: the last-saved (or just-opened) snapshot, compared against the
+  // current tables/notes to drive the dirty flag.
+  const savedSnapshotRef = useRef<LayoutSnapshot | null>(null);
+  const [dirty, setDirty] = useState(false);
 
   const applyLayout = useCallback((message: LayoutApplyMessage): string[] => {
     const names = message.layout.tables.map((table) => table.name);
@@ -43,6 +52,8 @@ export function useLayoutPersistence(notes: readonly DiagramNote[] = []): Layout
     );
     setSeedTick((tick) => tick + 1);
     setLayoutMissing(message.missing);
+    savedSnapshotRef.current = { tables: message.layout.tables, notes: message.layout.notes };
+    setDirty(false);
     return names;
   }, []);
 
@@ -81,23 +92,48 @@ export function useLayoutPersistence(notes: readonly DiagramNote[] = []): Layout
   }, []);
 
   const onSaveDiagram = useCallback((): void => {
-    postToHost({
-      type: 'layout:save',
-      layout: buildLayout(activeLayout?.name ?? 'mydiagram', tablePositions, notes),
-    });
+    const layout = buildLayout(activeLayout?.name ?? 'mydiagram', tablePositions, notes);
+    postToHost({ type: 'layout:save', layout });
+    // Optimistic: there is no save-ack message in the protocol, so the
+    // snapshot is taken from what was just sent (spec 22).
+    savedSnapshotRef.current = { tables: layout.tables, notes: layout.notes };
+    setDirty(false);
   }, [activeLayout, tablePositions, notes]);
 
-  // Live write-back: once a layout is active, every drag or visibility change
-  // rewrites its file after a short debounce, with no further user action.
-  // Notes (spec 16) ride along; the runtime collapse state deliberately does
-  // not, so peeking into a note never writes to disk.
+  // Recompute dirty whenever the live tables/notes change, comparing through
+  // `buildLayout` so both sides are sorted/rounded the same way (spec 22).
+  useEffect(() => {
+    if (activeLayout === null) {
+      setDirty(false);
+      return;
+    }
+    const current = buildLayout(activeLayout.name, tablePositions, notes);
+    setDirty(
+      isLayoutDirty(
+        { tables: current.tables, notes: current.notes },
+        savedSnapshotRef.current,
+      ),
+    );
+  }, [activeLayout, tablePositions, notes]);
+
+  // Pending-layout cache sync (spec 22): once a layout is active, every drag
+  // or visibility change posts the current layout (with its dirty flag) to
+  // the extension host's in-memory cache after a short debounce, for use by
+  // the close-time save prompt. This never writes to disk by itself. Notes
+  // (spec 16) ride along; the runtime collapse state deliberately does not,
+  // so peeking into a note never marks the diagram dirty.
   useEffect(() => {
     if (activeLayout === null) return;
     if (!writeArmedRef.current) return;
     const handle = window.setTimeout(() => {
+      const layout = buildLayout(activeLayout.name, tablePositions, notes);
       postToHost({
-        type: 'layout:changed',
-        layout: buildLayout(activeLayout.name, tablePositions, notes),
+        type: 'layout:pending',
+        layout,
+        dirty: isLayoutDirty(
+          { tables: layout.tables, notes: layout.notes },
+          savedSnapshotRef.current,
+        ),
       });
     }, WRITE_DEBOUNCE_MS);
     return () => window.clearTimeout(handle);
@@ -113,5 +149,6 @@ export function useLayoutPersistence(notes: readonly DiagramNote[] = []): Layout
     onSaveDiagram,
     applyLayout,
     applyActiveLayout,
+    dirty,
   };
 }

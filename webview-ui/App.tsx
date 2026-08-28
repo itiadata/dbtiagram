@@ -364,14 +364,16 @@ export function App(): JSX.Element {
               type="button"
               className="panel-button app__save"
               onClick={layout.onSaveDiagram}
-              disabled={graph === null}
+              disabled={activeLayout === null ? graph === null : !layout.dirty}
               title={
                 activeLayout === null
                   ? 'Save the visible tables and their positions to a diagram file'
-                  : `Saving to ${activeLayout.path}`
+                  : layout.dirty
+                    ? `Save changes to ${activeLayout.path}`
+                    : 'No unsaved changes'
               }
             >
-              {activeLayout === null ? 'Save diagram' : 'Saved'}
+              {activeLayout === null ? 'Save diagram' : layout.dirty ? 'Save' : 'No changes'}
             </button>
           </header>
 

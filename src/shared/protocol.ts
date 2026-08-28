@@ -54,7 +54,11 @@ export type MessageToExtension =
   | { type: 'webview:ready' }
   /** Explicit "Save diagram" action; prompts for a path when none is active. */
   | { type: 'layout:save'; layout: DiagramLayout }
-  /** Debounced live update; ignored when no layout is active. */
-  | { type: 'layout:changed'; layout: DiagramLayout }
+  /**
+   * Debounced sync of the current (unsaved) layout to the extension host's
+   * in-memory cache; never written to disk directly (spec 22). `dirty` is
+   * carried alongside so the host never has to recompute it.
+   */
+  | { type: 'layout:pending'; layout: DiagramLayout; dirty: boolean }
   /** Open the model.yml declaring `model` and reveal its declaration (spec 15). */
   | { type: 'model:openSource'; model: string };

@@ -1,7 +1,7 @@
 ---
 id: 22
 title: Manual save for diagram layout files
-status: approved
+status: implemented
 priority: medium
 created: 2026-08-28
 owner: unassigned
@@ -382,27 +382,27 @@ import), tested directly with plain Vitest cases mirroring the table above.
 
 ## Acceptance Criteria
 
-- [ ] While a layout is active, no drag, note edit, or visibility change writes
+- [x] While a layout is active, no drag, note edit, or visibility change writes
       to the `.dbtiagram.yml` file until Save is clicked.
-- [ ] The header button reads "No changes" and is disabled when there are no
+- [x] The header button reads "No changes" and is disabled when there are no
       unsaved changes, and "Save" and is enabled as soon as something changes.
-- [ ] Clicking "Save" while dirty writes the current tables and notes to the
+- [x] Clicking "Save" while dirty writes the current tables and notes to the
       active layout file and returns the button to disabled "No changes".
-- [ ] Opening a layout (including the `webview:ready` re-apply) starts with the
+- [x] Opening a layout (including the `webview:ready` re-apply) starts with the
       button disabled ("No changes").
-- [ ] With no active layout, the button is unchanged: "Save diagram", enabled,
+- [x] With no active layout, the button is unchanged: "Save diagram", enabled,
       opens the save dialog.
-- [ ] Model.yml edits keep writing back immediately regardless of the layout's
+- [x] Model.yml edits keep writing back immediately regardless of the layout's
       dirty state.
-- [ ] `layout:changed` is replaced by `layout:pending`, a host-side in-memory
+- [x] `layout:changed` is replaced by `layout:pending`, a host-side in-memory
       cache-sync that never writes to disk by itself.
-- [ ] Closing the diagram panel while the cached layout is dirty shows a modal
+- [x] Closing the diagram panel while the cached layout is dirty shows a modal
       "Save" / "Don't Save" dialog; choosing Save writes the layout to the
       active file; choosing Don't Save (or dismissing) leaves the file as it
       was at the last explicit save.
-- [ ] Closing the diagram panel with no unsaved changes, or with no active
+- [x] Closing the diagram panel with no unsaved changes, or with no active
       layout, never shows a confirmation dialog.
-- [ ] `npm run verify` and `npm test` are green.
+- [x] `npm run verify` and `npm test` are green.
 
 ## Confirm at Approval
 
