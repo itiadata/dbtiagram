@@ -222,3 +222,67 @@ models:
     expect(file.models[0].columns?.[0].dataTests).toEqual(['not_null']);
   });
 });
+
+describe('column meta (spec 27 bug fix)', () => {
+  it('parses column-level meta from the flat meta key', () => {
+    const file = parseModelYml(`
+models:
+  - name: customers
+    columns:
+      - name: email
+        meta:
+          confidentiality: internal
+          GDPR: "false"
+`);
+    expect(file.models[0].columns?.[0].meta).toEqual({
+      confidentiality: 'internal',
+      GDPR: 'false',
+    });
+  });
+
+  it('falls back to config.meta when meta is nested under column config', () => {
+    const file = parseModelYml(`
+models:
+  - name: customers
+    columns:
+      - name: customer_id
+        config:
+          meta:
+            confidentiality: internal
+            sensitivity: not_sensitive
+`);
+    expect(file.models[0].columns?.[0].meta).toEqual({
+      confidentiality: 'internal',
+      sensitivity: 'not_sensitive',
+    });
+  });
+
+  it('prefers the flat meta key over config.meta when both are present', () => {
+    const file = parseModelYml(`
+models:
+  - name: customers
+    columns:
+      - name: customer_id
+        meta:
+          a: "1"
+        config:
+          meta:
+            a: "2"
+`);
+    expect(file.models[0].columns?.[0].meta).toEqual({ a: '1' });
+  });
+
+  it('round trips column meta through the flat meta key', () => {
+    const file = parseModelYml(`
+models:
+  - name: customers
+    columns:
+      - name: email
+        meta:
+          GDPR: "false"
+`);
+    const reparsed = parseModelYml(serializeModelYml(file));
+    expect(reparsed).toEqual(file);
+  });
+});
+

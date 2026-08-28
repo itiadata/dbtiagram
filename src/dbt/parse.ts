@@ -125,12 +125,21 @@ function normalizeColumn(raw: Record<string, unknown>, source: string) {
   if (typeof name !== 'string' || name.trim().length === 0) {
     throw new ModelYmlParseError(source, 'Every column must have a non-empty string "name"');
   }
+  // Column meta is read from the flat `meta:` key (the form this app writes
+  // back, spec 27), falling back to `config.meta` for files that nest it
+  // there instead (a form dbt also accepts).
+  const meta = isRecord(raw.meta)
+    ? raw.meta
+    : isRecord(raw.config) && isRecord(raw.config.meta)
+      ? raw.config.meta
+      : undefined;
   return {
     name,
     ...(typeof raw.data_type === 'string' ? { dataType: raw.data_type } : {}),
     ...(typeof raw.description === 'string' ? { description: raw.description } : {}),
     ...(Array.isArray(raw.tests) ? { tests: raw.tests.filter((t): t is string => typeof t === 'string') } : {}),
     ...(Array.isArray(raw.data_tests) ? { dataTests: normalizeDataTests(raw.data_tests) } : {}),
+    ...(meta !== undefined ? { meta } : {}),
   };
 }
 

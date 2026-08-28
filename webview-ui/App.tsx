@@ -66,7 +66,8 @@ export function App(): JSX.Element {
     overrides: columnDisplay.overrides,
   });
   const settings = useSettings();
-  const fieldsMatrix = useFieldsMatrix(postToHost);  // Stable callbacks pulled out of the hook results: memo dependency lists must
+  const fieldsMatrix = useFieldsMatrix(postToHost);
+  // Stable callbacks pulled out of the hook results: memo dependency lists must
   // reference these, never the freshly-built hook result objects, or every
   // render would invalidate `interaction` and re-render every TableNode.
   const {
@@ -669,8 +670,8 @@ export function App(): JSX.Element {
           seedColumns={fieldsMatrix.seedColumns}
           onColumnsChange={fieldsMatrix.setColumns}
           storedPrefs={fieldsMatrix.storedPrefs[fieldsMatrix.target.scope]}
-          filterText={fieldsMatrix.filterText}
-          onFilterTextChange={fieldsMatrix.setFilterText}
+          columnFilters={fieldsMatrix.columnFilters}
+          onColumnFilterChange={fieldsMatrix.setColumnFilter}
         />
       )}
     </main>

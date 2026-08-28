@@ -1,8 +1,9 @@
 /**
  * The "fields matrix" modal (spec 27): a spreadsheet-like grid over one
- * model's columns or every column of every model in the diagram. Renders the
- * filter box, column show/hide + reorder controls, editable cells, and a
- * batch-apply affordance for multi-cell selections.
+ * model's columns or every column of every model in the diagram. Renders a
+ * "Columns…" popover for show/hide + drag-to-reorder, a per-column filter row
+ * under the headers, editable cells, and a batch-apply affordance for
+ * multi-cell selections.
  *
  * Modal chrome follows `SettingsPanel.tsx`'s conventions: Escape and outside
  * pointerdown close it.
@@ -27,6 +28,7 @@ import {
   type CellRef,
   type MatrixSelection,
 } from './matrix-selection';
+import type { MatrixColumnFilters } from './hooks/useFieldsMatrix';
 
 export interface FieldsMatrixProps {
   target: { scope: 'model'; model: string } | { scope: 'global' };
@@ -41,8 +43,9 @@ export interface FieldsMatrixProps {
   onColumnsChange: (columns: MatrixColumnDef[]) => void;
   /** The stored preferences last received from the host, for this scope. */
   storedPrefs: StoredMatrixColumnPref[] | undefined;
-  filterText: string;
-  onFilterTextChange: (text: string) => void;
+  /** One filter text per column, keyed by column id; always reset on open. */
+  columnFilters: MatrixColumnFilters;
+  onColumnFilterChange: (columnId: MatrixColumnId, text: string) => void;
 }
 
 function columnIdKey(id: MatrixColumnId): string {
@@ -67,13 +70,15 @@ export function FieldsMatrix({
   seedColumns,
   onColumnsChange,
   storedPrefs,
-  filterText,
-  onFilterTextChange,
+  columnFilters,
+  onColumnFilterChange,
 }: FieldsMatrixProps): JSX.Element {
   const ref = useRef<HTMLDivElement | null>(null);
+  const columnsMenuRef = useRef<HTMLDivElement | null>(null);
   const [selection, setSelection] = useState<MatrixSelection | null>(null);
   const [selecting, setSelecting] = useState(false);
   const [batchValue, setBatchValue] = useState('');
+  const [columnsMenuOpen, setColumnsMenuOpen] = useState(false);
 
   // Nodes in scope, and the meta keys discovered once at open time (spec 27,
   // Behavior note 6: a snapshot, not live).
@@ -104,25 +109,44 @@ export function FieldsMatrix({
 
   const visibleColumns = columns.filter((c) => c.visible);
 
+  // A row is kept when it matches every column's non-empty filter (spreadsheet
+  // AND semantics): each active filter is checked against that column's own
+  // cell, not any cell in the row.
   const filteredRowIndexes = useMemo(() => {
-    if (filterText.trim().length === 0) return rows.map((_, i) => i);
-    const needle = filterText.trim().toLowerCase();
+    const activeFilters = visibleColumns
+      .map((column) => ({ column, needle: (columnFilters[columnIdKey(column.id)] ?? '').trim().toLowerCase() }))
+      .filter(({ needle }) => needle.length > 0);
+    if (activeFilters.length === 0) return rows.map((_, i) => i);
     return rows
       .map((row, index) => ({ row, index }))
       .filter(({ row }) =>
-        visibleColumns.some((column) => {
-          if (column.id === 'primaryKey' || column.id === 'virtualPrimaryKey') return false;
+        activeFilters.every(({ column, needle }) => {
+          if (column.id === 'primaryKey' || column.id === 'virtualPrimaryKey') return true;
           return cellText(row, column.id).toLowerCase().includes(needle);
         }),
       )
       .map(({ index }) => index);
-  }, [rows, filterText, visibleColumns]);
+  }, [rows, columnFilters, visibleColumns]);
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent): void => {
-      if (event.key === 'Escape') onClose();
+      if (event.key === 'Escape') {
+        if (columnsMenuOpen) {
+          setColumnsMenuOpen(false);
+          return;
+        }
+        onClose();
+      }
     };
     const onPointerDown = (event: PointerEvent): void => {
+      if (
+        columnsMenuOpen &&
+        columnsMenuRef.current !== null &&
+        event.target instanceof globalThis.Node &&
+        !columnsMenuRef.current.contains(event.target)
+      ) {
+        setColumnsMenuOpen(false);
+      }
       const element = ref.current;
       if (element !== null && event.target instanceof globalThis.Node && element.contains(event.target)) {
         return;
@@ -135,7 +159,7 @@ export function FieldsMatrix({
       window.removeEventListener('keydown', onKeyDown);
       window.removeEventListener('pointerdown', onPointerDown);
     };
-  }, [onClose]);
+  }, [onClose, columnsMenuOpen]);
 
   function editRow(row: MatrixRow, columnId: MatrixColumnId, value: string): void {
     if (columnId === 'model') return;
@@ -262,24 +286,42 @@ export function FieldsMatrix({
           </button>
         </div>
         <div className="fields-matrix__toolbar">
-          <input
-            type="text"
-            className="fields-matrix__filter"
-            placeholder="Filter rows…"
-            value={filterText}
-            onChange={(event) => onFilterTextChange(event.target.value)}
-          />
-          <div className="fields-matrix__column-toggles">
-            {columns.map((column) => (
-              <label key={columnIdKey(column.id)} className="fields-matrix__column-toggle">
-                <input
-                  type="checkbox"
-                  checked={column.visible}
-                  onChange={() => onColumnsChange(toggleColumnVisible(columns, column.id))}
-                />
-                {column.label}
-              </label>
-            ))}
+          <div className="fields-matrix__columns-menu" ref={columnsMenuRef}>
+            <button
+              type="button"
+              className="panel-button panel-button--secondary"
+              onClick={() => setColumnsMenuOpen((open) => !open)}
+            >
+              Columns…
+            </button>
+            {columnsMenuOpen && (
+              <div className="fields-matrix__columns-popover" role="menu">
+                <ul className="fields-matrix__columns-list">
+                  {columns.map((column, index) => (
+                    <li
+                      key={columnIdKey(column.id)}
+                      className="fields-matrix__columns-item"
+                      draggable
+                      onDragStart={(event) => onDragStart(index, event)}
+                      onDragOver={(event) => event.preventDefault()}
+                      onDrop={(event) => onDrop(index, event)}
+                    >
+                      <span className="fields-matrix__columns-handle" aria-hidden="true">
+                        ⠿
+                      </span>
+                      <label className="fields-matrix__column-toggle">
+                        <input
+                          type="checkbox"
+                          checked={column.visible}
+                          onChange={() => onColumnsChange(toggleColumnVisible(columns, column.id))}
+                        />
+                        {column.label}
+                      </label>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
           </div>
         </div>
 
@@ -288,15 +330,23 @@ export function FieldsMatrix({
             <thead>
               <tr>
                 {visibleColumns.map((column) => (
-                  <th
-                    key={columnIdKey(column.id)}
-                    draggable
-                    onDragStart={(event) => onDragStart(columns.indexOf(column), event)}
-                    onDragOver={(event) => event.preventDefault()}
-                    onDrop={(event) => onDrop(columns.indexOf(column), event)}
-                    title={column.label}
-                  >
+                  <th key={columnIdKey(column.id)} title={column.label}>
                     {column.label}
+                  </th>
+                ))}
+              </tr>
+              <tr className="fields-matrix__filter-row">
+                {visibleColumns.map((column) => (
+                  <th key={columnIdKey(column.id)}>
+                    {column.id === 'primaryKey' || column.id === 'virtualPrimaryKey' ? null : (
+                      <input
+                        type="text"
+                        className="fields-matrix__column-filter"
+                        placeholder="Filter…"
+                        value={columnFilters[columnIdKey(column.id)] ?? ''}
+                        onChange={(event) => onColumnFilterChange(column.id, event.target.value)}
+                      />
+                    )}
                   </th>
                 ))}
               </tr>
