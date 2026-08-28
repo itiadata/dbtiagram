@@ -1,7 +1,7 @@
 ---
 id: 25
 title: Reveal a specific column in model.yml
-status: approved
+status: done
 priority: medium
 created: 2026-08-28
 owner: unassigned
