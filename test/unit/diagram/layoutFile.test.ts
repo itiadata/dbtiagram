@@ -305,3 +305,66 @@ describe('notes (spec 16)', () => {
     });
   });
 });
+
+describe('columnDisplay (spec 24)', () => {
+  it('round-trips through serialize/parse', () => {
+    const layout: DiagramLayout = {
+      version: 1,
+      name: 'd',
+      tables: [{ name: 'orders', x: 0, y: 0, columnDisplay: 'pkOnly' }],
+      notes: [],
+      defaultColumnDisplay: 'pkAndFk',
+    };
+    expect(parseDiagramLayout(serializeDiagramLayout(layout), 'd')).toEqual(layout);
+  });
+
+  it('omits defaults from serialized YAML', () => {
+    const layout = buildLayout('d', [{ name: 'orders', x: 0, y: 0 }]);
+    const text = serializeDiagramLayout(layout);
+    expect(text).not.toContain('columnDisplay');
+    expect(text).not.toContain('defaultColumnDisplay');
+  });
+
+  it('buildLayout carries the default and per-table overrides', () => {
+    const layout = buildLayout(
+      'd',
+      [
+        { name: 'orders', x: 0, y: 0 },
+        { name: 'customers', x: 10, y: 10 },
+      ],
+      [],
+      { default: 'pkAndFk', overrides: new Map([['orders', 'pkOnly']]) },
+    );
+    expect(layout.defaultColumnDisplay).toBe('pkAndFk');
+    expect(layout.tables.find((t) => t.name === 'orders')?.columnDisplay).toBe('pkOnly');
+    expect(layout.tables.find((t) => t.name === 'customers')?.columnDisplay).toBeUndefined();
+  });
+
+  it('applyLayout carries the default and per-table overrides through', () => {
+    const layout: DiagramLayout = {
+      version: 1,
+      name: 'd',
+      tables: [{ name: 'orders', x: 0, y: 0, columnDisplay: 'nameOnly' }],
+      notes: [],
+      defaultColumnDisplay: 'pkOnly',
+    };
+    const applied = applyLayout(layout, new Set(['orders']));
+    expect(applied.defaultColumnDisplay).toBe('pkOnly');
+    expect(applied.columnDisplay.get('orders')).toBe('nameOnly');
+  });
+
+  it('applyLayout defaults to "all" for a pre-feature layout', () => {
+    const applied = applyLayout(sample, new Set(['orders', 'order_items']));
+    expect(applied.defaultColumnDisplay).toBe('all');
+    expect(applied.columnDisplay.size).toBe(0);
+  });
+
+  it('rejects an invalid table columnDisplay', () => {
+    expect(() =>
+      parseDiagramLayout(
+        'version: 1\ntables:\n  - name: orders\n    x: 1\n    y: 2\n    columnDisplay: bogus\n',
+        'fallback',
+      ),
+    ).toThrow(DiagramLayoutParseError);
+  });
+});

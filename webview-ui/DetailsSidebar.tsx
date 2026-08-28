@@ -21,7 +21,9 @@ import {
 } from 'react';
 import type { ModelEdit } from '../src/dbt/edit';
 import type { ForeignKeyDescriptor } from '../src/dbt/types';
+import type { ColumnDisplayMode } from '../src/diagram/columnDisplay';
 import type { TableNode, TableNodeColumn } from '../src/diagram/graph';
+import { ColumnDisplaySection } from './ColumnDisplaySection';
 import { ForeignKeySection, type DraftForeignKey } from './ForeignKeySection';
 import { PrimaryKeySection } from './PrimaryKeySection';
 
@@ -46,6 +48,9 @@ interface DetailsSidebarProps {
   onRemoveLastPair: (fk: ForeignKeyDescriptor) => void;
   /** Hides the whole sidebar, leaving its reopen rail (spec 11). */
   onCollapse: () => void;
+  /** The selected table's effective column-display mode (spec 24); ignored for a column entity. */
+  columnDisplayMode: ColumnDisplayMode;
+  onColumnDisplayModeChange: (mode: ColumnDisplayMode) => void;
   /** Inline width from the App's resize state (spec 11). */
   style?: CSSProperties;
 }
@@ -62,6 +67,8 @@ export function DetailsSidebar({
   onDraftAddPair,
   onRemoveLastPair,
   onCollapse,
+  columnDisplayMode,
+  onColumnDisplayModeChange,
   style,
 }: DetailsSidebarProps): JSX.Element {
   return (
@@ -103,6 +110,7 @@ export function DetailsSidebar({
               })
             }
           />
+          <ColumnDisplaySection mode={columnDisplayMode} onChange={onColumnDisplayModeChange} />
           <PrimaryKeySection node={entity.node} onEdit={onEdit} />
           <ForeignKeySection
             node={entity.node}

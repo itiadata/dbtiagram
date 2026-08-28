@@ -21,6 +21,12 @@ export interface TableNode {
   primaryKey?: { columns: string[]; virtual: boolean };
   /** Every declared FK — real constraints first, then virtual meta entries. */
   foreignKeys: ForeignKeyDescriptor[];
+  /**
+   * This table's own FK columns (declaration order), plus any column another
+   * table's FK targets (order their edges were built), duplicates collapsed.
+   * Feeds the `pkAndFk` column display mode (spec 24).
+   */
+  foreignKeyColumns: string[];
 }
 
 export interface RelationEdge {
@@ -99,6 +105,7 @@ export function buildDiagram(models: ModelDefinition[]): DiagramGraph {
       })),
       ...(primaryKey !== undefined ? { primaryKey } : {}),
       foreignKeys,
+      foreignKeyColumns: [],
     };
   });
 
@@ -151,6 +158,31 @@ export function buildDiagram(models: ModelDefinition[]): DiagramGraph {
     for (const fk of virtual.foreignKeys ?? []) {
       addEdge(model.name, fk, true);
     }
+  }
+
+  // Spec 24: foreignKeyColumns feeds the pkAndFk column display mode — a
+  // table's own FK columns (declaration order) plus any column another
+  // table's FK targets (edge-build order), duplicates collapsed.
+  const foreignKeyColumnsById = new Map<string, string[]>(nodes.map((node) => [node.id, []]));
+  const addForeignKeyColumn = (nodeId: string, column: string): void => {
+    const columns = foreignKeyColumnsById.get(nodeId);
+    if (columns === undefined || columns.includes(column)) return;
+    columns.push(column);
+  };
+  for (const node of nodes) {
+    for (const fk of node.foreignKeys) {
+      for (const column of fk.columns) {
+        addForeignKeyColumn(node.id, column);
+      }
+    }
+  }
+  for (const edge of edges) {
+    for (const column of edge.targetColumns) {
+      addForeignKeyColumn(edge.target, column);
+    }
+  }
+  for (const node of nodes) {
+    node.foreignKeyColumns = foreignKeyColumnsById.get(node.id) ?? [];
   }
 
   return { nodes, edges };

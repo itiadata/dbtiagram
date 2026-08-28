@@ -91,8 +91,8 @@ describe('computeVisibleModels', () => {
 describe('filterGraph', () => {
   const graph: DiagramGraph = {
     nodes: [
-      { id: 'orders', label: 'orders', columns: [], foreignKeys: [] },
-      { id: 'products', label: 'products', columns: [], foreignKeys: [] },
+      { id: 'orders', label: 'orders', columns: [], foreignKeys: [], foreignKeyColumns: [] },
+      { id: 'products', label: 'products', columns: [], foreignKeys: [], foreignKeyColumns: [] },
     ],
     edges: [
       {

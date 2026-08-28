@@ -7,6 +7,7 @@
  */
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { buildLayout, type DiagramLayoutTable, type DiagramNote } from '../../src/diagram/layoutFile';
+import type { ColumnDisplayMode } from '../../src/diagram/columnDisplay';
 import type { NodePosition } from '../../src/diagram/positions';
 import { postToHost } from '../host';
 import { isLayoutDirty, type LayoutSnapshot } from '../layout-dirty';
@@ -30,7 +31,10 @@ export interface LayoutPersistenceState {
   dirty: boolean;
 }
 
-export function useLayoutPersistence(notes: readonly DiagramNote[] = []): LayoutPersistenceState {
+export function useLayoutPersistence(
+  notes: readonly DiagramNote[] = [],
+  columnDisplay?: { defaultMode: ColumnDisplayMode; overrides: Map<string, ColumnDisplayMode> },
+): LayoutPersistenceState {
   const [activeLayout, setActiveLayout] = useState<{ path: string; name: string } | null>(null);
   const [seedPositions, setSeedPositions] = useState<Map<string, NodePosition> | null>(null);
   const [seedTick, setSeedTick] = useState(0);
@@ -52,7 +56,11 @@ export function useLayoutPersistence(notes: readonly DiagramNote[] = []): Layout
     );
     setSeedTick((tick) => tick + 1);
     setLayoutMissing(message.missing);
-    savedSnapshotRef.current = { tables: message.layout.tables, notes: message.layout.notes };
+    savedSnapshotRef.current = {
+      tables: message.layout.tables,
+      notes: message.layout.notes,
+      defaultColumnDisplay: message.layout.defaultColumnDisplay,
+    };
     setDirty(false);
     return names;
   }, []);
@@ -92,13 +100,24 @@ export function useLayoutPersistence(notes: readonly DiagramNote[] = []): Layout
   }, []);
 
   const onSaveDiagram = useCallback((): void => {
-    const layout = buildLayout(activeLayout?.name ?? 'mydiagram', tablePositions, notes);
+    const layout = buildLayout(
+      activeLayout?.name ?? 'mydiagram',
+      tablePositions,
+      notes,
+      columnDisplay === undefined
+        ? undefined
+        : { default: columnDisplay.defaultMode, overrides: columnDisplay.overrides },
+    );
     postToHost({ type: 'layout:save', layout });
     // Optimistic: there is no save-ack message in the protocol, so the
     // snapshot is taken from what was just sent (spec 22).
-    savedSnapshotRef.current = { tables: layout.tables, notes: layout.notes };
+    savedSnapshotRef.current = {
+      tables: layout.tables,
+      notes: layout.notes,
+      defaultColumnDisplay: layout.defaultColumnDisplay,
+    };
     setDirty(false);
-  }, [activeLayout, tablePositions, notes]);
+  }, [activeLayout, tablePositions, notes, columnDisplay]);
 
   // Recompute dirty whenever the live tables/notes change, comparing through
   // `buildLayout` so both sides are sorted/rounded the same way (spec 22).
@@ -107,14 +126,21 @@ export function useLayoutPersistence(notes: readonly DiagramNote[] = []): Layout
       setDirty(false);
       return;
     }
-    const current = buildLayout(activeLayout.name, tablePositions, notes);
+    const current = buildLayout(
+      activeLayout.name,
+      tablePositions,
+      notes,
+      columnDisplay === undefined
+        ? undefined
+        : { default: columnDisplay.defaultMode, overrides: columnDisplay.overrides },
+    );
     setDirty(
       isLayoutDirty(
-        { tables: current.tables, notes: current.notes },
+        { tables: current.tables, notes: current.notes, defaultColumnDisplay: current.defaultColumnDisplay },
         savedSnapshotRef.current,
       ),
     );
-  }, [activeLayout, tablePositions, notes]);
+  }, [activeLayout, tablePositions, notes, columnDisplay]);
 
   // Pending-layout cache sync (spec 22): once a layout is active, every drag
   // or visibility change posts the current layout (with its dirty flag) to
@@ -126,18 +152,25 @@ export function useLayoutPersistence(notes: readonly DiagramNote[] = []): Layout
     if (activeLayout === null) return;
     if (!writeArmedRef.current) return;
     const handle = window.setTimeout(() => {
-      const layout = buildLayout(activeLayout.name, tablePositions, notes);
+      const layout = buildLayout(
+        activeLayout.name,
+        tablePositions,
+        notes,
+        columnDisplay === undefined
+          ? undefined
+          : { default: columnDisplay.defaultMode, overrides: columnDisplay.overrides },
+      );
       postToHost({
         type: 'layout:pending',
         layout,
         dirty: isLayoutDirty(
-          { tables: layout.tables, notes: layout.notes },
+          { tables: layout.tables, notes: layout.notes, defaultColumnDisplay: layout.defaultColumnDisplay },
           savedSnapshotRef.current,
         ),
       });
     }, WRITE_DEBOUNCE_MS);
     return () => window.clearTimeout(handle);
-  }, [activeLayout, tablePositions, notes]);
+  }, [activeLayout, tablePositions, notes, columnDisplay]);
 
   return {
     activeLayout,

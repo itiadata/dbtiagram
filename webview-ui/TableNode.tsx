@@ -24,6 +24,7 @@ import {
   columnSourceHandle,
   columnTargetHandle,
   CARD_ANCHOR,
+  HEADER_ANCHOR,
   type HandleSide,
   type FlowNode,
 } from '../src/diagram/flow';
@@ -92,15 +93,19 @@ function TableNodeComponent({ id, data }: NodeProps<FlowNode>): JSX.Element {
     const used = usedHandles?.[handleId] !== undefined;
     const position = side === 'right' ? Position.Right : Position.Left;
     const broken = column === CARD_ANCHOR && used;
+    const isHeaderAnchor = column === HEADER_ANCHOR;
     // Every handle sits at the row's exact vertical center, so all edges
     // attaching to the same (column, side) — however many, in either
-    // direction — converge on ONE shared dot (spec 12, section 9).
+    // direction — converge on ONE shared dot (spec 12, section 9). A
+    // HEADER_ANCHOR handle (spec 24) sits on the header instead, styled as a
+    // normal (non-broken) connection — the column is only hidden, not missing.
     return (
       <Handle
         key={handleId}
         id={handleId}
         type={type}
         position={position}
+        style={isHeaderAnchor ? { top: HEADER_HEIGHT / 2 } : undefined}
         className={
           used
             ? broken
@@ -118,6 +123,10 @@ function TableNodeComponent({ id, data }: NodeProps<FlowNode>): JSX.Element {
       {renderHandle(CARD_ANCHOR, 'right', 'target')}
       {renderHandle(CARD_ANCHOR, 'left', 'source')}
       {renderHandle(CARD_ANCHOR, 'right', 'source')}
+      {renderHandle(HEADER_ANCHOR, 'left', 'target')}
+      {renderHandle(HEADER_ANCHOR, 'right', 'target')}
+      {renderHandle(HEADER_ANCHOR, 'left', 'source')}
+      {renderHandle(HEADER_ANCHOR, 'right', 'source')}
       <div
         className={`table-node__title${selectedTable ? ' table-node__title--selected' : ''}`}
         title={data.description}

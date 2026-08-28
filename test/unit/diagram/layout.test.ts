@@ -130,4 +130,13 @@ describe('layoutDiagram', () => {
     const layout = layoutFor([]);
     expect(layout.nodes).toEqual([]);
   });
+
+  it('sizes a card by its displayed column count when a lookup is given', () => {
+    const graph = buildDiagram([
+      { name: 'a', columns: [{ name: 'x1' }, { name: 'x2' }, { name: 'x3' }] },
+    ]);
+    const layout = layoutDiagram(graph, () => 1);
+    expect(layout.nodes[0].height).toBe(nodeHeight(1));
+    expect(layout.nodes[0].height).not.toBe(nodeHeight(3));
+  });
 });

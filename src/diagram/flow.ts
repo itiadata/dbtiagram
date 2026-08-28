@@ -16,8 +16,10 @@
  * use (the webview mounts a dot for those and nothing else).
  */
 import type { Edge, Node } from '@xyflow/react';
+import { displayedColumns } from './columnDisplay';
+import type { ColumnDisplayMode } from './columnDisplay';
 import type { DiagramGraph, TableNodeColumn } from './graph';
-import { columnRowCenterY } from './layout';
+import { HEADER_HEIGHT, columnRowCenterY } from './layout';
 import type { DiagramLayout, NodePlacement } from './layout';
 import { ROUTING_NODE_LIMIT, routeEdge, type Point } from './routing';
 
@@ -121,6 +123,14 @@ export const FK_EDGE_TYPE = 'fk';
  */
 export const CARD_ANCHOR = '\u0000card';
 
+/**
+ * Pseudo-column name for an FK end whose column exists on the model but is
+ * hidden by the table's column display mode (spec 24). Sibling of
+ * `CARD_ANCHOR`, but rendered at the header position and styled as a normal
+ * (non-broken) connection — the column is not "missing", just not shown.
+ */
+export const HEADER_ANCHOR = '\u0000header';
+
 
 /**
  * Width (px) of the invisible hover/click band around every edge, rendered by
@@ -132,7 +142,11 @@ export const CARD_ANCHOR = '\u0000card';
 export const EDGE_INTERACTION_WIDTH = 24;
 
 /** Maps the diagram graph + dagre layout onto React Flow nodes and edges. */
-export function buildFlowElements(graph: DiagramGraph, layout: DiagramLayout): FlowElements {
+export function buildFlowElements(
+  graph: DiagramGraph,
+  layout: DiagramLayout,
+  columnDisplayMode: (nodeId: string) => ColumnDisplayMode,
+): FlowElements {
   const byId = new Map(layout.nodes.map((placement) => [placement.id, placement]));
 
   const placementOf = (id: string): NodePlacement => {
@@ -145,7 +159,13 @@ export function buildFlowElements(graph: DiagramGraph, layout: DiagramLayout): F
 
   const usedIds = new Set<string>();
   const rawEdges: FlowEdge[] = [];
-  const columnIndexOf = columnRowIndexLookup(graph);
+  // `columnExists` checks the full (unfiltered) model columns — genuinely
+  // missing vs. merely hidden are two different cases (spec 20 vs. spec 24).
+  const columnExists = columnRowIndexLookup(graph);
+  // `columnIndexOf` is built from each node's currently DISPLAYED columns, so
+  // a column hidden by the display mode reads as "not found" here even though
+  // `columnExists` still finds it.
+  const columnIndexOf = displayedColumnRowIndexLookup(graph, columnDisplayMode);
 
   // Only column-pair edges exist (spec 09 merged): graph edges with empty or
   // unequal-length arrays never reach this layer. Handles/paths are filled in
@@ -154,8 +174,8 @@ export function buildFlowElements(graph: DiagramGraph, layout: DiagramLayout): F
   for (const edge of graph.edges) {
     edge.sourceColumns.forEach((sourceColumn, index) => {
       const targetColumn = edge.targetColumns[index];
-      const sourceMissing = columnIndexOf(edge.source, sourceColumn) === undefined;
-      const targetMissing = columnIndexOf(edge.target, targetColumn) === undefined;
+      const sourceMissing = columnExists(edge.source, sourceColumn) === undefined;
+      const targetMissing = columnExists(edge.target, targetColumn) === undefined;
       const missing: string[] = [];
       if (sourceMissing) {
         missing.push(`${edge.source}.${sourceColumn}`);
@@ -190,7 +210,7 @@ export function buildFlowElements(graph: DiagramGraph, layout: DiagramLayout): F
     width: placement.width,
     height: placement.height,
   }));
-  const { edges, nodeHandles } = routeEdges(rawEdges, nodeRects, columnIndexOf);
+  const { edges, nodeHandles } = routeEdges(rawEdges, nodeRects, columnIndexOf, columnExists);
 
   const nodes: FlowNode[] = graph.nodes.map((node) => {
     const placement = placementOf(node.id);
@@ -204,7 +224,7 @@ export function buildFlowElements(graph: DiagramGraph, layout: DiagramLayout): F
       data: {
         label: node.label,
         description: node.description,
-        columns: node.columns,
+        columns: displayedColumns(node, columnDisplayMode(node.id)),
         ...(node.primaryKey !== undefined ? { primaryKey: node.primaryKey } : {}),
         ...(handles !== undefined ? { handles: Object.fromEntries(handles) } : {}),
       },
@@ -241,6 +261,7 @@ export function routeEdges(
   edges: readonly FlowEdge[],
   nodeRects: readonly NodeRect[],
   columnIndexOf: ColumnRowIndexLookup,
+  columnExists: ColumnRowIndexLookup,
 ): RoutedEdgeGeometry {
   const byId = new Map(nodeRects.map((rect) => [rect.id, rect]));
   const scoreObstacles = nodeRects.length <= ROUTING_NODE_LIMIT;
@@ -255,9 +276,21 @@ export function routeEdges(
     handles.set(handleId, side);
   };
 
+  // Two-tier anchor selection (spec 20 + spec 24): a column absent from the
+  // model entirely anchors at the card (CARD_ANCHOR, unresolved, unchanged
+  // spec-20 behavior); a column that exists but is hidden by the table's
+  // display mode anchors at the header instead (HEADER_ANCHOR), drawn as a
+  // normal connection.
+  const anchorFor = (nodeId: string, column: string): string => {
+    if (columnExists(nodeId, column) === undefined) return CARD_ANCHOR;
+    if (columnIndexOf(nodeId, column) === undefined) return HEADER_ANCHOR;
+    return column;
+  };
+
   const rowCenterY = (rect: NodeRect, column: string): number => {
     const index = columnIndexOf(rect.id, column);
-    return index === undefined ? rect.height / 2 : columnRowCenterY(index);
+    if (index !== undefined) return columnRowCenterY(index);
+    return columnExists(rect.id, column) === undefined ? rect.height / 2 : HEADER_HEIGHT / 2;
   };
 
   const rebuilt: FlowEdge[] = edges.map((edge) => {
@@ -282,8 +315,8 @@ export function routeEdges(
       target: { rect: targetRect, rowCenterY: rowCenterY(targetRect, targetColumn) },
       obstacles,
     });
-    const sourceAnchor = columnIndexOf(edge.source, sourceColumn) === undefined ? CARD_ANCHOR : sourceColumn;
-    const targetAnchor = columnIndexOf(edge.target, targetColumn) === undefined ? CARD_ANCHOR : targetColumn;
+    const sourceAnchor = anchorFor(edge.source, sourceColumn);
+    const targetAnchor = anchorFor(edge.target, targetColumn);
     const sourceHandle = columnSourceHandle(sourceAnchor, route.sourceSide);
     const targetHandle = columnTargetHandle(targetAnchor, route.targetSide);
     addHandle(edge.source, sourceHandle, route.sourceSide);
@@ -299,12 +332,35 @@ export function routeEdges(
   return { edges: rebuilt, nodeHandles };
 }
 
-/** Column name -> row index lookup for every node of a graph. */
+/** Column name -> row index lookup for every node of a graph (full column set). */
 export function columnRowIndexLookup(graph: DiagramGraph): ColumnRowIndexLookup {
   const byNode = new Map<string, Map<string, number>>(
     graph.nodes.map((node) => [
       node.id,
       new Map(node.columns.map((column, index) => [column.name, index])),
+    ]),
+  );
+  return (nodeId, column) => byNode.get(nodeId)?.get(column);
+}
+
+/**
+ * Column name -> row index lookup built from each node's currently
+ * DISPLAYED columns (spec 24), so a column hidden by the table's display
+ * mode reads as "not found" here even though it still exists in the model.
+ */
+export function displayedColumnRowIndexLookup(
+  graph: DiagramGraph,
+  columnDisplayMode: (nodeId: string) => ColumnDisplayMode,
+): ColumnRowIndexLookup {
+  const byNode = new Map<string, Map<string, number>>(
+    graph.nodes.map((node) => [
+      node.id,
+      new Map(
+        displayedColumns(node, columnDisplayMode(node.id)).map((column, index) => [
+          column.name,
+          index,
+        ]),
+      ),
     ]),
   );
   return (nodeId, column) => byNode.get(nodeId)?.get(column);

@@ -413,4 +413,45 @@ describe('buildDiagram', () => {
       ]);
     });
   });
+
+  describe('foreignKeyColumns (spec 24)', () => {
+    it('includes own FK columns and incoming target columns', () => {
+      const graph = buildDiagram([
+        {
+          name: 'orders',
+          columns: [{ name: 'id' }, { name: 'customer_id' }],
+          constraints: [
+            { type: 'foreign_key', columns: ['customer_id'], to: "ref('customers')", toColumns: ['id'] },
+          ],
+        },
+        { name: 'customers', columns: [{ name: 'id' }] },
+      ]);
+      const orders = graph.nodes.find((n) => n.id === 'orders')!;
+      const customers = graph.nodes.find((n) => n.id === 'customers')!;
+      expect(orders.foreignKeyColumns).toEqual(['customer_id']);
+      expect(customers.foreignKeyColumns).toEqual(['id']);
+    });
+
+    it('is empty when a table has no FKs and is not an FK target', () => {
+      const graph = buildDiagram([{ name: 'orphan', columns: [{ name: 'id' }] }]);
+      expect(graph.nodes[0].foreignKeyColumns).toEqual([]);
+    });
+
+    it('collapses duplicates when a column is both a PK/FK target and a declared FK column', () => {
+      const graph = buildDiagram([
+        {
+          name: 'a',
+          columns: [{ name: 'b_id' }],
+          constraints: [
+            { type: 'foreign_key', columns: ['b_id'], to: "ref('b')", toColumns: ['id'] },
+            { type: 'foreign_key', columns: ['b_id'], to: "ref('c')", toColumns: ['id'] },
+          ],
+        },
+        { name: 'b', columns: [{ name: 'id' }] },
+        { name: 'c', columns: [{ name: 'id' }] },
+      ]);
+      const a = graph.nodes.find((n) => n.id === 'a')!;
+      expect(a.foreignKeyColumns).toEqual(['b_id']);
+    });
+  });
 });

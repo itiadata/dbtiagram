@@ -7,10 +7,13 @@
  * `vscode` import, no host state.
  */
 import type { DiagramLayoutTable, DiagramNote } from '../src/diagram/layoutFile';
+import type { ColumnDisplayMode } from '../src/diagram/columnDisplay';
 
 export interface LayoutSnapshot {
   tables: DiagramLayoutTable[];
   notes: DiagramNote[];
+  /** The diagram-wide default column-display mode (spec 24); undefined means the pre-feature default ('all'). */
+  defaultColumnDisplay?: ColumnDisplayMode;
 }
 
 export function isLayoutDirty(current: LayoutSnapshot, saved: LayoutSnapshot | null): boolean {
@@ -19,6 +22,7 @@ export function isLayoutDirty(current: LayoutSnapshot, saved: LayoutSnapshot | n
   }
   return (
     JSON.stringify(current.tables) !== JSON.stringify(saved.tables) ||
-    JSON.stringify(current.notes) !== JSON.stringify(saved.notes)
+    JSON.stringify(current.notes) !== JSON.stringify(saved.notes) ||
+    current.defaultColumnDisplay !== saved.defaultColumnDisplay
   );
 }

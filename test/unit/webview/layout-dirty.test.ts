@@ -78,3 +78,20 @@ describe('isLayoutDirty', () => {
     expect(isLayoutDirty(sortedCurrent, sortedSaved)).toBe(false);
   });
 });
+
+describe('isLayoutDirty (spec 24)', () => {
+  it('is true when a display-mode-only change occurs', () => {
+    const current: LayoutSnapshot = { tables: [], notes: [], defaultColumnDisplay: 'pkOnly' };
+    const saved: LayoutSnapshot = { tables: [], notes: [], defaultColumnDisplay: 'all' };
+    expect(isLayoutDirty(current, saved)).toBe(true);
+  });
+
+  it('is true when a per-table override changes', () => {
+    const current: LayoutSnapshot = {
+      tables: [{ name: 'orders', x: 1, y: 2, columnDisplay: 'pkOnly' }],
+      notes: [],
+    };
+    const saved: LayoutSnapshot = { tables: [{ name: 'orders', x: 1, y: 2 }], notes: [] };
+    expect(isLayoutDirty(current, saved)).toBe(true);
+  });
+});

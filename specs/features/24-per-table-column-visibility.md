@@ -1,7 +1,7 @@
 ---
 id: 24
 title: Per-table column visibility in the diagram
-status: approved
+status: implemented
 priority: medium
 created: 2026-08-28
 owner: unassigned

@@ -7,6 +7,7 @@
  * here.
  */
 import { parse, stringify } from 'yaml';
+import { DEFAULT_COLUMN_DISPLAY, isColumnDisplayMode, type ColumnDisplayMode } from './columnDisplay';
 import type { NodePosition } from './positions';
 
 /** File name suffix identifying a saved diagram layout. */
@@ -20,6 +21,8 @@ export interface DiagramLayoutTable {
   name: string;
   x: number;
   y: number;
+  /** This table's individual column-display override (spec 24); absent means "use the diagram default". */
+  columnDisplay?: ColumnDisplayMode;
 }
 
 /** A free-text sticky note pinned to the canvas (spec 16). */
@@ -46,6 +49,8 @@ export interface DiagramLayout {
   tables: DiagramLayoutTable[];
   /** Always present in memory; `[]` when the file has no notes. */
   notes: DiagramNote[];
+  /** The diagram-wide default column-display mode (spec 24); omitted at its default ('all'). */
+  defaultColumnDisplay?: ColumnDisplayMode;
 }
 
 export class DiagramLayoutParseError extends Error {
@@ -86,19 +91,26 @@ export function stripLayoutSuffix(name: string): string {
 /**
  * Builds a layout from the currently visible tables. Tables are sorted by name
  * and coordinates rounded to integers so repeated writes produce minimal diffs.
- * Notes (spec 16) get the same treatment, sorted by id.
+ * Notes (spec 16) get the same treatment, sorted by id. `columnDisplay` (spec
+ * 24) carries the diagram-wide default and any per-table overrides; omitted
+ * entirely, a table reads the diagram default and the diagram uses `'all'`.
  */
 export function buildLayout(
   name: string,
   visible: readonly { name: string; x: number; y: number }[],
   notes: readonly DiagramNote[] = [],
+  columnDisplay?: { default: ColumnDisplayMode; overrides: ReadonlyMap<string, ColumnDisplayMode> },
 ): DiagramLayout {
   const tables = visible
-    .map((table) => ({
-      name: table.name,
-      x: Math.round(table.x),
-      y: Math.round(table.y),
-    }))
+    .map((table) => {
+      const override = columnDisplay?.overrides.get(table.name);
+      return {
+        name: table.name,
+        x: Math.round(table.x),
+        y: Math.round(table.y),
+        ...(override !== undefined ? { columnDisplay: override } : {}),
+      };
+    })
     .sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0));
   const sortedNotes = notes
     .map((note) => ({
@@ -109,7 +121,14 @@ export function buildLayout(
       height: Math.round(note.height),
     }))
     .sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
-  return { version: LAYOUT_VERSION, name, tables, notes: sortedNotes };
+  const defaultColumnDisplay = columnDisplay?.default ?? DEFAULT_COLUMN_DISPLAY;
+  return {
+    version: LAYOUT_VERSION,
+    name,
+    tables,
+    notes: sortedNotes,
+    ...(defaultColumnDisplay !== DEFAULT_COLUMN_DISPLAY ? { defaultColumnDisplay } : {}),
+  };
 }
 
 /**
@@ -137,7 +156,12 @@ export function serializeDiagramLayout(layout: DiagramLayout): string {
   const root: Record<string, unknown> = {
     version: layout.version,
     name: layout.name,
-    tables: layout.tables.map((table) => ({ name: table.name, x: table.x, y: table.y })),
+    tables: layout.tables.map((table) => ({
+      name: table.name,
+      x: table.x,
+      y: table.y,
+      ...(table.columnDisplay !== undefined ? { columnDisplay: table.columnDisplay } : {}),
+    })),
   };
   if (layout.notes.length > 0) {
     root.notes = layout.notes.map((note) => ({
@@ -149,6 +173,9 @@ export function serializeDiagramLayout(layout: DiagramLayout): string {
       height: note.height,
       collapsedByDefault: note.collapsedByDefault,
     }));
+  }
+  if (layout.defaultColumnDisplay !== undefined && layout.defaultColumnDisplay !== DEFAULT_COLUMN_DISPLAY) {
+    root.defaultColumnDisplay = layout.defaultColumnDisplay;
   }
   return stringify(root);
 }
@@ -193,7 +220,7 @@ export function parseDiagramLayout(text: string, fallbackName: string): DiagramL
     if (!isRecord(entry)) {
       throw new DiagramLayoutParseError(fallbackName, 'Every entry in "tables" must be a mapping');
     }
-    const { name, x, y } = entry;
+    const { name, x, y, columnDisplay } = entry;
     if (typeof name !== 'string' || name === '') {
       throw new DiagramLayoutParseError(fallbackName, 'Every table entry needs a "name"');
     }
@@ -203,16 +230,35 @@ export function parseDiagramLayout(text: string, fallbackName: string): DiagramL
         `Table "${name}" needs numeric "x" and "y" coordinates`,
       );
     }
+    if (columnDisplay !== undefined && !isColumnDisplayMode(columnDisplay)) {
+      throw new DiagramLayoutParseError(
+        fallbackName,
+        `Table "${name}" has an invalid "columnDisplay"`,
+      );
+    }
     // Duplicates keep the first entry.
     if (seen.has(name)) {
       continue;
     }
     seen.add(name);
-    tables.push({ name, x, y });
+    tables.push({ name, x, y, ...(columnDisplay !== undefined ? { columnDisplay } : {}) });
   }
 
   const name = typeof raw.name === 'string' && raw.name !== '' ? raw.name : fallbackName;
-  return { version: LAYOUT_VERSION, name, tables, notes: parseNotes(raw.notes, fallbackName) };
+  const notes = parseNotes(raw.notes, fallbackName);
+  if (raw.defaultColumnDisplay !== undefined && !isColumnDisplayMode(raw.defaultColumnDisplay)) {
+    throw new DiagramLayoutParseError(fallbackName, 'Diagram file has an invalid "defaultColumnDisplay"');
+  }
+  const defaultColumnDisplay = isColumnDisplayMode(raw.defaultColumnDisplay)
+    ? raw.defaultColumnDisplay
+    : undefined;
+  return {
+    version: LAYOUT_VERSION,
+    name,
+    tables,
+    notes,
+    ...(defaultColumnDisplay !== undefined ? { defaultColumnDisplay } : {}),
+  };
 }
 
 /**
@@ -296,6 +342,10 @@ export interface AppliedLayout {
   missing: string[];
   /** Passed through untouched — notes reference nothing in the workspace. */
   notes: DiagramNote[];
+  /** The diagram-wide default column-display mode (spec 24); defaults to 'all' for pre-feature files. */
+  defaultColumnDisplay: ColumnDisplayMode;
+  /** Per-table column-display overrides for visible tables (spec 24). */
+  columnDisplay: Map<string, ColumnDisplayMode>;
 }
 
 /**
@@ -309,6 +359,7 @@ export function applyLayout(
   const visible = new Set<string>();
   const positions = new Map<string, NodePosition>();
   const missing: string[] = [];
+  const columnDisplay = new Map<string, ColumnDisplayMode>();
 
   for (const table of layout.tables) {
     if (!knownModels.has(table.name)) {
@@ -317,9 +368,19 @@ export function applyLayout(
     }
     visible.add(table.name);
     positions.set(table.name, { x: table.x, y: table.y });
+    if (table.columnDisplay !== undefined) {
+      columnDisplay.set(table.name, table.columnDisplay);
+    }
   }
 
-  return { visible, positions, missing, notes: layout.notes };
+  return {
+    visible,
+    positions,
+    missing,
+    notes: layout.notes,
+    defaultColumnDisplay: layout.defaultColumnDisplay ?? DEFAULT_COLUMN_DISPLAY,
+    columnDisplay,
+  };
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

@@ -5,6 +5,7 @@ import {
   CARD_ANCHOR,
   EDGE_INTERACTION_WIDTH,
   FK_EDGE_TYPE,
+  HEADER_ANCHOR,
   buildFlowElements,
   columnSourceHandle,
   columnTargetHandle,
@@ -12,23 +13,26 @@ import {
   type HandleSide,
 } from '../../../src/diagram/flow';
 import type { ModelDefinition } from '../../../src/dbt/types';
+import type { ColumnDisplayMode } from '../../../src/diagram/columnDisplay';
 
-function flowFor(models: ModelDefinition[]) {
+function flowFor(models: ModelDefinition[], columnDisplayMode?: (nodeId: string) => ColumnDisplayMode) {
   const graph = buildDiagram(models);
   const layout = layoutDiagram(graph);
-  return { flow: buildFlowElements(graph, layout), layout };
+  return { flow: buildFlowElements(graph, layout, columnDisplayMode ?? (() => 'all')), layout, graph };
 }
 
 /**
  * `routeEdges` with a column lookup that anchors every edge at the card's
  * vertical center (the row index is irrelevant to the side choice these tests
  * assert). Spec 12: sides come out of the router, not a center comparison.
+ * `columnExists` defaults to "always exists" so these tests never hit the
+ * spec-24 hidden-column path.
  */
 function routeEdgesFor(
   edges: Parameters<typeof routeEdges>[0],
   nodeRects: Parameters<typeof routeEdges>[1],
 ) {
-  return routeEdges(edges, nodeRects, () => 0);
+  return routeEdges(edges, nodeRects, () => 0, () => 0);
 }
 
 describe('buildFlowElements', () => {
@@ -652,5 +656,49 @@ describe('broken FK columns (spec 20)', () => {
     const orderItems = flow.nodes.find((n) => n.id === 'order_items')!;
     const keys = Object.keys(orderItems.data.handles ?? {});
     expect(keys.some((k) => k.startsWith(`${CARD_ANCHOR}:source:`))).toBe(true);
+  });
+});
+
+describe('column display anchoring (spec 24)', () => {
+  it('anchors a hidden FK source column at HEADER_ANCHOR without marking it unresolved', () => {
+    const { flow } = flowFor(
+      [
+        {
+          name: 'order_items',
+          columns: [{ name: 'id' }, { name: 'order_id' }],
+          constraints: [
+            { type: 'primary_key', columns: ['id'] },
+            { type: 'foreign_key', columns: ['order_id'], to: "ref('orders')", toColumns: ['order_id'] },
+          ],
+        },
+        {
+          name: 'orders',
+          columns: [{ name: 'order_id' }],
+          constraints: [{ type: 'primary_key', columns: ['order_id'] }],
+        },
+      ],
+      (nodeId) => (nodeId === 'order_items' ? 'pkOnly' : 'all'),
+    );
+    const edge = flow.edges[0];
+    expect(edge.sourceHandle?.startsWith(`${HEADER_ANCHOR}:source:`)).toBe(true);
+    expect(edge.targetHandle?.startsWith('order_id:target:')).toBe(true);
+    expect(edge.data.unresolved).toBeUndefined();
+    expect(edge.data.title).toBe('order_items.order_id -> orders.order_id');
+  });
+
+  it('a genuinely missing FK column still anchors at CARD_ANCHOR and stays unresolved (regression guard)', () => {
+    const { flow } = flowFor([
+      {
+        name: 'order_items',
+        columns: [{ name: 'id' }],
+        constraints: [
+          { type: 'foreign_key', columns: ['customer_id'], to: "ref('customers')", toColumns: ['id'] },
+        ],
+      },
+      { name: 'customers', columns: [{ name: 'id' }] },
+    ]);
+    const edge = flow.edges[0];
+    expect(edge.sourceHandle?.startsWith(`${CARD_ANCHOR}:source:`)).toBe(true);
+    expect(edge.data.unresolved?.source).toBe(true);
   });
 });

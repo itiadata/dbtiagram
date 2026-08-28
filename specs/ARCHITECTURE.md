@@ -42,11 +42,12 @@ lines** under `test/unit/` (see `specs/features/17-modular-source-layout.md`).
 | Path | Layer | Responsibility | Key exports |
 |------|-------|----------------|-------------|
 | `src/diagram/graph.ts` | pure | Turn model definitions into an abstract diagram graph of table nodes and relation edges. | `buildDiagram`, `DiagramGraph`, `TableNode`, `TableNodeColumn`, `RelationEdge` |
-| `src/diagram/layout.ts` | pure | Automatic node placement and the node geometry constants the webview mirrors. | `layoutDiagram`, `DiagramLayout`, `NodePlacement`, `nodeHeight`, `columnRowCenterY`, `NODE_WIDTH`, `HEADER_HEIGHT`, `ROW_HEIGHT` |
+| `src/diagram/layout.ts` | pure | Automatic node placement and the node geometry constants the webview mirrors; accepts an optional per-node displayed-column-count override so cards size by what they actually show (spec 24). | `layoutDiagram`, `DiagramLayout`, `NodePlacement`, `nodeHeight`, `columnRowCenterY`, `NODE_WIDTH`, `HEADER_HEIGHT`, `ROW_HEIGHT` |
 | `src/diagram/positions.ts` | pure | Position bookkeeping: overlap avoidance and merging user-moved positions into freshly built nodes. | `avoidOverlap`, `mergeFlowNodes`, `rectsOverlap`, `NodePosition`, `NodeRect`, `OVERLAP_PADDING`, `OVERLAP_STEP_Y` |
 | `src/diagram/routing.ts` | pure | Obstacle-aware orthogonal edge routing with free side choice. | `routeEdge`, `Route`, `RouteRequest`, `RouteEndpoint`, `RouteSide`, `Point`, `STUB_PX`, `ROUTE_MARGIN`, `OBSTACLE_PENALTY`, `BEND_PENALTY`, `ROUTING_NODE_LIMIT` |
-| `src/diagram/flow.ts` | pure | Convert the diagram graph into React Flow nodes/edges and route them; owns handle-id conventions; anchors FKs naming a missing column to the card and marks them `unresolved` (spec 20). | `buildFlowElements`, `routeEdges`, `columnSourceHandle`, `columnTargetHandle`, `columnRowIndexLookup`, `FlowNode`, `FlowEdge`, `FlowElements`, `HandleSide`, `FK_EDGE_TYPE`, `EDGE_INTERACTION_WIDTH`, `CARD_ANCHOR` |
-| `src/diagram/layoutFile.ts` | pure | The saved `.dbtiagram` layout file format: build, serialize, parse, apply, including sticky notes (spec 16). | `buildLayout`, `serializeDiagramLayout`, `parseDiagramLayout`, `applyLayout`, `createNote`, `isLayoutFilePath`, `defaultLayoutName`, `stripLayoutSuffix`, `DiagramLayout`, `DiagramLayoutTable`, `DiagramNote`, `AppliedLayout`, `DiagramLayoutParseError`, `LAYOUT_FILE_SUFFIX`, `LAYOUT_VERSION`, `NOTE_DEFAULT_WIDTH`, `NOTE_DEFAULT_HEIGHT`, `NOTE_MIN_WIDTH`, `NOTE_MIN_HEIGHT` |
+| `src/diagram/columnDisplay.ts` | pure | The four per-table column display modes and which columns each mode shows (spec 24). | `ColumnDisplayMode`, `DEFAULT_COLUMN_DISPLAY`, `ColumnDisplayOption`, `COLUMN_DISPLAY_OPTIONS`, `isColumnDisplayMode`, `displayedColumns` |
+| `src/diagram/flow.ts` | pure | Convert the diagram graph into React Flow nodes/edges and route them; owns handle-id conventions; anchors FKs naming a missing column to the card and marks them `unresolved` (spec 20); anchors a hidden-but-existing FK column at the header instead, without `unresolved` (spec 24). | `buildFlowElements`, `routeEdges`, `columnSourceHandle`, `columnTargetHandle`, `columnRowIndexLookup`, `displayedColumnRowIndexLookup`, `FlowNode`, `FlowEdge`, `FlowElements`, `HandleSide`, `FK_EDGE_TYPE`, `EDGE_INTERACTION_WIDTH`, `CARD_ANCHOR`, `HEADER_ANCHOR` |
+| `src/diagram/layoutFile.ts` | pure | The saved `.dbtiagram` layout file format: build, serialize, parse, apply, including sticky notes (spec 16) and per-table/diagram-wide column-display modes (spec 24). | `buildLayout`, `serializeDiagramLayout`, `parseDiagramLayout`, `applyLayout`, `createNote`, `isLayoutFilePath`, `defaultLayoutName`, `stripLayoutSuffix`, `DiagramLayout`, `DiagramLayoutTable`, `DiagramNote`, `AppliedLayout`, `DiagramLayoutParseError`, `LAYOUT_FILE_SUFFIX`, `LAYOUT_VERSION`, `NOTE_DEFAULT_WIDTH`, `NOTE_DEFAULT_HEIGHT`, `NOTE_MIN_WIDTH`, `NOTE_MIN_HEIGHT` |
 
 ## `src/shared/` — host ↔ webview shared code
 
@@ -87,20 +88,22 @@ lines** under `test/unit/` (see `specs/features/17-modular-source-layout.md`).
 |------|-------|----------------|-------------|
 | `webview-ui/index.tsx` | webview | Mount point: renders `App` into the webview document. | — |
 | `webview-ui/App.tsx` | webview | Top-level composition: state hooks, sidebars, canvas. | `App` |
-| `webview-ui/DiagramCanvas.tsx` | webview | React Flow canvas: nodes, edges, pan/zoom, node drag. | `DiagramCanvas`, `DiagramCanvasProps` |
-| `webview-ui/TableNode.tsx` | webview | Custom React Flow node rendering a table with its column rows and handles. | `TableNode` |
+| `webview-ui/DiagramCanvas.tsx` | webview | React Flow canvas: nodes, edges, pan/zoom, node drag; top-right toolbar groups Auto-layout with the diagram-wide column-display selector (spec 24). | `DiagramCanvas`, `DiagramCanvasProps` |
+| `webview-ui/TableNode.tsx` | webview | Custom React Flow node rendering a table with its column rows and handles, including the header-positioned `HEADER_ANCHOR` handle for a hidden FK column (spec 24). | `TableNode` |
 | `webview-ui/NoteNode.tsx` | webview | Custom React Flow node rendering a sticky note: resizable rectangle, textarea, or collapsed icon (spec 16). | `NoteNode`, `NoteNodeData` |
 | `webview-ui/FkEdge.tsx` | webview | Custom FK edge renderer with hover-friendly interaction width. | `FkEdge`, `roundedPath` |
-| `webview-ui/ContextMenu.tsx` | webview | Reusable portal-rendered context menu with disabled and checkable items (spec 15). | `ContextMenu`, `ContextMenuItem`, `ContextMenuProps` |
+| `webview-ui/ContextMenu.tsx` | webview | Reusable portal-rendered context menu with disabled/checkable items and submenu flyouts (spec 15, spec 24). | `ContextMenu`, `ContextMenuItem`, `ContextMenuProps` |
 | `webview-ui/SettingsPanel.tsx` | webview | "Open new diagrams" settings overlay: option list with descriptions, radio selection, dismiss conventions matching `ContextMenu` (spec 23). | `SettingsPanel`, `SettingsPanelProps` |
-| `webview-ui/context-menu-position.ts` | webview (pure) | Viewport flip/clamp geometry for the context menu (spec 15). | `placeMenu`, `MenuBox`, `MenuPoint`, `MenuPlacement` |
+| `webview-ui/context-menu-position.ts` | webview (pure) | Viewport flip/clamp geometry for the context menu and its submenu flyouts (spec 15, spec 24). | `placeMenu`, `placeSubmenu`, `MenuBox`, `MenuPoint`, `MenuPlacement`, `SubmenuAnchor` |
 | `webview-ui/details-visibility.ts` | webview (pure) | Details sidebar visibility policy: opens/closes with the selection, manual collapse sticks until it next changes (spec 19); `{visible,key}` transition that keeps the policy safe inside a React state updater (spec 21). | `selectionKey`, `nextDetailsVisible`, `SelectionKey`, `DetailsVisibility`, `initialDetailsVisibility`, `advanceDetailsVisibility` |
 | `webview-ui/initial-fit.ts` | webview (pure) | Whether the one-off post-measurement corrective `fitView` should still run — skipped once fitted or once the user has touched the canvas (spec 21). | `shouldRunInitialFit` |
-| `webview-ui/layout-dirty.ts` | webview (pure) | Compares a current layout snapshot against the last-saved one to drive the manual-save header button's dirty state (spec 22). | `isLayoutDirty`, `LayoutSnapshot` |
+| `webview-ui/layout-dirty.ts` | webview (pure) | Compares a current layout snapshot against the last-saved one to drive the manual-save header button's dirty state (spec 22), including the diagram-wide default and per-table column-display modes (spec 24). | `isLayoutDirty`, `LayoutSnapshot` |
+| `webview-ui/column-display-state.ts` | webview (pure) | The diagram-wide default column-display mode and per-table overrides; setting the default clears every override (spec 24). | `ColumnDisplayState`, `seedColumnDisplay`, `setTableOverride`, `setDefaultMode`, `effectiveMode` |
 | `webview-ui/settings-state.ts` | webview (pure) | Pure reducer applying a `settings:current` value without forcing the settings overlay open (spec 23). | `applySettingsCurrent`, `SettingsPanelState` |
 | `webview-ui/FilterSidebar.tsx` | webview | Left sidebar: file/model filtering, search, locate. | `FilterSidebar` |
-| `webview-ui/DetailsSidebar.tsx` | webview | Right sidebar: edit the selected model or column. | `DetailsSidebar`, `SelectedEntity` |
+| `webview-ui/DetailsSidebar.tsx` | webview | Right sidebar: edit the selected model or column; renders the "Columns shown" section between Description and Primary key for a table (spec 24). | `DetailsSidebar`, `SelectedEntity` |
 | `webview-ui/PrimaryKeySection.tsx` | webview | Primary key editing UI inside the details sidebar. | `PrimaryKeySection` |
+| `webview-ui/ColumnDisplaySection.tsx` | webview | "Columns shown" radio section of the details pane (spec 24). | `ColumnDisplaySection`, `ColumnDisplaySectionProps` |
 | `webview-ui/ForeignKeySection.tsx` | webview | Foreign key editing UI, including draft (incomplete) FKs. | `ForeignKeySection`, `DraftForeignKey`, `sameFkContent` |
 | `webview-ui/SearchSelect.tsx` | webview | Reusable searchable dropdown. | `SearchSelect` |
 | `webview-ui/SidebarChrome.tsx` | webview | Collapsed sidebar rail and drag-to-resize handle. | `SidebarRail`, `SidebarResizer` |
@@ -119,7 +122,8 @@ lines** under `test/unit/` (see `specs/features/17-modular-source-layout.md`).
 | `webview-ui/hooks/useDiagramFilter.ts` | webview | Filter sidebar state on top of `src/shared/filter.ts`. | `useDiagramFilter`, `DiagramFilterState` |
 | `webview-ui/hooks/useDraftForeignKeys.ts` | webview | Track in-progress FK edits that are not yet persistable. | `useDraftForeignKeys`, `DraftForeignKeysState` |
 | `webview-ui/hooks/useEdgeHighlighting.ts` | webview | Hover/selection highlighting of FK edges and handle dots. | `useEdgeHighlighting`, `EdgeHighlightingState` |
-| `webview-ui/hooks/useLayoutPersistence.ts` | webview | Node positions ↔ layout file messages: seeding on open, the explicit save, and a debounced sync of the pending (unsaved) layout to the host's in-memory cache, plus the dirty flag driving the header button (spec 22). | `useLayoutPersistence`, `LayoutPersistenceState` |
+| `webview-ui/hooks/useColumnDisplay.ts` | webview | React state wrapper around `column-display-state.ts`: the diagram default, per-table overrides, effective-mode lookup, and seeding from an opened layout (spec 24). | `useColumnDisplay`, `ColumnDisplayHookState` |
+| `webview-ui/hooks/useLayoutPersistence.ts` | webview | Node positions ↔ layout file messages: seeding on open, the explicit save, and a debounced sync of the pending (unsaved) layout to the host's in-memory cache, plus the dirty flag driving the header button (spec 22); threads the column-display state into every save/sync (spec 24). | `useLayoutPersistence`, `LayoutPersistenceState` |
 
 ## Tests
 

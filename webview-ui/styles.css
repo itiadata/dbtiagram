@@ -126,6 +126,30 @@ body {
   cursor: default;
 }
 
+/* A layout tool, not the primary action (spec 24): neutral, not accent. */
+.panel-button--secondary {
+  background: var(--card);
+  color: var(--text);
+  border-color: var(--border);
+}
+
+/* Groups the Auto-layout button and the column-display selector (spec 24). */
+.canvas-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.canvas-toolbar__select {
+  font: inherit;
+  font-size: 12px;
+  padding: 5px 6px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--card);
+  color: var(--text);
+}
+
 .empty {
   padding: 16px;
   color: var(--muted);
@@ -1095,6 +1119,37 @@ body {
   width: 10px;
   flex-shrink: 0;
 }
+
+/* Submenu flyout (spec 24): same base look as the root menu, positioned by placeSubmenu. */
+.context-menu--submenu {
+  min-width: 160px;
+}
+
+.context-menu__row {
+  position: relative;
+}
+
+.context-menu__submenu-arrow {
+  margin-left: auto;
+  padding-left: 8px;
+  color: var(--muted);
+}
+
+/* ---- Column display section (spec 24) ---- */
+.column-display {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.column-display__option {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  cursor: pointer;
+}
+
 
 /* Spec 16: sticky notes. The surface wrapper exists so the canvas can catch
    Delete/Backspace keydowns bubbling out of the React Flow pane. */

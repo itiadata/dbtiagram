@@ -49,7 +49,10 @@ const RANK_SEP = 80;
 const MARGIN = 20;
 
 /** Assigns non-overlapping left-to-right positions to graph nodes via dagre. */
-export function layoutDiagram(graph: DiagramGraph): DiagramLayout {
+export function layoutDiagram(
+  graph: DiagramGraph,
+  displayedColumnCount?: (nodeId: string) => number,
+): DiagramLayout {
   const dagreGraph = new dagre.graphlib.Graph<GraphLabel, NodeLabel, EdgeLabel>();
   dagreGraph.setGraph({
     rankdir: 'LR',
@@ -63,7 +66,7 @@ export function layoutDiagram(graph: DiagramGraph): DiagramLayout {
   const nodes: NodePlacement[] = graph.nodes.map((node) => ({
     id: node.id,
     width: NODE_WIDTH,
-    height: nodeHeight(node.columns.length),
+    height: nodeHeight(displayedColumnCount?.(node.id) ?? node.columns.length),
     x: 0,
     y: 0,
   }));

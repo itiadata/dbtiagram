@@ -9,8 +9,10 @@ import { useCallback, useEffect, useMemo, useState, type MouseEvent as ReactMous
 import { ReactFlowProvider, type Edge, type Node } from '@xyflow/react';
 import type { ModelEdit } from '../src/dbt/edit';
 import type { ForeignKeyDescriptor } from '../src/dbt/types';
+import { COLUMN_DISPLAY_OPTIONS } from '../src/diagram/columnDisplay';
+import type { ColumnDisplayMode } from '../src/diagram/columnDisplay';
 import type { DiagramGraph } from '../src/diagram/graph';
-import { buildFlowElements, type FlowEdgeData, type FlowElements } from '../src/diagram/flow';
+import { buildFlowElements, columnRowIndexLookup, type FlowEdgeData, type FlowElements } from '../src/diagram/flow';
 import { layoutDiagram } from '../src/diagram/layout';
 import { filterGraph } from '../src/shared/filter';
 import { DetailsSidebar, type SelectedEntity } from './DetailsSidebar';
@@ -24,6 +26,7 @@ import {
 import { FilterSidebar } from './FilterSidebar';
 import { SettingsPanel } from './SettingsPanel';
 import { postToHost } from './host';
+import { useColumnDisplay } from './hooks/useColumnDisplay';
 import { useDiagramFilter } from './hooks/useDiagramFilter';
 import { useContextMenu } from './hooks/useContextMenu';
 import { useRevealModel } from './hooks/useRevealModel';
@@ -53,7 +56,11 @@ export function App(): JSX.Element {
   const selection = useSelection();
   const filter = useDiagramFilter();
   const notes = useNotes();
-  const layout = useLayoutPersistence(notes.notes);
+  const columnDisplay = useColumnDisplay();
+  const layout = useLayoutPersistence(notes.notes, {
+    defaultMode: columnDisplay.defaultMode,
+    overrides: columnDisplay.overrides,
+  });
   const settings = useSettings();
   // Stable callbacks pulled out of the hook results: memo dependency lists must
   // reference these, never the freshly-built hook result objects, or every
@@ -96,6 +103,14 @@ export function App(): JSX.Element {
     onLayoutApply: (message) => {
       filter.applyLayoutTables(layout.applyLayout(message));
       notes.applyLayoutNotes(message.layout.notes);
+      columnDisplay.applySeed(
+        message.layout.defaultColumnDisplay ?? 'all',
+        new Map(
+          message.layout.tables
+            .filter((table) => table.columnDisplay !== undefined)
+            .map((table) => [table.name, table.columnDisplay as ColumnDisplayMode]),
+        ),
+      );
     },
     onLayoutActive: (message) => layout.applyActiveLayout(message),
     onSettingsCurrent: (openBehavior) => settings.applyCurrent(openBehavior),
@@ -111,8 +126,32 @@ export function App(): JSX.Element {
   // positions (and manual drags) stay stable across hovers.
   const flow = useMemo<FlowElements | null>(() => {
     if (visibleGraph === null) return null;
-    return buildFlowElements(visibleGraph, layoutDiagram(visibleGraph));
-  }, [visibleGraph, layoutTick]);
+    const columnDisplayMode = (nodeId: string): ColumnDisplayMode => columnDisplay.effectiveMode(nodeId);
+    const displayedColumnCount = (nodeId: string): number => {
+      const node = visibleGraph.nodes.find((n) => n.id === nodeId);
+      if (node === undefined) return 0;
+      const mode = columnDisplayMode(nodeId);
+      if (mode === 'all') return node.columns.length;
+      if (mode === 'nameOnly') return 0;
+      const pk = new Set(node.primaryKey?.columns ?? []);
+      if (mode === 'pkOnly') return node.columns.filter((c) => pk.has(c.name)).length;
+      const fk = new Set(node.foreignKeyColumns);
+      return node.columns.filter((c) => pk.has(c.name) || fk.has(c.name)).length;
+    };
+    return buildFlowElements(
+      visibleGraph,
+      layoutDiagram(visibleGraph, displayedColumnCount),
+      columnDisplayMode,
+    );
+  }, [visibleGraph, layoutTick, columnDisplay.defaultMode, columnDisplay.overrides]);
+
+  // Full (unfiltered-by-display) column existence, so a genuinely missing FK
+  // column and a hidden-but-existing one stay distinguishable while dragging
+  // (spec 20 vs. spec 24).
+  const columnExists = useMemo(
+    () => (visibleGraph === null ? (): undefined => undefined : columnRowIndexLookup(visibleGraph)),
+    [visibleGraph],
+  );
 
   const highlighting = useEdgeHighlighting(flow);
 
@@ -238,8 +277,17 @@ export function App(): JSX.Element {
     (event: ReactMouseEvent, node: Node): void => {
       event.preventDefault();
       if (node.type === 'table') {
+        const currentMode = columnDisplay.effectiveMode(node.id);
         openMenu(event.clientX, event.clientY, [
           { label: 'Open in model.yml', onSelect: () => onOpenModelSource(node.id) },
+          {
+            label: 'Show columns',
+            items: COLUMN_DISPLAY_OPTIONS.map((option) => ({
+              label: option.label,
+              checked: currentMode === option.value,
+              onSelect: () => columnDisplay.setTableMode(node.id, option.value),
+            })),
+          },
         ]);
         return;
       }
@@ -267,7 +315,7 @@ export function App(): JSX.Element {
         { label: 'Delete', onSelect: () => notes.deleteNote(note.id) },
       ]);
     },
-    [openMenu, onOpenModelSource, notes],
+    [openMenu, onOpenModelSource, notes, columnDisplay],
   );
 
   const current = selection.selection;
@@ -440,6 +488,9 @@ export function App(): JSX.Element {
                     onEdgeClick={onEdgeClick}
                     onEdgeDoubleClick={onEdgeDoubleClick}
                     onAutoLayout={onAutoLayout}
+                    columnExists={columnExists}
+                    columnDisplayDefault={columnDisplay.defaultMode}
+                    onColumnDisplayDefaultChange={columnDisplay.setDefaultMode}
                     onPaneClick={onPaneClick}
                     onNodeContextMenu={onNodeContextMenu}
                     revealTarget={revealTarget}
@@ -465,6 +516,12 @@ export function App(): JSX.Element {
             focusedFk={selection.focusedFk}
             drafts={selectedTableId === null ? [] : (drafts.draftFks[selectedTableId] ?? [])}
             onEdit={onEdit}
+            columnDisplayMode={
+              selectedTableId === null ? 'all' : columnDisplay.effectiveMode(selectedTableId)
+            }
+            onColumnDisplayModeChange={(mode) => {
+              if (selectedTableId !== null) columnDisplay.setTableMode(selectedTableId, mode);
+            }}
             onAddDraft={(target) => {
               if (selectedTableId !== null) drafts.addDraft(selectedTableId, target);
             }}

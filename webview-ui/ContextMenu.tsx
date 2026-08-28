@@ -8,14 +8,17 @@
  */
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { placeMenu, type MenuPlacement } from './context-menu-position';
+import { placeMenu, placeSubmenu, type MenuPlacement } from './context-menu-position';
 
 export interface ContextMenuItem {
   label: string;
   disabled?: boolean;
   checked?: boolean;
   title?: string;
-  onSelect: () => void;
+  /** Ignored when `items` is present — a parent item opens its submenu instead. */
+  onSelect?: () => void;
+  /** A submenu flyout, opened by clicking this item instead of invoking `onSelect`. */
+  items?: ContextMenuItem[];
 }
 
 export interface ContextMenuProps {
@@ -83,27 +86,106 @@ export function ContextMenu({ x, y, items, onClose }: ContextMenuProps): JSX.Ele
       style={{ left: placement.left, top: placement.top }}
     >
       {items.map((item) => (
-        <li key={item.label} role="none">
-          <button
-            type="button"
-            role="menuitem"
-            className="context-menu__item"
-            aria-disabled={item.disabled === true ? 'true' : undefined}
-            disabled={item.disabled === true}
-            title={item.title}
-            onClick={
-              item.disabled === true
-                ? undefined
-                : () => {
-                    item.onSelect();
-                    onClose();
-                  }
-            }
-          >
-            <span className="context-menu__check">{item.checked === true ? '✓' : ''}</span>
-            {item.label}
-          </button>
-        </li>
+        <ContextMenuRow key={item.label} item={item} onClose={onClose} />
+      ))}
+    </ul>,
+    document.body,
+  );
+}
+
+interface ContextMenuRowProps {
+  item: ContextMenuItem;
+  /** Closes the WHOLE menu (root + any open submenu), e.g. after a leaf click. */
+  onClose: () => void;
+}
+
+/**
+ * One `<li>` of the menu. A leaf item behaves as before (`onSelect` then
+ * `onClose`); an item with `items` toggles an inline flyout anchored to its
+ * own rect instead, via the same `placeMenu` flip/clamp geometry the root
+ * menu uses (spec 24).
+ */
+function ContextMenuRow({ item, onClose }: ContextMenuRowProps): JSX.Element {
+  const rowRef = useRef<HTMLLIElement | null>(null);
+  const [submenuOpen, setSubmenuOpen] = useState(false);
+  const hasSubmenu = item.items !== undefined && item.items.length > 0;
+
+  return (
+    <li ref={rowRef} role="none" className="context-menu__row">
+      <button
+        type="button"
+        role="menuitem"
+        className="context-menu__item"
+        aria-disabled={item.disabled === true ? 'true' : undefined}
+        aria-haspopup={hasSubmenu ? 'true' : undefined}
+        disabled={item.disabled === true}
+        title={item.title}
+        onClick={
+          item.disabled === true
+            ? undefined
+            : hasSubmenu
+              ? () => setSubmenuOpen((open) => !open)
+              : () => {
+                  item.onSelect?.();
+                  onClose();
+                }
+        }
+      >
+        <span className="context-menu__check">{item.checked === true ? '✓' : ''}</span>
+        {item.label}
+        {hasSubmenu && <span className="context-menu__submenu-arrow" aria-hidden="true">›</span>}
+      </button>
+      {hasSubmenu && submenuOpen && (
+        <ContextSubmenu
+          items={item.items ?? []}
+          anchor={rowRef.current}
+          onClose={onClose}
+        />
+      )}
+    </li>
+  );
+}
+
+interface ContextSubmenuProps {
+  items: ContextMenuItem[];
+  anchor: HTMLLIElement | null;
+  onClose: () => void;
+}
+
+/** The flyout `<ul>` for a submenu, placed relative to its parent item's rect. */
+function ContextSubmenu({ items, anchor, onClose }: ContextSubmenuProps): JSX.Element | null {
+  const ref = useRef<HTMLUListElement | null>(null);
+  const [placement, setPlacement] = useState<MenuPlacement | null>(null);
+
+  useLayoutEffect(() => {
+    const element = ref.current;
+    if (element === null || anchor === null) {
+      return;
+    }
+    const anchorRect = anchor.getBoundingClientRect();
+    const menuRect = element.getBoundingClientRect();
+    setPlacement(
+      placeSubmenu(
+        { left: anchorRect.left, right: anchorRect.right, top: anchorRect.top },
+        { width: menuRect.width, height: menuRect.height },
+        { width: window.innerWidth, height: window.innerHeight },
+      ),
+    );
+  }, [anchor, items]);
+
+  if (items.length === 0) {
+    return null;
+  }
+
+  return createPortal(
+    <ul
+      ref={ref}
+      className="context-menu context-menu--submenu"
+      role="menu"
+      style={placement === null ? { visibility: 'hidden' } : { left: placement.left, top: placement.top }}
+    >
+      {items.map((item) => (
+        <ContextMenuRow key={item.label} item={item} onClose={onClose} />
       ))}
     </ul>,
     document.body,

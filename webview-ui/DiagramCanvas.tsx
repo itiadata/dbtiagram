@@ -29,10 +29,12 @@ import {
 import {
   FK_EDGE_TYPE,
   routeEdges,
+  type ColumnRowIndexLookup,
   type FlowElements,
   type HandleSide,
 } from '../src/diagram/flow';
 import { HEADER_HEIGHT, NODE_WIDTH } from '../src/diagram/layout';
+import { COLUMN_DISPLAY_OPTIONS, type ColumnDisplayMode } from '../src/diagram/columnDisplay';
 import type { DiagramLayoutTable } from '../src/diagram/layoutFile';
 import { mergeFlowNodes, type NodePosition } from '../src/diagram/positions';
 import { FkEdge } from './FkEdge';
@@ -60,6 +62,13 @@ export interface DiagramCanvasProps {
   onEdgeClick: (event: ReactMouseEvent, edge: Edge) => void;
   onEdgeDoubleClick: (event: ReactMouseEvent, edge: Edge) => void;
   onAutoLayout: () => void;
+  /** Full (unfiltered-by-display) column existence, so the live drag pass can
+   * still distinguish a genuinely missing FK column from a merely hidden one
+   * (spec 20 vs. spec 24). */
+  columnExists: ColumnRowIndexLookup;
+  /** The diagram-wide default column-display mode and its setter (spec 24). */
+  columnDisplayDefault: ColumnDisplayMode;
+  onColumnDisplayDefaultChange: (mode: ColumnDisplayMode) => void;
   onPaneClick: () => void;
   /** Right-click on a node; the App decides the menu from `node.type` (spec 15). */
   onNodeContextMenu: (event: ReactMouseEvent, node: Node) => void;
@@ -87,6 +96,9 @@ export function DiagramCanvas({
   onEdgeClick,
   onEdgeDoubleClick,
   onAutoLayout,
+  columnExists,
+  columnDisplayDefault,
+  onColumnDisplayDefaultChange,
   onPaneClick,
   onNodeContextMenu,
   revealTarget,
@@ -216,8 +228,8 @@ export function DiagramCanvas({
     return (nodeId: string, column: string): number | undefined => byNode.get(nodeId)?.get(column);
   }, [rfNodes]);
   const { edges: liveEdges, nodeHandles } = useMemo(
-    () => routeEdges(flow.edges, nodeRects, columnIndexOf),
-    [flow.edges, nodeRects, columnIndexOf],
+    () => routeEdges(flow.edges, nodeRects, columnIndexOf, columnExists),
+    [flow.edges, nodeRects, columnIndexOf, columnExists],
   );
 
   // The nodes React Flow renders: the layout/data from `rfNodes`, with
@@ -380,9 +392,27 @@ export function DiagramCanvas({
       <Background gap={16} size={1} />
       <Controls />
       <Panel position="top-right">
-        <button type="button" className="panel-button" onClick={onAutoLayout}>
-          Auto-layout
-        </button>
+        <div className="canvas-toolbar">
+          <button
+            type="button"
+            className="panel-button panel-button--secondary"
+            onClick={onAutoLayout}
+          >
+            Auto-layout
+          </button>
+          <select
+            className="canvas-toolbar__select"
+            value={columnDisplayDefault}
+            onChange={(event) => onColumnDisplayDefaultChange(event.target.value as ColumnDisplayMode)}
+            title="Sets the column display mode for every table, current and future"
+          >
+            {COLUMN_DISPLAY_OPTIONS.map((option) => (
+              <option key={option.value} value={option.value}>
+                {option.label}
+              </option>
+            ))}
+          </select>
+        </div>
       </Panel>
     </ReactFlow>
     </div>
