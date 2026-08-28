@@ -1,7 +1,7 @@
 ---
 id: 27
 title: Column fields matrix (spreadsheet-style batch editor)
-status: implemented
+status: done
 priority: medium
 created: 2026-08-28
 owner: unassigned
@@ -530,24 +530,24 @@ export interface DiagramCanvasProps {
 
 ## Acceptance Criteria
 
-- [ ] "Edit fields matrix" appears on a table's right-click menu and opens a
+- [x] "Edit fields matrix" appears on a table's right-click menu and opens a
       modal scoped to that model's columns.
-- [ ] "Edit fields matrix (all models)" appears on the canvas's blank-space
+- [x] "Edit fields matrix (all models)" appears on the canvas's blank-space
       right-click menu and on a new top-left toolbar button, opening a modal
       scoped to every model with an extra Model column.
-- [ ] The grid shows Name, Data type, Description, Primary key, Virtual PK,
+- [x] The grid shows Name, Data type, Description, Primary key, Virtual PK,
       and one column per distinct meta key found in scope; a column missing a
       meta key shows an empty cell.
-- [ ] Editing any single cell (text or checkbox) writes back to the correct
+- [x] Editing any single cell (text or checkbox) writes back to the correct
       model.yml column via the existing edit protocol.
-- [ ] Clearing a meta cell that had a value writes `""`, keeping the key;
+- [x] Clearing a meta cell that had a value writes `""`, keeping the key;
       clearing/leaving-blank a cell whose key never existed adds nothing.
-- [ ] Selecting multiple compatible cells and applying one value/state updates
+- [x] Selecting multiple compatible cells and applying one value/state updates
       every selected cell and nothing else (including Data type, now
       batch-editable).
-- [ ] Grid columns can be hidden/shown and reordered, and the text filter
+- [x] Grid columns can be hidden/shown and reordered, and the text filter
       narrows rows by substring match on visible text cells.
-- [ ] Column visibility/order persist across VS Code restarts (per scope, via
+- [x] Column visibility/order persist across VS Code restarts (per scope, via
       `workspaceState`), while the filter always starts empty; neither is
       written to `.dbtiagram.yml`.
-- [ ] `npm run verify` is green.
+- [x] `npm run verify` is green.
