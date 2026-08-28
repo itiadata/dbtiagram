@@ -10,6 +10,7 @@ export interface TableNodeColumn {
   name: string;
   dataType?: string;
   description?: string;
+  meta?: Record<string, unknown>;
 }
 
 export interface TableNode {
@@ -102,6 +103,7 @@ export function buildDiagram(models: ModelDefinition[]): DiagramGraph {
         name: c.name,
         dataType: c.dataType,
         description: c.description,
+        meta: c.meta,
       })),
       ...(primaryKey !== undefined ? { primaryKey } : {}),
       foreignKeys,

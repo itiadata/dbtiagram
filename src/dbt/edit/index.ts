@@ -11,7 +11,7 @@
 import { ApplyEditResult, EditError, mapModel } from './internal';
 import { ModelEdit } from './types';
 import { applyDescription, renameModel } from './model';
-import { renameColumn, setColumnDataType, setColumnDescription } from './column';
+import { renameColumn, setColumnDataType, setColumnDescription, setColumnMetaValue } from './column';
 import { dedupeTrimmed, setPrimaryKeyOnModel } from './primaryKey';
 import {
   applyForeignKeyColumns,
@@ -56,6 +56,10 @@ export function applyEdit(models: ModelDefinition[], edit: ModelEdit): ApplyEdit
     case 'setColumnDescription':
       return mapModel(models, edit.model, (m) =>
         setColumnDescription(m, edit.column, edit.description),
+      );
+    case 'setColumnMeta':
+      return mapModel(models, edit.model, (m) =>
+        setColumnMetaValue(m, edit.column, edit.key, edit.value),
       );
     case 'setPrimaryKey': {
       const columns = dedupeTrimmed(edit.columns);

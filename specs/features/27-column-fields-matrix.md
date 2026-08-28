@@ -1,7 +1,7 @@
 ---
 id: 27
 title: Column fields matrix (spreadsheet-style batch editor)
-status: approved
+status: implemented
 priority: medium
 created: 2026-08-28
 owner: unassigned

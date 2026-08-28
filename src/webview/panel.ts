@@ -26,6 +26,8 @@ import { matchesGlob } from '../shared/glob';
 import { disambiguateFileLabels } from '../shared/labels';
 import { DEFAULT_OPEN_BEHAVIOR, type OpenBehavior } from '../shared/openBehavior';
 import type { DiagramModelFile, MessageToExtension, MessageToWebview } from '../shared/protocol';
+import type { MatrixScope } from '../shared/matrixColumns';
+import { readMatrixColumnPrefs, writeMatrixColumnPrefs } from '../vscode/matrixColumnPrefs';
 import { registerModelWatcher } from '../vscode/modelWatcher';
 import { resolvePlacement, untrackPanel } from '../vscode/openBehaviorWindows';
 import { promptForLayoutPath, readLayoutFile, writeLayoutFile } from '../vscode/layoutFiles';
@@ -67,17 +69,20 @@ export class DiagramPanel {
   /** What this tab was opened from, and its current registry key (spec 14). */
   private source: DiagramSource;
   private key: string;
+  private readonly workspaceState: vscode.Memento;
 
   private constructor(
     panel: vscode.WebviewPanel,
     store: ModelStore,
     source: DiagramSource,
     key: string,
+    workspaceState: vscode.Memento,
   ) {
     this.panel = panel;
     this.store = store;
     this.source = source;
     this.key = key;
+    this.workspaceState = workspaceState;
     this.publish();
     this.publishScope();
 
@@ -124,6 +129,7 @@ export class DiagramPanel {
   public static async createOrShow(
     extensionUri: vscode.Uri,
     source: DiagramSource,
+    workspaceState: vscode.Memento,
   ): Promise<void> {
     const key = diagramPanelKey(source);
 
@@ -157,7 +163,7 @@ export class DiagramPanel {
       result.failures.map((failure) => ({ uri: failure.uri.fsPath, error: failure.message })),
     );
 
-    const current = new DiagramPanel(panel, store, source, key);
+    const current = new DiagramPanel(panel, store, source, key, workspaceState);
     DiagramPanel.panels.set(key, current);
     panel.webview.html = buildWebviewHtml(panel.webview, extensionUri);
 
@@ -341,6 +347,8 @@ export class DiagramPanel {
         await sendActiveLayout(this.layoutHost);
         publishActiveLayout(this.layoutHost);
         this.postMessage({ type: 'settings:current', openBehavior: DiagramPanel.openBehavior() });
+        this.publishMatrixColumnPrefs('model');
+        this.publishMatrixColumnPrefs('global');
         return;
       case 'diagram:edit': {
         try {
@@ -367,7 +375,19 @@ export class DiagramPanel {
           .getConfiguration('dbtiagram')
           .update('openBehavior', message.openBehavior, vscode.ConfigurationTarget.Global);
         return;
+      case 'matrix:setColumnPrefs':
+        await writeMatrixColumnPrefs(this.workspaceState, message.scope, message.columns);
+        return;
     }
+  }
+
+  /** Sends the currently stored grid column preferences for one matrix scope (spec 27). */
+  private publishMatrixColumnPrefs(scope: MatrixScope): void {
+    this.postMessage({
+      type: 'matrix:columnPrefs',
+      scope,
+      columns: readMatrixColumnPrefs(this.workspaceState, scope) ?? [],
+    });
   }
 
   /** Adapter handing the pure "Open in model.yml" orchestration its host port. */

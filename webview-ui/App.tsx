@@ -18,6 +18,7 @@ import { filterGraph } from '../src/shared/filter';
 import { DetailsSidebar, type SelectedEntity } from './DetailsSidebar';
 import { DiagramCanvas } from './DiagramCanvas';
 import { ContextMenu, type ContextMenuItem } from './ContextMenu';
+import { FieldsMatrix } from './FieldsMatrix';
 import { advanceDetailsVisibility, initialDetailsVisibility } from './details-visibility';
 import {
   DiagramInteractionContext,
@@ -33,6 +34,7 @@ import { useRevealModel } from './hooks/useRevealModel';
 import { useDraftForeignKeys } from './hooks/useDraftForeignKeys';
 import { useEdgeHighlighting } from './hooks/useEdgeHighlighting';
 import { useFkCreateMode } from './hooks/useFkCreateMode';
+import { useFieldsMatrix } from './hooks/useFieldsMatrix';
 import { useHostMessages } from './hooks/useHostMessages';
 import { useLayoutPersistence } from './hooks/useLayoutPersistence';
 import { useNotes } from './hooks/useNotes';
@@ -64,7 +66,7 @@ export function App(): JSX.Element {
     overrides: columnDisplay.overrides,
   });
   const settings = useSettings();
-  // Stable callbacks pulled out of the hook results: memo dependency lists must
+  const fieldsMatrix = useFieldsMatrix(postToHost);  // Stable callbacks pulled out of the hook results: memo dependency lists must
   // reference these, never the freshly-built hook result objects, or every
   // render would invalidate `interaction` and re-render every TableNode.
   const {
@@ -116,8 +118,8 @@ export function App(): JSX.Element {
     },
     onLayoutActive: (message) => layout.applyActiveLayout(message),
     onSettingsCurrent: (openBehavior) => settings.applyCurrent(openBehavior),
+    onMatrixColumnPrefs: (scope, columns) => fieldsMatrix.applyColumnPrefs(scope, columns),
   });
-
   const visibleGraph = useMemo(
     () => (graph === null ? null : filterGraph(graph, filter.visibleModels)),
     [graph, filter.visibleModels],
@@ -314,9 +316,13 @@ export function App(): JSX.Element {
           label: 'Add note here',
           onSelect: () => focusNoteText(notes.addNote(flowPoint.x, flowPoint.y)),
         },
+        {
+          label: 'Edit fields matrix (all models)',
+          onSelect: () => fieldsMatrix.openGlobal(),
+        },
       ]);
     },
-    [openMenu, notes, focusNoteText],
+    [openMenu, notes, focusNoteText, fieldsMatrix],
   );
 
   const onDeleteSelectedNotes = useCallback((): void => {
@@ -341,9 +347,10 @@ export function App(): JSX.Element {
             onSelect: () => columnDisplay.setTableMode(model, option.value),
           })),
         },
+        { label: 'Edit fields matrix', onSelect: () => fieldsMatrix.openForModel(model) },
       ];
     },
-    [columnDisplay, onOpenModelSource],
+    [columnDisplay, onOpenModelSource, fieldsMatrix],
   );
 
   const onColumnContextMenu = useCallback(
@@ -581,8 +588,8 @@ export function App(): JSX.Element {
                     onPaneContextMenu={onPaneContextMenu}
                     onDeleteSelectedNotes={onDeleteSelectedNotes}
                     onAddNoteAt={onAddNoteAt}
-                    fkSource={fkPickedSource}
-                    fkCreateActive={fkCreate.state.active}
+                    onOpenFieldsMatrix={fieldsMatrix.openGlobal}
+                    fkSource={fkPickedSource}                    fkCreateActive={fkCreate.state.active}
                     onStartFkCreate={fkCreate.start}
                     onCancelFkCreate={fkCreate.cancel}
                   />
@@ -650,6 +657,20 @@ export function App(): JSX.Element {
           value={settings.openBehavior}
           onChange={settings.setOpenBehavior}
           onClose={settings.closePanel}
+        />
+      )}
+      {fieldsMatrix.target !== null && graph !== null && (
+        <FieldsMatrix
+          target={fieldsMatrix.target}
+          graph={graph}
+          onEdit={onEdit}
+          onClose={fieldsMatrix.close}
+          columns={fieldsMatrix.columns}
+          seedColumns={fieldsMatrix.seedColumns}
+          onColumnsChange={fieldsMatrix.setColumns}
+          storedPrefs={fieldsMatrix.storedPrefs[fieldsMatrix.target.scope]}
+          filterText={fieldsMatrix.filterText}
+          onFilterTextChange={fieldsMatrix.setFilterText}
         />
       )}
     </main>

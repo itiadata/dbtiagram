@@ -6,6 +6,7 @@ import type { DiagramGraph } from '../diagram/graph';
 import type { DiagramLayout } from '../diagram/layoutFile';
 import type { ModelEdit } from '../dbt/edit';
 import type { OpenBehavior } from './openBehavior';
+import type { MatrixScope, StoredMatrixColumnPref } from './matrixColumns';
 
 /** A model.yml file whose most recent parse failed (last good data shown). */
 export interface DiagramPendingError {
@@ -53,7 +54,9 @@ export type MessageToWebview =
    * whenever `dbtiagram.openBehavior` changes, so every open panel's
    * settings overlay reflects the latest value.
    */
-  | { type: 'settings:current'; openBehavior: OpenBehavior };
+  | { type: 'settings:current'; openBehavior: OpenBehavior }
+  /** The stored grid column preferences for one matrix scope (spec 27). */
+  | { type: 'matrix:columnPrefs'; scope: MatrixScope; columns: StoredMatrixColumnPref[] };
 
 /** Messages sent from the webview to the extension host. */
 export type MessageToExtension =
@@ -70,4 +73,6 @@ export type MessageToExtension =
     /** Open the model.yml declaring `model` and reveal its declaration, or a specific `column` within it (spec 15, extended by spec 25). */
     | { type: 'model:openSource'; model: string; column?: string }
   /** Persist a new "Open new diagrams" choice as a VS Code user setting (spec 23). */
-  | { type: 'settings:setOpenBehavior'; openBehavior: OpenBehavior };
+  | { type: 'settings:setOpenBehavior'; openBehavior: OpenBehavior }
+  /** Persist grid column visibility/order for one matrix scope (spec 27). */
+  | { type: 'matrix:setColumnPrefs'; scope: MatrixScope; columns: StoredMatrixColumnPref[] };

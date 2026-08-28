@@ -58,6 +58,30 @@ export function setColumnDescription(
 }
 
 /**
+ * Sets one `config.meta` key on a column (spec 27). If the key already exists
+ * (any value, including `''`), the write always sets `meta[key] =
+ * value.trim()` — even when that trim is `''` — so an existing key is never
+ * deleted, only blanked. If the key is absent and `value.trim()` is
+ * non-empty, the key is added with that trimmed value. If the key is absent
+ * and `value.trim()` is empty, the model is returned unchanged.
+ */
+export function setColumnMetaValue(
+  model: ModelDefinition,
+  column: string,
+  key: string,
+  value: string,
+): ModelDefinition {
+  return mapColumn(model, column, (c) => {
+    const meta = c.meta ?? {};
+    const exists = Object.prototype.hasOwnProperty.call(meta, key);
+    const trimmed = value.trim();
+    if (!exists && trimmed.length === 0) return c;
+    if (exists && meta[key] === trimmed) return c;
+    return { ...c, meta: { ...meta, [key]: trimmed } };
+  });
+}
+
+/**
  * Renames a column and re-points every FK reference to it: `to_columns` in
  * constraints whose `to` targets the renamed model (in any model,
  * self-references included) and `columns` in constraints declared on the

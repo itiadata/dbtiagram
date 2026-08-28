@@ -9,6 +9,7 @@ import { useEffect, useRef } from 'react';
 import { postToHost } from '../host';
 import type { MessageToWebview } from '../../src/shared/protocol';
 import type { OpenBehavior } from '../../src/shared/openBehavior';
+import type { MatrixScope, StoredMatrixColumnPref } from '../../src/shared/matrixColumns';
 
 export type DiagramUpdateMessage = Extract<MessageToWebview, { type: 'diagram:update' }>;
 export type LayoutApplyMessage = Extract<MessageToWebview, { type: 'layout:apply' }>;
@@ -21,6 +22,7 @@ export interface HostMessageHandlers {
   onLayoutApply: (message: LayoutApplyMessage) => void;
   onLayoutActive: (message: LayoutActiveMessage) => void;
   onSettingsCurrent: (openBehavior: OpenBehavior) => void;
+  onMatrixColumnPrefs: (scope: MatrixScope, columns: StoredMatrixColumnPref[]) => void;
 }
 
 export function useHostMessages(handlers: HostMessageHandlers): void {
@@ -49,6 +51,9 @@ export function useHostMessages(handlers: HostMessageHandlers): void {
           break;
         case 'settings:current':
           current.onSettingsCurrent(message.openBehavior);
+          break;
+        case 'matrix:columnPrefs':
+          current.onMatrixColumnPrefs(message.scope, message.columns);
           break;
       }
     };

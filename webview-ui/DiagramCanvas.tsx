@@ -85,6 +85,8 @@ export interface DiagramCanvasProps {
   onDeleteSelectedNotes: () => void;
   /** Creates a note at the given flow point (spec 26's "Add note" toolbar button). */
   onAddNoteAt: (point: { x: number; y: number }) => void;
+  /** Opens the global fields matrix (spec 27's toolbar button). */
+  onOpenFieldsMatrix: () => void;
   /** The column picked as the FK gesture's source, or null (spec 26). */
   fkSource: { model: string; column: string } | null;
   fkCreateActive: boolean;
@@ -117,6 +119,7 @@ export function DiagramCanvas({
   onPaneContextMenu,
   onDeleteSelectedNotes,
   onAddNoteAt,
+  onOpenFieldsMatrix,
   fkSource,
   fkCreateActive,
   onStartFkCreate,
@@ -471,6 +474,13 @@ export function DiagramCanvas({
             onClick={fkCreateActive ? onCancelFkCreate : onStartFkCreate}
           >
             {fkCreateActive ? 'Cancel' : 'Add foreign key'}
+          </button>
+          <button
+            type="button"
+            className="panel-button panel-button--secondary"
+            onClick={onOpenFieldsMatrix}
+          >
+            Edit fields matrix
           </button>
         </div>
       </Panel>

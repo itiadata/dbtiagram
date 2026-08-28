@@ -35,7 +35,11 @@ lines** under `test/unit/` (see `specs/features/17-modular-source-layout.md`).
 | `src/dbt/edit/model.ts` | pure | Model-level edits: rename, description. | `renameModel`, `applyDescription` |
 | `src/dbt/edit/column.ts` | pure | Column-level edits: rename, data type, description. | `renameColumn`, `setColumnDataType`, `setColumnDescription`, `mapColumn` |
 | `src/dbt/edit/primaryKey.ts` | pure | Primary key edits, including de-duplication of column names. | `setPrimaryKeyOnModel`, `dedupeTrimmed` |
-| `src/dbt/edit/foreignKey.ts` | pure | Foreign key creation, retargeting, column pairing, virtual-flag and removal. | `createForeignKey`, `applyForeignKeyTarget`, `applyForeignKeyColumns`, `setFkVirtualOnModel`, `removeFkFromModel` |
+| `src/dbt/edit/foreignKey.ts` | pure | Foreign key creation, retargeting, column pairing, virtual-flag and removal. | 
+`createForeignKey`, `applyForeignKeyTarget`, `applyForeignKeyColumns`, `setFkVirtualOnModel`, `removeFkFromModel` |
+| `src/dbt/edit/column.ts` | pure | Column-level edits: rename (with FK re-pointing), data type, description, and 
+one `config.meta` key at a time (spec 27). | `mapColumn`, `setColumnDataType`, `setColumnDescription`, 
+`setColumnMetaValue`, `renameColumn` |
 
 ## `src/diagram/` — graph and layout (pure)
 
@@ -47,7 +51,14 @@ lines** under `test/unit/` (see `specs/features/17-modular-source-layout.md`).
 | `src/diagram/routing.ts` | pure | Obstacle-aware orthogonal edge routing with free side choice; `chooseSide` also picks the FK-draw preview line's anchor side (spec 26). | `routeEdge`, `Route`, `RouteRequest`, `RouteEndpoint`, `RouteSide`, `Point`, `STUB_PX`, `ROUTE_MARGIN`, `OBSTACLE_PENALTY`, `BEND_PENALTY`, `ROUTING_NODE_LIMIT`, `chooseSide` |
 | `src/diagram/columnDisplay.ts` | pure | The four per-table column display modes and which columns each mode shows (spec 24). | `ColumnDisplayMode`, `DEFAULT_COLUMN_DISPLAY`, `ColumnDisplayOption`, `COLUMN_DISPLAY_OPTIONS`, `isColumnDisplayMode`, `displayedColumns` |
 | `src/diagram/flow.ts` | pure | Convert the diagram graph into React Flow nodes/edges and route them; owns handle-id conventions; anchors FKs naming a missing column to the card and marks them `unresolved` (spec 20); anchors a hidden-but-existing FK column at the header instead, without `unresolved` (spec 24). | `buildFlowElements`, `routeEdges`, `columnSourceHandle`, `columnTargetHandle`, `columnRowIndexLookup`, `displayedColumnRowIndexLookup`, `FlowNode`, `FlowEdge`, `FlowElements`, `HandleSide`, `FK_EDGE_TYPE`, `EDGE_INTERACTION_WIDTH`, `CARD_ANCHOR`, `HEADER_ANCHOR` |
-| `src/diagram/layoutFile.ts` | pure | The saved `.dbtiagram` layout file format: build, serialize, parse, apply, including sticky notes (spec 16) and per-table/diagram-wide column-display modes (spec 24). | `buildLayout`, `serializeDiagramLayout`, `parseDiagramLayout`, `applyLayout`, `createNote`, `isLayoutFilePath`, `defaultLayoutName`, `stripLayoutSuffix`, `DiagramLayout`, `DiagramLayoutTable`, `DiagramNote`, `AppliedLayout`, `DiagramLayoutParseError`, `LAYOUT_FILE_SUFFIX`, `LAYOUT_VERSION`, `NOTE_DEFAULT_WIDTH`, `NOTE_DEFAULT_HEIGHT`, `NOTE_MIN_WIDTH`, `NOTE_MIN_HEIGHT` |
+| `src/diagram/layoutFile.ts` | pure | The saved `.dbtiagram` layout file format: build, serialize, parse, apply, 
+including sticky notes (spec 16) and per-table/diagram-wide column-display modes (spec 24). | `buildLayout`, 
+`serializeDiagramLayout`, `parseDiagramLayout`, `applyLayout`, `createNote`, `isLayoutFilePath`, `defaultLayoutName`, 
+`stripLayoutSuffix`, `DiagramLayout`, `DiagramLayoutTable`, `DiagramNote`, `AppliedLayout`, `DiagramLayoutParseError`, 
+`LAYOUT_FILE_SUFFIX`, `LAYOUT_VERSION`, `NOTE_DEFAULT_WIDTH`, `NOTE_DEFAULT_HEIGHT`, `NOTE_MIN_WIDTH`, 
+`NOTE_MIN_HEIGHT` |
+| `src/diagram/matrix.ts` | pure | Derives "fields matrix" rows (spec 27) from a `DiagramGraph`'s nodes: one row per 
+`(model, column)` pair, plus meta-key discovery. | `MatrixRow`, `discoverMetaKeys`, `buildMatrixRows` |
 
 ## `src/shared/` — host ↔ webview shared code
 
@@ -58,7 +69,13 @@ lines** under `test/unit/` (see `specs/features/17-modular-source-layout.md`).
 | `src/shared/glob.ts` | shared | Minimal glob matching used for model file discovery patterns. | `matchesGlob`, `globToRegExp`, `normalizePathForGlob` |
 | `src/shared/labels.ts` | shared | Disambiguate display labels for files that share a base name. | `disambiguateFileLabels`, `FileLabelMap` |
 | `src/shared/openBehavior.ts` | shared | The "Open new diagrams" setting's type, default and UI option text (spec 23). | `OpenBehavior`, `DEFAULT_OPEN_BEHAVIOR`, `OpenBehaviorOption`, `OPEN_BEHAVIOR_OPTIONS` |
-| `src/shared/openBehaviorPlacement.ts` | shared (pure) | Pure four-way placement decision for a new diagram panel, given the setting and whether a reusable separate-window tab group was found (spec 23). | `decidePlacement`, `PlacementDecision`, `ReuseTarget` |
+| `src/shared/openBehaviorPlacement.ts` | shared (pure) | Pure four-way placement decision for a new diagram panel, 
+given the setting and whether a reusable separate-window tab group was found (spec 23). | `decidePlacement`, 
+`PlacementDecision`, `ReuseTarget` |
+| `src/shared/matrixColumns.ts` | shared | Grid column definitions for the "fields matrix" (spec 27): defaults, 
+show/hide, reorder, and merging with stored preferences. Used by both the webview and the extension host. | 
+`MatrixScope`, `MatrixColumnId`, `MatrixColumnDef`, `StoredMatrixColumnPref`, `defaultMatrixColumns`, 
+`toggleColumnVisible`, `reorderColumn`, `applyStoredPrefs`, `toStoredPrefs` |
 
 ## `src/vscode/` — VS Code API wrappers
 
@@ -70,6 +87,8 @@ lines** under `test/unit/` (see `specs/features/17-modular-source-layout.md`).
 | `src/vscode/editorButtonContext.ts` | vscode-facing | Registers the editor-title button and keeps its `when`-clause context keys in sync. | `registerEditorTitleButton` |
 | `src/vscode/layoutFiles.ts` | vscode-facing | Read/write `.dbtiagram` layout files and prompt the user for a save path. | `readLayoutFile`, `writeLayoutFile`, `promptForLayoutPath` |
 | `src/vscode/openBehaviorWindows.ts` | vscode-facing | Resolves where a new diagram panel should be created for the current `OpenBehavior`, and tracks this extension's separate-window tab groups for "Separate window (reuse)" (spec 23). | `resolvePlacement`, `untrackPanel`, `PanelPlacement` |
+| `src/vscode/matrixColumnPrefs.ts` | vscode-facing | Reads/writes matrix grid column preferences per `MatrixScope` 
+via `ExtensionContext.workspaceState` (spec 27). | `readMatrixColumnPrefs`, `writeMatrixColumnPrefs` |
 
 ## `src/webview/` — extension-host side of the panel
 
@@ -124,7 +143,16 @@ lines** under `test/unit/` (see `specs/features/17-modular-source-layout.md`).
 | `webview-ui/hooks/useEdgeHighlighting.ts` | webview | Hover/selection highlighting of FK edges and handle dots. | `useEdgeHighlighting`, `EdgeHighlightingState` |
 | `webview-ui/hooks/useColumnDisplay.ts` | webview | React state wrapper around `column-display-state.ts`: the diagram default, per-table overrides, effective-mode lookup, and seeding from an opened layout (spec 24). | `useColumnDisplay`, `ColumnDisplayHookState` |
 | `webview-ui/hooks/useLayoutPersistence.ts` | webview | Node positions ↔ layout file messages: seeding on open, the explicit save, and a debounced sync of the pending (unsaved) layout to the host's in-memory cache, plus the dirty flag driving the header button (spec 22); threads the column-display state into every save/sync (spec 24). | `useLayoutPersistence`, `LayoutPersistenceState` |
-| `webview-ui/hooks/useFkCreateMode.ts` | webview | React wrapper around `fk-create-state.ts`: window-level Escape cancellation and the hint banner text (spec 26). | `useFkCreateMode`, `FkCreateModeState` |
+| `webview-ui/hooks/useFkCreateMode.ts` | webview | React wrapper around `fk-create-state.ts`: window-level Escape 
+cancellation and the hint banner text (spec 26). | `useFkCreateMode`, `FkCreateModeState` |
+| `webview-ui/matrix-selection.ts` | webview (pure) | Rectangular multi-cell selection over a `(rowIndex, 
+columnIndex)` grid (spec 27). | `CellRef`, `MatrixSelection`, `startSelection`, `extendSelection`, 
+`cellsInSelection` |
+| `webview-ui/FieldsMatrix.tsx` | webview | The "fields matrix" modal (spec 27): grid over one model's columns or 
+every model's, with filter, column show/hide + reorder, editable cells, and batch-apply. | `FieldsMatrix`, 
+`FieldsMatrixProps` |
+| `webview-ui/hooks/useFieldsMatrix.ts` | webview | Open/close state, column-prefs round trip, and the always-reset 
+filter text for the fields matrix (spec 27). | `useFieldsMatrix`, `FieldsMatrixState`, `MatrixTarget` |
 
 ## Tests
 

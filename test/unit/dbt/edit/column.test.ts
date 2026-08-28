@@ -380,6 +380,50 @@ describe('applyEdit', () => {
     });
   });
 
+  describe('setColumnMeta', () => {
+    it('fills a previously-absent key', () => {
+      const withMeta: ModelDefinition[] = [
+        { name: 'customers', columns: [{ name: 'email', meta: { confidentiality: 'internal' } }] },
+      ];
+      const { models: next } = applyEdit(withMeta, {
+        kind: 'setColumnMeta',
+        model: 'customers',
+        column: 'email',
+        key: 'GDPR',
+        value: 'true',
+      });
+      expect(next[0].columns?.[0].meta).toEqual({ confidentiality: 'internal', GDPR: 'true' });
+    });
+
+    it('blanks an existing key to empty string, keeping it', () => {
+      const withMeta: ModelDefinition[] = [
+        { name: 'customers', columns: [{ name: 'email', meta: { GDPR: 'false' } }] },
+      ];
+      const { models: next } = applyEdit(withMeta, {
+        kind: 'setColumnMeta',
+        model: 'customers',
+        column: 'email',
+        key: 'GDPR',
+        value: '',
+      });
+      expect(next[0].columns?.[0].meta).toEqual({ GDPR: '' });
+    });
+
+    it('no-ops when key is absent and value is blank', () => {
+      const withMeta: ModelDefinition[] = [
+        { name: 'customers', columns: [{ name: 'email', meta: { confidentiality: 'internal' } }] },
+      ];
+      const { models: next } = applyEdit(withMeta, {
+        kind: 'setColumnMeta',
+        model: 'customers',
+        column: 'email',
+        key: 'GDPR',
+        value: '   ',
+      });
+      expect(next[0]).toBe(withMeta[0]);
+    });
+  });
+
   it('does not mutate the input models', () => {
     applyEdit(models, { kind: 'setModelName', model: 'orders', name: 'orders_v2' });
     expect(models[0].name).toBe('orders');

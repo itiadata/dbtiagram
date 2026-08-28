@@ -20,7 +20,7 @@ export function activate(context: vscode.ExtensionContext): void {
         uri !== undefined && uri.scheme === 'file'
           ? { kind: 'model', fsPath: uri.fsPath }
           : { kind: 'adhoc', id: String((adhocCounter += 1)) };
-      return DiagramPanel.createOrShow(context.extensionUri, source);
+      return DiagramPanel.createOrShow(context.extensionUri, source, context.workspaceState);
     }),
     // Opens the diagram with a saved layout applied (spec 13). The editor/title
     // menu passes the active resource; fall back to the active editor.
@@ -30,7 +30,7 @@ export function activate(context: vscode.ExtensionContext): void {
         uri !== undefined && uri.scheme === 'file'
           ? { kind: 'layout', fsPath: uri.fsPath }
           : { kind: 'adhoc', id: String((adhocCounter += 1)) };
-      return DiagramPanel.createOrShow(context.extensionUri, source);
+      return DiagramPanel.createOrShow(context.extensionUri, source, context.workspaceState);
     }),
   );
 

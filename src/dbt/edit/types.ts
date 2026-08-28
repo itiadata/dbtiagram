@@ -15,6 +15,7 @@ export type ModelEdit =
   | { kind: 'setColumnName'; model: string; column: string; name: string }
   | { kind: 'setColumnDataType'; model: string; column: string; dataType: string }
   | { kind: 'setColumnDescription'; model: string; column: string; description: string }
+  | { kind: 'setColumnMeta'; model: string; column: string; key: string; value: string }
   | { kind: 'setPrimaryKey'; model: string; columns: string[]; virtual: boolean }
   | { kind: 'setForeignKeyTarget'; model: string; fk: ForeignKeyDescriptor; target: string }
   | {
