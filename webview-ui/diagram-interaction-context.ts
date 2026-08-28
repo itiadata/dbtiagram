@@ -7,6 +7,7 @@
  * or the selection change (spec 03).
  */
 import { createContext } from 'react';
+import type { MouseEvent as ReactMouseEvent } from 'react';
 import type { ModelEdit } from '../src/dbt/edit';
 
 export interface DiagramInteractionContextValue {
@@ -24,6 +25,8 @@ export interface DiagramInteractionContextValue {
   onColumnSelect: (model: string, column: string) => void;
   /** Posts a `diagram:edit` message (inline editing and the details sidebar). */
   onEdit: (edit: ModelEdit) => void;
+  /** Opens the table's context menu from a column row (spec 25). */
+  onColumnContextMenu: (model: string, column: string, event: ReactMouseEvent) => void;
 }
 
 export const DiagramInteractionContext = createContext<DiagramInteractionContextValue | null>(

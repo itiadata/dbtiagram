@@ -25,7 +25,7 @@ lines** under `test/unit/` (see `specs/features/17-modular-source-layout.md`).
 | `src/dbt/types.ts` | pure | The dbt model.yml data model shared across parsing, editing and diagramming. | `ModelYmlFile`, `ModelDefinition`, `ModelColumn`, `ModelConfig`, `ModelConstraint`, `DataTestEntry`, `ForeignKeyDescriptor`, `VirtualPrimaryKey`, `VirtualForeignKey`, `VirtualConstraintsBlock` |
 | `src/dbt/parse.ts` | pure | Parse model.yml text into `ModelYmlFile`, raising a typed error on malformed YAML. | `parseModelYml`, `ModelYmlParseError` |
 | `src/dbt/serialize.ts` | pure | Serialize a `ModelYmlFile` back to YAML text for write-back. | `serializeModelYml` |
-| `src/dbt/locate.ts` | pure | Locate a model's `name:` declaration in model.yml text via the yaml package's node ranges (spec 15). | `findModelDeclaration`, `DeclarationPosition` |
+| `src/dbt/locate.ts` | pure | Locate a model's `name:` declaration, or a specific column's `name:` entry within it, in model.yml text via the yaml package's node ranges (spec 15, extended by spec 25). | `findModelDeclaration`, `findColumnDeclaration`, `DeclarationPosition` |
 | `src/dbt/refs.ts` | pure | Parse and rewrite `ref('…')` targets inside model properties. | `parseRef`, `renameRefTarget`, `RefTarget` |
 | `src/dbt/virtual.ts` | pure | Read/write the dbtiagram-managed virtual constraints block (PKs/FKs not expressed as dbt constraints). | `readVirtualConstraints`, `writeVirtualConstraints` |
 | `src/dbt/modelStore.ts` | pure | In-memory set of loaded model.yml files: upsert, text change, delete, rename, and redistribution of edited models. | `createModelStore`, `ModelStore`, `upsertRecord`, `applyTextChange`, `applyFileDeleted`, `applyFileRenamed`, `distributeEditedModels`, `replaceModelStore`, `ModelFileRecord`, `LoadedModelFile`, `FailedModelFile` |
@@ -78,7 +78,7 @@ lines** under `test/unit/` (see `specs/features/17-modular-source-layout.md`).
 | `src/webview/panel.ts` | vscode-facing | The diagram panel: lifecycle, message pump, model store wiring, write-back, in-memory pending-layout cache and close-time save prompt (spec 22). | `DiagramPanel` |
 | `src/webview/html.ts` | vscode-facing | Build the webview HTML shell (CSP, nonce, asset URIs). | `buildWebviewHtml` |
 | `src/webview/panelKey.ts` | pure | One panel per source file: key and title derivation. | `diagramPanelKey`, `diagramPanelTitle`, `DiagramSource`, `defaultCaseInsensitive` |
-| `src/webview/openSource.ts` | pure | Orchestrates "Open in model.yml" against a host port: resolve, read, locate, reveal or report (spec 15). | `openModelSource`, `OpenSourceHost` |
+| `src/webview/openSource.ts` | pure | Orchestrates "Reveal in model.yml" against a host port: resolve, read, locate (model or a specific column, falling back to the model), reveal or report (spec 15, extended by spec 25). | `openModelSource`, `OpenSourceHost` |
 | `src/webview/layoutMessages.ts` | pure | Layout-related message handling against a small `LayoutHost` port, so it stays testable. Manual save (spec 22): `cachePendingLayout` only caches the webview's latest layout in host memory, never writes to disk. | `publishActiveLayout`, `openLayout`, `sendActiveLayout`, `saveLayout`, `cachePendingLayout`, `ActiveLayout`, `LayoutHost` |
 | `src/extension.ts` | vscode-facing | `activate` / `deactivate` only — command registration and disposal. | `activate`, `deactivate` |
 

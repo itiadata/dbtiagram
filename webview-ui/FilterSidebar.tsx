@@ -141,7 +141,7 @@ export function FilterSidebar({
       title: selectedModels.has(name) ? undefined : 'Model is hidden by the filter',
       onSelect: () => onRevealModel(name),
     },
-    { label: 'Open in model.yml', onSelect: () => onOpenModelSource(name) },
+    { label: 'Reveal in model.yml', onSelect: () => onOpenModelSource(name) },
   ];
 
   return (

@@ -169,6 +169,11 @@ function TableNodeComponent({ id, data }: NodeProps<FlowNode>): JSX.Element {
             onMouseEnter={() => interaction?.onColumnHover(id, column.name)}
             onMouseLeave={() => interaction?.onColumnLeave(id, column.name)}
             onClick={() => interaction?.onColumnSelect(id, column.name)}
+            onContextMenu={(event) => {
+              event.preventDefault();
+              event.stopPropagation();
+              interaction?.onColumnContextMenu(id, column.name, event);
+            }}
           >
             {renderHandle(column.name, 'left', 'target')}
             {renderHandle(column.name, 'right', 'target')}

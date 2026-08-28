@@ -17,7 +17,7 @@ import { layoutDiagram } from '../src/diagram/layout';
 import { filterGraph } from '../src/shared/filter';
 import { DetailsSidebar, type SelectedEntity } from './DetailsSidebar';
 import { DiagramCanvas } from './DiagramCanvas';
-import { ContextMenu } from './ContextMenu';
+import { ContextMenu, type ContextMenuItem } from './ContextMenu';
 import { advanceDetailsVisibility, initialDetailsVisibility } from './details-visibility';
 import {
   DiagramInteractionContext,
@@ -237,8 +237,8 @@ export function App(): JSX.Element {
   );
   const { revealTarget, revealModel } = useRevealModel(onRevealed);
 
-  const onOpenModelSource = useCallback((model: string): void => {
-    postToHost({ type: 'model:openSource', model });
+  const onOpenModelSource = useCallback((model: string, column?: string): void => {
+    postToHost({ type: 'model:openSource', model, column });
   }, []);
 
   // Spec 16: React Flow tags each rendered node with its id, so focusing a
@@ -271,24 +271,41 @@ export function App(): JSX.Element {
     }
   }, [notes]);
 
+  // Spec 15 (extended by spec 25): the table card's context menu is the same
+  // whether opened from the header or a column row — only what "Reveal in
+  // model.yml" reveals differs, based on whether `column` is given.
+  const buildTableMenuItems = useCallback(
+    (model: string, column?: string): ContextMenuItem[] => {
+      const currentMode = columnDisplay.effectiveMode(model);
+      return [
+        { label: 'Reveal in model.yml', onSelect: () => onOpenModelSource(model, column) },
+        {
+          label: 'Show columns',
+          items: COLUMN_DISPLAY_OPTIONS.map((option) => ({
+            label: option.label,
+            checked: currentMode === option.value,
+            onSelect: () => columnDisplay.setTableMode(model, option.value),
+          })),
+        },
+      ];
+    },
+    [columnDisplay, onOpenModelSource],
+  );
+
+  const onColumnContextMenu = useCallback(
+    (model: string, column: string, event: ReactMouseEvent): void => {
+      openMenu(event.clientX, event.clientY, buildTableMenuItems(model, column));
+    },
+    [openMenu, buildTableMenuItems],
+  );
+
   // Spec 15: only table cards carry a menu; other node types (notes) are
   // handled by their own features.
   const onNodeContextMenu = useCallback(
     (event: ReactMouseEvent, node: Node): void => {
       event.preventDefault();
       if (node.type === 'table') {
-        const currentMode = columnDisplay.effectiveMode(node.id);
-        openMenu(event.clientX, event.clientY, [
-          { label: 'Open in model.yml', onSelect: () => onOpenModelSource(node.id) },
-          {
-            label: 'Show columns',
-            items: COLUMN_DISPLAY_OPTIONS.map((option) => ({
-              label: option.label,
-              checked: currentMode === option.value,
-              onSelect: () => columnDisplay.setTableMode(node.id, option.value),
-            })),
-          },
-        ]);
+        openMenu(event.clientX, event.clientY, buildTableMenuItems(node.id));
         return;
       }
       if (node.type !== 'note') {
@@ -315,7 +332,7 @@ export function App(): JSX.Element {
         { label: 'Delete', onSelect: () => notes.deleteNote(note.id) },
       ]);
     },
-    [openMenu, onOpenModelSource, notes, columnDisplay],
+    [openMenu, buildTableMenuItems, notes],
   );
 
   const current = selection.selection;
@@ -332,6 +349,7 @@ export function App(): JSX.Element {
       onTableSelect,
       onColumnSelect,
       onEdit,
+      onColumnContextMenu,
     }),
     [
       highlighting.highlightedColumns,
@@ -341,6 +359,7 @@ export function App(): JSX.Element {
       onTableSelect,
       onColumnSelect,
       onEdit,
+      onColumnContextMenu,
     ],
   );
 

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { findModelDeclaration } from '../../../src/dbt/locate';
+import { findModelDeclaration, findColumnDeclaration } from '../../../src/dbt/locate';
 
 const TWO_MODELS =
   'version: 2\nmodels:\n  - name: orders\n    description: Orders\n  - name: order_items\n    columns:\n      - name: id\n';
@@ -69,5 +69,46 @@ describe('findModelDeclaration', () => {
 
   it('returns null for malformed YAML instead of throwing', () => {
     expect(findModelDeclaration('models:\n  - name: [unclosed\n', 'orders')).toBeNull();
+  });
+});
+
+describe('findColumnDeclaration', () => {
+  it('finds a column on the matching model', () => {
+    const text =
+      'models:\n  - name: orders\n    columns:\n      - name: id\n      - name: customer_id\n';
+    expect(findColumnDeclaration(text, 'orders', 'customer_id')).toEqual({
+      line: 4,
+      column: 14,
+      length: 11,
+    });
+  });
+
+  it('does not match a same-named column on a different model', () => {
+    const text =
+      'models:\n  - name: orders\n    columns:\n      - name: id\n  - name: order_items\n    columns:\n      - name: id\n';
+    expect(findColumnDeclaration(text, 'order_items', 'id')).toEqual({
+      line: 6,
+      column: 14,
+      length: 2,
+    });
+  });
+
+  it('returns null when the model cannot be located', () => {
+    expect(findColumnDeclaration(TWO_MODELS, 'ghost', 'id')).toBeNull();
+  });
+
+  it('returns null when columns is missing', () => {
+    expect(findColumnDeclaration('models:\n  - name: orders\n', 'orders', 'id')).toBeNull();
+  });
+
+  it('returns null when columns is not a sequence', () => {
+    expect(
+      findColumnDeclaration('models:\n  - name: orders\n    columns: id\n', 'orders', 'id'),
+    ).toBeNull();
+  });
+
+  it('returns null for an unknown column name', () => {
+    const text = 'models:\n  - name: orders\n    columns:\n      - name: id\n';
+    expect(findColumnDeclaration(text, 'orders', 'ghost')).toBeNull();
   });
 });

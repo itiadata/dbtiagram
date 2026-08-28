@@ -67,7 +67,7 @@ export type MessageToExtension =
    * carried alongside so the host never has to recompute it.
    */
   | { type: 'layout:pending'; layout: DiagramLayout; dirty: boolean }
-  /** Open the model.yml declaring `model` and reveal its declaration (spec 15). */
-  | { type: 'model:openSource'; model: string }
+    /** Open the model.yml declaring `model` and reveal its declaration, or a specific `column` within it (spec 15, extended by spec 25). */
+    | { type: 'model:openSource'; model: string; column?: string }
   /** Persist a new "Open new diagrams" choice as a VS Code user setting (spec 23). */
   | { type: 'settings:setOpenBehavior'; openBehavior: OpenBehavior };

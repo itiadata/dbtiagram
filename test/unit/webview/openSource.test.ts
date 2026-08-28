@@ -60,4 +60,39 @@ describe('openModelSource', () => {
 
     expect(host.reveal).toHaveBeenCalledWith('/w/a.yml', { line: 1, column: 10, length: 6 });
   });
+
+  it('reveals a located column', async () => {
+    const host = makeHost({
+      readFileText: () =>
+        Promise.resolve('models:\n  - name: orders\n    columns:\n      - name: customer_id\n'),
+    });
+    await openModelSource(host, 'orders', 'customer_id');
+
+    expect(host.reveal).toHaveBeenCalledTimes(1);
+    expect(host.reveal).toHaveBeenCalledWith(FILE, { line: 3, column: 14, length: 11 });
+    expect(host.showWarning).not.toHaveBeenCalled();
+    expect(host.postError).not.toHaveBeenCalled();
+  });
+
+  it('falls back to the model line and warns when the column is not found', async () => {
+    const host = makeHost({
+      readFileText: () =>
+        Promise.resolve('models:\n  - name: orders\n    columns:\n      - name: id\n'),
+    });
+    await openModelSource(host, 'orders', 'customer_id');
+
+    expect(host.reveal).toHaveBeenCalledWith(FILE, { line: 1, column: 10, length: 6 });
+    expect(host.showWarning).toHaveBeenCalledWith(
+      `Could not locate column "customer_id" on "orders" in ${FILE}; revealed the model declaration instead.`,
+    );
+  });
+
+  it('omitting column preserves spec 15 behavior', async () => {
+    const host = makeHost();
+    await openModelSource(host, 'orders');
+
+    expect(host.reveal).toHaveBeenCalledWith(FILE, { line: 1, column: 10, length: 6 });
+    expect(host.showWarning).not.toHaveBeenCalled();
+    expect(host.postError).not.toHaveBeenCalled();
+  });
 });

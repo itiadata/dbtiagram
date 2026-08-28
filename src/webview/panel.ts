@@ -359,9 +359,9 @@ export class DiagramPanel {
       case 'layout:pending':
         cachePendingLayout(this.layoutHost, message.layout, message.dirty);
         return;
-      case 'model:openSource':
-        await openModelSource(this.openSourceHost, message.model);
-        return;
+        case 'model:openSource':
+          await openModelSource(this.openSourceHost, message.model, message.column);
+          return;
       case 'settings:setOpenBehavior':
         await vscode.workspace
           .getConfiguration('dbtiagram')
