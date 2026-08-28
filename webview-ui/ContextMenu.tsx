@@ -12,6 +12,7 @@ import { placeMenu, placeSubmenu, type MenuPlacement } from './context-menu-posi
 
 export interface ContextMenuItem {
   label: string;
+  icon?: React.ReactNode;
   disabled?: boolean;
   checked?: boolean;
   title?: string;
@@ -163,6 +164,9 @@ function ContextMenuRow({ item, onClose }: ContextMenuRowProps): JSX.Element {
         }
       >
         <span className="context-menu__check">{item.checked === true ? '✓' : ''}</span>
+        {item.icon !== undefined && (
+          <span className="context-menu__icon">{item.icon}</span>
+        )}
         {item.label}
         {hasSubmenu && <span className="context-menu__submenu-arrow" aria-hidden="true">›</span>}
       </button>

@@ -107,6 +107,7 @@
     "@vscode/vsce": "^2.26.0",
     "@xyflow/react": "^12.11.2",
     "esbuild": "^0.20.2",
+    "lucide-react": "^1.35.0",
     "mocha": "^10.4.0",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",

@@ -1,7 +1,7 @@
 ---
 id: 28
 title: Lucide icons for UI buttons
-status: approved
+status: implemented
 priority: medium
 created: 2026-08-28
 owner: unassigned

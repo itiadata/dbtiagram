@@ -71,14 +71,29 @@ body {
   background: rgba(127, 127, 127, 0.18);
 }
 
-.app__settings {
+/* Spec 28: settings button is secondary, not primary. Two-class selector
+   overrides the later `.panel-button` primary rule via specificity. */
+.panel-button.app__settings {
   margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--card);
+  color: var(--text);
+  border-color: var(--border);
 }
 
 /* Spec 23: gear button already claims margin-left: auto to hug the right
    edge; the Save button follows it with normal flow spacing. */
 .app__save {
   margin-left: 0;
+}
+
+/* Spec 28: save button icon + label layout. */
+.app__save {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
 }
 
 .banner {
@@ -138,6 +153,13 @@ body {
   display: flex;
   align-items: center;
   gap: 6px;
+}
+
+/* Spec 28: icon-only toolbar buttons — center the Lucide icon, no text. */
+.canvas-toolbar .panel-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .canvas-toolbar__select {
@@ -1138,6 +1160,13 @@ body {
   flex-shrink: 0;
 }
 
+/* Spec 28: icon before a context-menu label, between the check gutter and text. */
+.context-menu__icon {
+  display: inline-flex;
+  align-items: center;
+  margin-right: 6px;
+}
+
 /* Submenu flyout (spec 24): same base look as the root menu, positioned by placeSubmenu. */
 .context-menu--submenu {
   min-width: 160px;
@@ -1221,10 +1250,9 @@ body {
   width: 28px;
   height: 28px;
   padding: 0;
+  display: inline-flex;
   align-items: center;
   justify-content: center;
-  font-size: 15px;
-  line-height: 1;
   cursor: pointer;
 }
 

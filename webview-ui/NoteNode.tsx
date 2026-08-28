@@ -12,6 +12,7 @@ import {
   NOTE_MIN_WIDTH,
   type DiagramNote,
 } from '../src/diagram/layoutFile';
+import { SquareText } from './icons';
 
 export interface NoteNodeData extends Record<string, unknown> {
   note: DiagramNote;
@@ -53,7 +54,7 @@ export function NoteNode(props: NodeProps): JSX.Element {
         title={firstLine(note.text)}
         onDoubleClick={() => onToggleCollapsed(note.id)}
       >
-        🗒
+        <SquareText size={16} />
       </button>
     );
   }

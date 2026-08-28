@@ -40,6 +40,7 @@ import { COLUMN_DISPLAY_OPTIONS, type ColumnDisplayMode } from '../src/diagram/c
 import type { DiagramLayoutTable } from '../src/diagram/layoutFile';
 import { mergeFlowNodes, type NodePosition } from '../src/diagram/positions';
 import { FkEdge } from './FkEdge';
+import { StickyNotePlus, Cable, Grid3x3, Network } from './icons';
 import type { RevealTarget } from './hooks/useRevealModel';
 import { shouldRunInitialFit } from './initial-fit';
 import { NoteNode } from './NoteNode';
@@ -465,22 +466,25 @@ export function DiagramCanvas({
             type="button"
             className="panel-button panel-button--secondary"
             onClick={onAddNote}
+            title="Add note"
           >
-            Add note
+            <StickyNotePlus size={16} />
           </button>
           <button
             type="button"
             className="panel-button panel-button--secondary"
             onClick={fkCreateActive ? onCancelFkCreate : onStartFkCreate}
+            title={fkCreateActive ? 'Cancel' : 'Add foreign key'}
           >
-            {fkCreateActive ? 'Cancel' : 'Add foreign key'}
+            <Cable size={16} />
           </button>
           <button
             type="button"
             className="panel-button panel-button--secondary"
             onClick={onOpenFieldsMatrix}
+            title="Edit fields matrix"
           >
-            Edit fields matrix
+            <Grid3x3 size={16} />
           </button>
         </div>
       </Panel>
@@ -490,8 +494,9 @@ export function DiagramCanvas({
             type="button"
             className="panel-button panel-button--secondary"
             onClick={onAutoLayout}
+            title="Auto-layout"
           >
-            Auto-layout
+            <Network size={16} />
           </button>
           <select
             className="canvas-toolbar__select"

@@ -42,6 +42,7 @@ import { useSelection } from './hooks/useSelection';
 import { useSettings } from './hooks/useSettings';
 import { SidebarRail, SidebarResizer } from './SidebarChrome';
 import { SIDEBAR_DEFAULT_WIDTH } from './sidebar-constants';
+import { Settings, SavePlus, Save, SaveCheck, StickyNotePlus, Grid3x3, ChartNoAxesGantt, BetweenHorizontalStart } from './icons';
 
 export function App(): JSX.Element {
   const [graph, setGraph] = useState<DiagramGraph | null>(null);
@@ -315,10 +316,12 @@ export function App(): JSX.Element {
       openMenu(event.clientX, event.clientY, [
         {
           label: 'Add note here',
+          icon: <StickyNotePlus size={16} />,
           onSelect: () => focusNoteText(notes.addNote(flowPoint.x, flowPoint.y)),
         },
         {
           label: 'Edit fields matrix (all models)',
+          icon: <Grid3x3 size={16} />,
           onSelect: () => fieldsMatrix.openGlobal(),
         },
       ]);
@@ -339,16 +342,17 @@ export function App(): JSX.Element {
     (model: string, column?: string): ContextMenuItem[] => {
       const currentMode = columnDisplay.effectiveMode(model);
       return [
-        { label: 'Reveal in model.yml', onSelect: () => onOpenModelSource(model, column) },
+        { label: 'Reveal in model.yml', icon: <ChartNoAxesGantt size={16} />, onSelect: () => onOpenModelSource(model, column) },
         {
           label: 'Show columns',
+          icon: <BetweenHorizontalStart size={16} />,
           items: COLUMN_DISPLAY_OPTIONS.map((option) => ({
             label: option.label,
             checked: currentMode === option.value,
             onSelect: () => columnDisplay.setTableMode(model, option.value),
           })),
         },
-        { label: 'Edit fields matrix', onSelect: () => fieldsMatrix.openForModel(model) },
+        { label: 'Edit fields matrix', icon: <Grid3x3 size={16} />, onSelect: () => fieldsMatrix.openForModel(model) },
       ];
     },
     [columnDisplay, onOpenModelSource, fieldsMatrix],
@@ -507,7 +511,7 @@ export function App(): JSX.Element {
               title="Settings"
               aria-label="Settings"
             >
-              ⚙
+              <Settings size={16} />
             </button>
             <button
               type="button"
@@ -522,7 +526,11 @@ export function App(): JSX.Element {
                     : 'No unsaved changes'
               }
             >
-              {activeLayout === null ? 'Save diagram' : layout.dirty ? 'Save' : 'No changes'}
+              {activeLayout === null
+                ? <><SavePlus size={14} /> Save as new diagram</>
+                : layout.dirty
+                  ? <><Save size={14} /> Save</>
+                  : <><SaveCheck size={14} /> No changes</>}
             </button>
           </header>
 
