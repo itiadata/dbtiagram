@@ -961,6 +961,14 @@ body {
   color: var(--muted);
 }
 
+/* Warning badge next to the PK icon (spec 33): shown when a real primary
+   key's unique-combination test is off. */
+.table-node__pk-warning-icon {
+  flex-shrink: 0;
+  display: inline-flex;
+  color: var(--error);
+}
+
 /* Test icon after the column name (spec 30): muted, same sizing as the PK icon. */
 .table-node__test-icon {
   flex-shrink: 0;

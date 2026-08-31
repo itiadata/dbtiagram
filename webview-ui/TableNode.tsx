@@ -30,7 +30,7 @@ import {
 } from '../src/diagram/flow';
 import { HEADER_HEIGHT, ROW_HEIGHT } from '../src/diagram/layout';
 import { DiagramInteractionContext } from './diagram-interaction-context';
-import { KeyRound, FlaskConical } from './icons';
+import { KeyRound, FlaskConical, TriangleAlert } from './icons';
 
 const EMPTY_COLUMNS: ReadonlySet<string> = new Set();
 const EMPTY_PK_COLUMNS: readonly string[] = [];
@@ -54,6 +54,10 @@ function TableNodeComponent({ id, data }: NodeProps<FlowNode>): JSX.Element {
   // for a virtual one (data.primaryKey is virtual-first, see graph.ts).
   const pkColumns = data.primaryKey?.columns ?? EMPTY_PK_COLUMNS;
   const pkVirtual = data.primaryKey?.virtual ?? false;
+  // Spec 33: a real PK whose unique-combination test is off gets a red
+  // warning badge next to the key icon; virtual PKs never show it (the test
+  // concept doesn't apply there).
+  const pkUniqueTestOff = !pkVirtual && data.primaryKey !== undefined && !data.primaryKey.uniqueTest;
 
   const isSelectedColumn = (column: string): boolean =>
     selectedColumnRef !== null &&
@@ -186,6 +190,14 @@ function TableNodeComponent({ id, data }: NodeProps<FlowNode>): JSX.Element {
                 title={pkVirtual ? 'Virtual primary key' : 'Primary key'}
               >
                 <KeyRound size={10} />
+              </span>
+            )}
+            {isPk && pkUniqueTestOff && (
+              <span
+                className="table-node__pk-warning-icon"
+                title="Unique combination of columns test is off"
+              >
+                <TriangleAlert size={10} />
               </span>
             )}
             {editingCell === 'name' ? (

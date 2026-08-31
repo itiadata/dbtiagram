@@ -40,6 +40,9 @@ YAML already says, keeps dbtiagram honest about the file on disk.
   Primary key section, initialised from the model's current YAML.
 - Writing the test when the box is checked, removing it entirely when unchecked.
 - Surfacing the current state through `TableNode.primaryKey`.
+- A small red warning badge next to the diagram's PK key icon (spec 08) on real
+  primary keys whose unique-combination test is off, so the state is visible on
+  the canvas, not only in the details sidebar.
 
 **Out of scope**
 
@@ -116,6 +119,25 @@ When I look at the Primary key section
 Then the "Unique combination of columns test" checkbox is unchecked and disabled
 ```
 
+### The diagram warns when the test is off
+
+```
+Given model "customers" has a real primary key on "customer_id"
+And its unique-combination test is off
+When I look at the "customers" table card on the canvas
+Then the PK key icon on "customer_id" shows a red warning badge
+  titled "Unique combination of columns test is off"
+```
+
+### The diagram does not warn when the test is on, or for a virtual PK
+
+```
+Given model "orders" has a real primary key with the unique-combination test on
+And model "products" has a virtual primary key
+When I look at both table cards on the canvas
+Then neither PK key icon shows the red warning badge
+```
+
 ## Implementation Plan
 
 ### Files
@@ -129,6 +151,9 @@ Then the "Unique combination of columns test" checkbox is unchecked and disabled
 | `src/diagram/flow.ts` | modify | Use `TablePrimaryKey` in `FlowNodeData` instead of the inline structural type. |
 | `webview-ui/PrimaryKeySection.tsx` | modify | Render the checkbox, post the flag on every `setPrimaryKey`, update the explanatory note. |
 | `webview-ui/FieldsMatrix.tsx` | modify | Leave `uniqueTest` unspecified on its two `setPrimaryKey` posts (documented "preserve" semantics). |
+| `webview-ui/TableNode.tsx` | modify | Render a red warning badge next to the PK key icon when the displayed PK is real and `uniqueTest` is `false`. |
+| `webview-ui/icons.ts` | modify | Re-export the `TriangleAlert` Lucide icon for the warning badge. |
+| `webview-ui/styles.css` | modify | Add `.table-node__pk-warning-icon` (uses the existing `--error` theme variable). |
 | `specs/ARCHITECTURE.md` | modify | Update the key exports of `src/dbt/edit/primaryKey.ts` and `src/diagram/graph.ts`. |
 | `test/unit/dbt/edit/primaryKey.test.ts` | modify | Cases for the flag; existing "creates the test" cases pass `uniqueTest: true`. |
 | `test/unit/diagram/graph.test.ts` | modify | `TableNode.primaryKey.uniqueTest` reflects the model's YAML. |
@@ -265,11 +290,22 @@ export interface FlowNodeData {
     existing test but never introduces one. This is a deliberate change from
     today's always-create behavior and is what makes the checkbox the single place
     the test can be brought into existence.
-11. The explanatory note in `PrimaryKeySection` currently reads "Saving writes the
     unique_combination_of_columns data test, the primary_key constraint, and
     not_null checks to the model file." It becomes: `Writes the primary_key
     constraint and not_null checks to the model file. The unique combination test
     is written only while the box above is checked.`
+12. **Diagram warning badge (`TableNode.tsx`).** Next to the existing
+    `pkColumns`/`pkVirtual` derivation, compute
+    `pkUniqueTestOff = !pkVirtual && data.primaryKey !== undefined && !data.primaryKey.uniqueTest`.
+    On a PK column row (`isPk` true), when `pkUniqueTestOff` is also true, render a
+    second small icon right after the existing `table-node__pk-icon` span: a
+    `TriangleAlert` (size 10) inside a `<span className="table-node__pk-warning-icon"
+    title="Unique combination of columns test is off">`. It never renders for a
+    virtual PK (`pkVirtual` true) or when the model has no PK at all
+    (`data.primaryKey === undefined`) — both already imply `uniqueTest: false` from
+    `buildDiagram`, but the explicit `!pkVirtual` check keeps the virtual case
+    unambiguous in the component itself. `.table-node__pk-warning-icon` uses
+    `color: var(--error)`, mirroring `.table-node__pk-icon`'s use of `--accent`.
 
 ### Tests
 
@@ -290,6 +326,12 @@ export interface FlowNodeData {
 | `test/unit/diagram/graph.test.ts` | `reports uniqueTest false when the test is absent` | model with a `primary_key` constraint only | `node.primaryKey` equals `{ columns: ['id'], virtual: false, uniqueTest: false }` |
 | `test/unit/diagram/graph.test.ts` | `reports uniqueTest false for a virtual PK` | model with a virtual PK meta block and a stray unique-combination test | `node.primaryKey.uniqueTest` is `false` |
 
+`webview-ui/TableNode.tsx`'s warning badge is pure JSX rendering with no
+extractable pure-logic seam and no existing component-test harness (no
+jsdom/RTL in this repo's unit setup) — it is covered by Manual Verify below
+only, matching how the existing `table-node__pk-icon` and
+`table-node__test-icon` (spec 30) are verified.
+
 Existing cases in `test/unit/dbt/edit/primaryKey.test.ts` that assert the
 unique-combination test is *created* for a model that did not have one must add
 `uniqueTest: true` to their edit object; cases where the model already has the
@@ -302,6 +344,10 @@ test need no change.
 - Manual: on `fixtures/sample-dbt/models/orders.yml` (which already has the test)
   confirm the box is checked; uncheck it and confirm only the `data_tests` entry
   disappears from the file; re-check it and confirm a fresh entry is written.
+- Manual: with the test unchecked, confirm the "orders" table card shows a red
+  warning badge next to the `order_id` key icon; re-check the box and confirm
+  the badge disappears. Confirm "products" (virtual PK, spec 08 fixture) never
+  shows the badge.
 
 ### Do not touch
 
@@ -325,4 +371,7 @@ test need no change.
 - [ ] Changing PK columns while it is unchecked never re-creates the test.
 - [ ] The checkbox is unchecked and disabled for a virtual primary key and when
       there are no PK columns.
+- [ ] A real primary key with the test off shows a red warning badge next to
+      its key icon on the diagram canvas; the badge disappears once the test is
+      on, and never appears for a virtual primary key.
 - [ ] `npm run verify` is green.
