@@ -156,4 +156,25 @@ describe('sample fixture (fixtures/sample-dbt)', () => {
       }
     }
   });
+
+  it('carries column test names into the diagram graph (spec 30)', () => {
+    const graph = buildDiagram(loadFixtureModels());
+
+    const customers = graph.nodes.find((n) => n.id === 'customers')!;
+    const email = customers.columns.find((c) => c.name === 'email')!;
+    // email has unique + not_null + accepted_values; PK-owned not_null excluded for customer_id
+    expect(email.tests).toEqual(['unique', 'not_null', 'accepted_values']);
+
+    // customer_id is the real PK; its only test is not_null (PK-owned), so no tests field
+    const customerId = customers.columns.find((c) => c.name === 'customer_id')!;
+    expect(customerId.tests).toBeUndefined();
+
+    const orderItems = graph.nodes.find((n) => n.id === 'order_items')!;
+    const quantity = orderItems.columns.find((c) => c.name === 'quantity')!;
+    expect(quantity.tests).toEqual(['not_null', 'dbt_utils.accepted_range']);
+
+    const products = graph.nodes.find((n) => n.id === 'products')!;
+    const productName = products.columns.find((c) => c.name === 'name')!;
+    expect(productName.tests).toEqual(['not_null', 'unique']);
+  });
 });

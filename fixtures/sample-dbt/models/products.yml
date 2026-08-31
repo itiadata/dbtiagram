@@ -17,6 +17,9 @@ models:
         data_type: integer
       - name: name
         data_type: string
+        data_tests:
+          - not_null
+          - unique
       - name: new
         data_type: number
         description: jeje

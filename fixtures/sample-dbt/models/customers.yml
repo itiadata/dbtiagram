@@ -2,13 +2,28 @@ version: 2
 models:
   - name: customers
     description: One row per customer
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments:
+            combination_of_columns:
+              - customer_id
+    constraints:
+      - type: primary_key
+        columns:
+          - customer_id
     columns:
       - name: customer_id
         data_type: integer
         description: Primary key
-        tests:
+        data_tests:
           - not_null
-          - unique
       - name: email
         data_type: string
         description: Customer email address
+        data_tests:
+          - unique
+          - not_null
+          - accepted_values:
+              values:
+                - '@company.com'
+                - '@partner.com'
