@@ -5,6 +5,7 @@
 import * as vscode from 'vscode';
 import { parseModelYml, ModelYmlParseError } from '../dbt/parse';
 import { serializeModelYml } from '../dbt/serialize';
+import { mergeModelYml } from '../dbt/merge';
 import { isLayoutFilePath } from '../diagram/layoutFile';
 import type { ModelYmlFile } from '../dbt/types';
 import type { DeclarationPosition } from '../dbt/locate';
@@ -62,9 +63,22 @@ export async function loadModelYmlFiles(glob = '**/models/**/*.yml'): Promise<Mo
   return { records, failures };
 }
 
-/** Writes a model.yml file back to disk. */
+/** Writes a model.yml file back to disk.
+ *
+ * The current on-disk text is read fresh (not taken from the in-memory store)
+ * and patched surgically, so unknown keys, key order and comments survive
+ * (spec 29). If the file cannot be read, the full serializer is used instead
+ * so the edit is never dropped.
+ */
 export async function writeModelYmlFile(uri: vscode.Uri, file: ModelYmlFile): Promise<void> {
-  await vscode.workspace.fs.writeFile(uri, Buffer.from(serializeModelYml(file), 'utf8'));
+  let text: string | undefined;
+  try {
+    text = await readFileText(uri);
+  } catch {
+    text = undefined;
+  }
+  const content = text === undefined ? serializeModelYml(file) : mergeModelYml(text, file);
+  await vscode.workspace.fs.writeFile(uri, Buffer.from(content, 'utf8'));
 }
 
 /**

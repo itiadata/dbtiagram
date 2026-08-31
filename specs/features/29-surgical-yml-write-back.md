@@ -1,7 +1,7 @@
----
+﻿---
 id: 29
 title: Surgical model.yml write-back that only touches edited keys
-status: approved
+status: implemented
 priority: high
 created: 2026-08-31
 owner: unassigned
@@ -15,7 +15,7 @@ depends_on: [06, 08]
 As a dbt developer who hand-maintains `model.yml` files, I want the diagram
 editor to write back **only the properties I actually changed in the diagram**,
 so that my custom keys, my key order, and my comments survive untouched. The
-editor is not expected to understand every dbt property — it must therefore
+editor is not expected to understand every dbt property â€” it must therefore
 behave like a surgeon, not like a formatter.
 
 ## Background
@@ -27,7 +27,7 @@ whole file from a hardcoded key order. Three concrete defects follow:
 1. **Column-level unknown keys are destroyed.** `ModelColumn` models only
    `name`, `data_type`, `description`, `tests`, `data_tests`, `meta`. A column
    carrying `custom_tag: a value` loses it the first time any edit touches the
-   file — exactly the reported symptom.
+   file â€” exactly the reported symptom.
 2. **Model-level keys get reordered.** `ModelDefinition.extra` preserves unknown
    model keys, but `toDbtModel` hoists them all to the front and pins modeled
    keys to a fixed order, so editing a description reshuffles the mapping.
@@ -61,7 +61,7 @@ YAML document, changing only the nodes that actually differ.
 
 - Changing `parseModelYml`, the domain types, or any `applyEdit` handler.
   Parsing stays exactly as it is; loss-tolerance moves to the write side.
-- Adding a `column.extra` bucket — unnecessary, since the merge never deletes
+- Adding a `column.extra` bucket â€” unnecessary, since the merge never deletes
   unknown keys.
 - Preserving comments attached to array items that the editor *reorders*
   (see Behavior notes).
@@ -156,7 +156,7 @@ And no edit is silently dropped
 ### Signatures
 
 ```ts
-// src/dbt/merge/index.ts  (pure — must not import `vscode`)
+// src/dbt/merge/index.ts  (pure â€” must not import `vscode`)
 export function mergeModelYml(originalText: string, file: ModelYmlFile): string;
 
 // src/dbt/merge/shape.ts  (pure)
@@ -200,7 +200,7 @@ export async function writeModelYmlFile(uri: vscode.Uri, file: ModelYmlFile): Pr
 
 **Document handling.** `mergeModelYml` uses `parseDocument` from `yaml`. If the
 document has parse errors, or its `contents` is not a map, it returns
-`serializeModelYml(file)` unchanged — this is the fallback scenario. Output is
+`serializeModelYml(file)` unchanged â€” this is the fallback scenario. Output is
 `String(doc)`. If `originalText` contains `\r\n`, every `\n` in the output is
 converted back to `\r\n`; otherwise output uses `\n`.
 
@@ -216,7 +216,7 @@ converted back to `\r\n`; otherwise output uses `\n`.
 
 **Deletion allowlists.**
 
-- root mapping: `deletable` is the empty set — nothing at the root is removed.
+- root mapping: `deletable` is the empty set â€” nothing at the root is removed.
 - model mapping: `{ description, data_tests, constraints, config, columns, meta }`.
 - column mapping: `{ data_type, description, tests, data_tests, meta }`.
 - every deeper level (inside `config`, `meta`, a constraint entry, a data test
@@ -225,19 +225,19 @@ converted back to `\r\n`; otherwise output uses `\n`.
 
 **Ordering.** `insertionIndex` places `key` as follows:
 
-- if `key` is in `order.last` → at the end of the mapping;
-- else if `key` is in `order.preferred` → immediately after the last existing
+- if `key` is in `order.last` â†’ at the end of the mapping;
+- else if `key` is in `order.preferred` â†’ immediately after the last existing
   key that precedes it in `preferred`; if there is none, immediately before the
   first existing key that follows it in `preferred`; if there is none either,
   before the first existing key from `order.last`, else at the end;
-- else (unknown key) → before the first existing key from `order.last`, else at
+- else (unknown key) â†’ before the first existing key from `order.last`, else at
   the end.
 
 Concrete orders:
 
 - `MODEL_KEY_ORDER = { preferred: ['name', 'description', 'data_tests', 'constraints'], last: ['columns'] }`
 - `COLUMN_KEY_ORDER = { preferred: ['name', 'data_type', 'description', 'config'], last: [] }`
-- `FREE_KEY_ORDER = { preferred: [], last: [] }` — used everywhere else; new
+- `FREE_KEY_ORDER = { preferred: [], last: [] }` â€” used everywhere else; new
   keys are appended.
 
 Existing keys are **never** reordered, under any circumstance.
@@ -287,30 +287,30 @@ plain objects key-by-key ignoring key order, and arrays index-by-index.
 
 ### Verification
 
-- `npm run verify` — typecheck + unit suites, must be green.
-- `npm test` — before the commit, must be green.
+- `npm run verify` â€” typecheck + unit suites, must be green.
+- `npm test` â€” before the commit, must be green.
 
 ### Do not touch
 
-- `src/dbt/parse.ts`, `src/dbt/types.ts` — parsing and the domain model stay as
+- `src/dbt/parse.ts`, `src/dbt/types.ts` â€” parsing and the domain model stay as
   they are; this feature is write-side only.
-- Every file under `src/dbt/edit/` and `src/dbt/virtual.ts` — the desired state
+- Every file under `src/dbt/edit/` and `src/dbt/virtual.ts` â€” the desired state
   they produce is already correct.
-- `serializeModelYml`'s output — it remains the fallback path and is asserted by
+- `serializeModelYml`'s output â€” it remains the fallback path and is asserted by
   existing tests.
-- `src/webview/panel.ts`, `src/dbt/modelStore.ts` — the write path change is
+- `src/webview/panel.ts`, `src/dbt/modelStore.ts` â€” the write path change is
   confined to `writeModelYmlFile`.
 
 ## Acceptance Criteria
 
-- [ ] Editing a column description leaves every other key of that column, and
+- [x] Editing a column description leaves every other key of that column, and
       its key order, byte-identical.
-- [ ] Editing a model description leaves the model's key order unchanged and
+- [x] Editing a model description leaves the model's key order unchanged and
       every unmanaged key byte-identical.
-- [ ] Comments and blank lines in untouched regions survive a write.
-- [ ] A merge whose desired state equals the parsed file returns the input text
+- [x] Comments and blank lines in untouched regions survive a write.
+- [x] A merge whose desired state equals the parsed file returns the input text
       unchanged.
-- [ ] Newly created keys follow the model/column standard orders.
-- [ ] Only allowlisted managed keys can be deleted.
-- [ ] Unreadable/unparseable files still get written via `serializeModelYml`.
-- [ ] `npm run verify` is green.
+- [x] Newly created keys follow the model/column standard orders.
+- [x] Only allowlisted managed keys can be deleted.
+- [x] Unreadable/unparseable files still get written via `serializeModelYml`.
+- [x] `npm run verify` is green.

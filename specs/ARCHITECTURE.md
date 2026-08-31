@@ -24,7 +24,11 @@ lines** under `test/unit/` (see `specs/features/17-modular-source-layout.md`).
 |------|-------|----------------|-------------|
 | `src/dbt/types.ts` | pure | The dbt model.yml data model shared across parsing, editing and diagramming. | `ModelYmlFile`, `ModelDefinition`, `ModelColumn`, `ModelConfig`, `ModelConstraint`, `DataTestEntry`, `ForeignKeyDescriptor`, `VirtualPrimaryKey`, `VirtualForeignKey`, `VirtualConstraintsBlock` |
 | `src/dbt/parse.ts` | pure | Parse model.yml text into `ModelYmlFile`, raising a typed error on malformed YAML. | `parseModelYml`, `ModelYmlParseError` |
-| `src/dbt/serialize.ts` | pure | Serialize a `ModelYmlFile` back to YAML text for write-back. | `serializeModelYml` |
+| `src/dbt/serialize.ts` | pure | Regenerate a whole `ModelYmlFile` as YAML text. **Fallback** write path only (spec 29); it drops comments and on-disk key order. | `serializeModelYml` |
+| `src/dbt/merge/index.ts` | pure | Surgical write-back (spec 29): patch the existing YAML text with the desired state so unknown keys, key order and comments survive; falls back to `serializeModelYml`. Owns the per-level merge policies. | `mergeModelYml` |
+| `src/dbt/merge/shape.ts` | pure | The single camelCase -> snake_case dbt representation shared by the serializer and the merge. | `toDbtShape`, `toDbtModel`, `toDbtColumn`, `toDbtConstraint` |
+| `src/dbt/merge/reconcile.ts` | pure | Recursive YAML node reconciler: merges maps by key, sequences positionally, mutates scalars in place, applies the deletion allowlist. | `reconcileNode`, `MergePolicy`, `deepEqual`, `isPlainObject` |
+| `src/dbt/merge/order.ts` | pure | Key-insertion ordering used only when a key must be created; existing keys are never reordered. | `insertionIndex`, `KeyOrder`, `MODEL_KEY_ORDER`, `COLUMN_KEY_ORDER`, `FREE_KEY_ORDER` |
 | `src/dbt/locate.ts` | pure | Locate a model's `name:` declaration, or a specific column's `name:` entry within it, in model.yml text via the yaml package's node ranges (spec 15, extended by spec 25). | `findModelDeclaration`, `findColumnDeclaration`, `DeclarationPosition` |
 | `src/dbt/refs.ts` | pure | Parse and rewrite `ref('…')` targets inside model properties. | `parseRef`, `renameRefTarget`, `RefTarget` |
 | `src/dbt/virtual.ts` | pure | Read/write the dbtiagram-managed virtual constraints block (PKs/FKs not expressed as dbt constraints). | `readVirtualConstraints`, `writeVirtualConstraints` |
@@ -81,7 +85,7 @@ show/hide, reorder, and merging with stored preferences. Used by both the webvie
 
 | Path | Layer | Responsibility | Key exports |
 |------|-------|----------------|-------------|
-| `src/vscode/project.ts` | vscode-facing | Discover, read and write model.yml files in the workspace, and reveal a declaration in an editor. | `loadModelYmlFiles`, `readFileText`, `writeModelYmlFile`, `revealInEditor`, `ModelYmlRecord`, `ModelYmlFailure`, `ModelYmlLoadResult` |
+| `src/vscode/project.ts` | vscode-facing | Discover, read and write model.yml files in the workspace, and reveal a declaration in an editor. `writeModelYmlFile` re-reads the on-disk text and patches it via `mergeModelYml` (spec 29). | `loadModelYmlFiles`, `readFileText`, `writeModelYmlFile`, `revealInEditor`, `ModelYmlRecord`, `ModelYmlFailure`, `ModelYmlLoadResult` |
 | `src/vscode/modelWatcher.ts` | vscode-facing | File-system watcher that pushes create/change/delete events to the panel. | `registerModelWatcher`, `ModelWatcherCallbacks` |
 | `src/vscode/editorButton.ts` | pure | Decision logic for whether the editor-title button shows for a document. | `shouldShowButton`, `isDiagramLayoutFile`, `modelFileContextKey`, `layoutFileContextKey` |
 | `src/vscode/editorButtonContext.ts` | vscode-facing | Registers the editor-title button and keeps its `when`-clause context keys in sync. | `registerEditorTitleButton` |
