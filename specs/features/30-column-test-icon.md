@@ -1,7 +1,7 @@
 ---
 id: 30
 title: Show a test-tube icon on columns that have a data test
-status: approved
+status: implemented
 priority: medium
 created: 2026-08-31
 owner: unassigned
