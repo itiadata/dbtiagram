@@ -41,6 +41,10 @@ up-to-date spec in `specs/features/`.
 | 21  | Fix details pane auto-reveal and the lost first click after opening a diagram | Done |
 | 27  | Column fields matrix (spreadsheet-style batch editor) | Done |
 | 28  | Lucide icons for UI buttons | Approved |
+| 30  | Show a test-tube icon on columns that have a data test | Draft |
+| 31  | Group tables inside a named box on the diagram | Draft |
+| 32  | Fit the view after auto-layout | Approved |
+| 33  | Opt in or out of the model-level unique-combination test for a primary key | Draft |
 
 Status values: `draft` → `approved` → `implemented` → `done`.
 
