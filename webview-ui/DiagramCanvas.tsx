@@ -42,7 +42,7 @@ import { mergeFlowNodes, type NodePosition } from '../src/diagram/positions';
 import { FkEdge } from './FkEdge';
 import { StickyNotePlus, Cable, Grid3x3, Network } from './icons';
 import type { RevealTarget } from './hooks/useRevealModel';
-import { shouldRunInitialFit } from './initial-fit';
+import { shouldRunInitialFit, shouldRunPendingFit } from './initial-fit';
 import { NoteNode } from './NoteNode';
 import { TableNode } from './TableNode';
 
@@ -141,6 +141,7 @@ export function DiagramCanvas({
   // capture phase so it is recorded before React Flow's drag handling and
   // before any child's `stopPropagation`. Read only by the corrective fit.
   const userInteractedRef = useRef(false);
+  const pendingFitRef = useRef(false);
   const nodesInitialized = useNodesInitialized();
 
   // Adopt each new diagram without disturbing the layout: existing nodes keep
@@ -181,9 +182,19 @@ export function DiagramCanvas({
     const added = ids.length > lastIdsRef.current.length;
     lastIdsRef.current = ids;
     if (added || reset || filterChanged || seeded) {
-      void fitView({ padding: 0.15, maxZoom: 1 });
+      pendingFitRef.current = true;
     }
   }, [flow, layoutTick, filterTick, seedTick, seedPositions, fitView]);
+
+  // Spec 32: deferred fit — the adopt effect sets `pendingFitRef` instead of
+  // calling `fitView` inline, so the new node positions are committed before
+  // React Flow measures them. Keying on `rfNodes` ensures this effect runs
+  // after the updated node list has reached the store.
+  useEffect(() => {
+    if (!shouldRunPendingFit(nodesInitialized, pendingFitRef.current)) return;
+    pendingFitRef.current = false;
+    void fitView({ padding: 0.15, maxZoom: 1 });
+  }, [rfNodes, nodesInitialized, fitView]);
 
   // Spec 19: the pre-measurement `fitView` prop/`fitViewOptions` run before
   // React Flow has measured the table cards, so the initial fit is against

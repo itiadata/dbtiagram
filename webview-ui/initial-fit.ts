@@ -1,12 +1,12 @@
 /**
- * Pure policy for the one-off post-measurement viewport fit (spec 21).
+ * Pure policy for viewport-fit timing (spec 21 corrective fit + spec 32
+ * deferred pending fit).
  *
  * `DiagramCanvas` fits the view once React Flow has actually measured the table
- * cards. That corrective fit used to run in a passive effect — i.e. after the
- * browser had already painted the un-fitted layout — so it could land between a
- * user's pointerdown and pointerup, slide the card out from under the cursor and
- * swallow the click. It now runs pre-paint and is abandoned entirely as soon as
- * the user touches the canvas.
+ * cards. The corrective fit (spec 21) runs pre-paint and is abandoned if the
+ * user has touched the canvas. The deferred pending fit (spec 32) runs after
+ * the new node positions are committed, so `fitView` measures the arrangement
+ * the user just asked for.
  */
 
 /**
@@ -20,4 +20,15 @@ export function shouldRunInitialFit(
   userInteracted: boolean,
 ): boolean {
   return nodesInitialized && !alreadyFitted && !userInteracted;
+}
+
+/**
+ * Whether an owed viewport fit (spec 32) should run now: a fit was requested by
+ * the adopt effect and React Flow has measured the nodes. Unlike
+ * `shouldRunInitialFit`, this ignores whether the user has touched the canvas —
+ * the fit is the direct result of an action the user just took (Auto-layout,
+ * a filter toggle, opening a layout, a new table appearing).
+ */
+export function shouldRunPendingFit(nodesInitialized: boolean, fitPending: boolean): boolean {
+  return nodesInitialized && fitPending;
 }
