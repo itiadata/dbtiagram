@@ -7,9 +7,10 @@ models:
         data_type: integer
       - name: order_id
         data_type: integer
+        description: hola
       - name: customer_id
         data_type: integer
-        description: Denormalized FK column to exercise a composite foreign key
+        description: hola
       - name: product_id
         data_type: integer
       - name: quantity
@@ -21,5 +22,5 @@ models:
         to_columns: [order_id, customer_id]
       - type: foreign_key
         columns: [product_id]
-        to: ref('products')
+        to: ref('productos')
         to_columns: [product_id]

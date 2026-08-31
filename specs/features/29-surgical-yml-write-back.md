@@ -1,7 +1,7 @@
 ﻿---
 id: 29
 title: Surgical model.yml write-back that only touches edited keys
-status: implemented
+status: done
 priority: high
 created: 2026-08-31
 owner: unassigned

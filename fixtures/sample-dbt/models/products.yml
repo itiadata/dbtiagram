@@ -1,20 +1,23 @@
 version: 2
 models:
-  - name: products
+  - name: productos
     description: One row per product
     config:
       meta:
         dbtiagram:
           virtual:
-            primary_key:
-              columns: [product_id]
             foreign_keys:
               - to: ref('customers')
                 columns: [product_id]
                 to_columns: [customer_id]
+            primary_key:
+              columns:
+                - product_id
     columns:
       - name: product_id
         data_type: integer
+        meta: asdf
+        description: holafff
       - name: name
         data_type: string
       - name: new
