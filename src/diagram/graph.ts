@@ -2,6 +2,7 @@
  * Pure graph logic: derives diagram nodes/edges from dbt model definitions.
  * MUST NOT import `vscode`.
  */
+import { hasUniqueCombinationTest } from '../dbt/edit/primaryKey';
 import { parseRef } from '../dbt/refs';
 import { columnTestNames } from '../dbt/tests';
 import { readVirtualConstraints } from '../dbt/virtual';
@@ -16,13 +17,24 @@ export interface TableNodeColumn {
   tests?: string[];
 }
 
+/** The displayed primary key of a table node. */
+export interface TablePrimaryKey {
+  columns: string[];
+  virtual: boolean;
+  /**
+   * Whether the model declares the `dbt_utils.unique_combination_of_columns`
+   * data test (spec 33). Always `false` for a virtual primary key.
+   */
+  uniqueTest: boolean;
+}
+
 export interface TableNode {
   id: string;
   label: string;
   description?: string;
   columns: TableNodeColumn[];
   /** The displayed primary key: virtual-first (spec 08, Confirm at Approval (c)). */
-  primaryKey?: { columns: string[]; virtual: boolean };
+  primaryKey?: TablePrimaryKey;
   /** Every declared FK — real constraints first, then virtual meta entries. */
   foreignKeys: ForeignKeyDescriptor[];
   /**
@@ -66,11 +78,15 @@ export function buildDiagram(models: ModelDefinition[]): DiagramGraph {
     if (virtual.primaryKey !== undefined) {
       // The dbtiagram-namespaced block records what was last done in the
       // diagram — it wins over a coexisting real constraint for display.
-      primaryKey = { columns: virtual.primaryKey.columns, virtual: true };
+      primaryKey = { columns: virtual.primaryKey.columns, virtual: true, uniqueTest: false };
     } else {
       const constraint = (m.constraints ?? []).find((c) => c.type === 'primary_key');
       if (constraint !== undefined) {
-        primaryKey = { columns: constraint.columns ?? [], virtual: false };
+        primaryKey = {
+          columns: constraint.columns ?? [],
+          virtual: false,
+          uniqueTest: hasUniqueCombinationTest(m),
+        };
       }
     }
 

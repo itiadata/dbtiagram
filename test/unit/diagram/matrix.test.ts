@@ -36,7 +36,7 @@ describe('buildMatrixRows', () => {
     const nodeA = node({
       id: 'a',
       columns: [{ name: 'id' }, { name: 'name' }],
-      primaryKey: { columns: ['id'], virtual: true },
+      primaryKey: { columns: ['id'], virtual: true, uniqueTest: false },
     });
     const rows = buildMatrixRows([nodeA], []);
     const idRow = rows.find((r) => r.column === 'id');

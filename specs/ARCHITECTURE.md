@@ -39,7 +39,7 @@ lines** under `test/unit/` (see `specs/features/17-modular-source-layout.md`).
 | `src/dbt/edit/internal.ts` | pure | Shared helpers and the result/error shape used by the edit handlers. | `applyEdit` result types `ApplyEditResult`, `EditError`, `mapModel`, `mapNames`, `blankToUndefined`, `arraysEqual`, `isRecord` |
 | `src/dbt/edit/model.ts` | pure | Model-level edits: rename, description. | `renameModel`, `applyDescription` |
 | `src/dbt/edit/column.ts` | pure | Column-level edits: rename, data type, description. | `renameColumn`, `setColumnDataType`, `setColumnDescription`, `mapColumn` |
-| `src/dbt/edit/primaryKey.ts` | pure | Primary key edits, including de-duplication of column names. | `setPrimaryKeyOnModel`, `dedupeTrimmed` |
+| `src/dbt/edit/primaryKey.ts` | pure | Primary key edits, including de-duplication of column names, and the opt-in model-level unique-combination test (spec 33). | `setPrimaryKeyOnModel`, `dedupeTrimmed`, `hasUniqueCombinationTest` |
 | `src/dbt/edit/foreignKey.ts` | pure | Foreign key creation, retargeting, column pairing, virtual-flag and removal. | 
 `createForeignKey`, `applyForeignKeyTarget`, `applyForeignKeyColumns`, `setFkVirtualOnModel`, `removeFkFromModel` |
 | `src/dbt/edit/column.ts` | pure | Column-level edits: rename (with FK re-pointing), data type, description, and 
@@ -50,7 +50,7 @@ one `config.meta` key at a time (spec 27). | `mapColumn`, `setColumnDataType`, `
 
 | Path | Layer | Responsibility | Key exports |
 |------|-------|----------------|-------------|
-| `src/diagram/graph.ts` | pure | Turn model definitions into an abstract diagram graph of table nodes and relation edges. | `buildDiagram`, `DiagramGraph`, `TableNode`, `TableNodeColumn`, `RelationEdge` |
+| `src/diagram/graph.ts` | pure | Turn model definitions into an abstract diagram graph of table nodes and relation edges. | `buildDiagram`, `DiagramGraph`, `TableNode`, `TableNodeColumn`, `TablePrimaryKey`, `RelationEdge` |
 | `src/diagram/layout.ts` | pure | Automatic node placement and the node geometry constants the webview mirrors; accepts an optional per-node displayed-column-count override so cards size by what they actually show (spec 24). | `layoutDiagram`, `DiagramLayout`, `NodePlacement`, `nodeHeight`, `columnRowCenterY`, `NODE_WIDTH`, `HEADER_HEIGHT`, `ROW_HEIGHT` |
 | `src/diagram/positions.ts` | pure | Position bookkeeping: overlap avoidance and merging user-moved positions into freshly built nodes. | `avoidOverlap`, `mergeFlowNodes`, `rectsOverlap`, `NodePosition`, `NodeRect`, `OVERLAP_PADDING`, `OVERLAP_STEP_Y` |
 | `src/diagram/routing.ts` | pure | Obstacle-aware orthogonal edge routing with free side choice; `chooseSide` also picks the FK-draw preview line's anchor side (spec 26). | `routeEdge`, `Route`, `RouteRequest`, `RouteEndpoint`, `RouteSide`, `Point`, `STUB_PX`, `ROUTE_MARGIN`, `OBSTACLE_PENALTY`, `BEND_PENALTY`, `ROUTING_NODE_LIMIT`, `chooseSide` |

@@ -18,7 +18,7 @@
 import type { Edge, Node } from '@xyflow/react';
 import { displayedColumns } from './columnDisplay';
 import type { ColumnDisplayMode } from './columnDisplay';
-import type { DiagramGraph, TableNodeColumn } from './graph';
+import type { DiagramGraph, TableNodeColumn, TablePrimaryKey } from './graph';
 import { HEADER_HEIGHT, columnRowCenterY } from './layout';
 import type { DiagramLayout, NodePlacement } from './layout';
 import { ROUTING_NODE_LIMIT, routeEdge, type Point } from './routing';
@@ -34,7 +34,7 @@ export type FlowNodeData = {
   /** Column names on this model that should render highlighted. */
   highlightedColumns?: string[];
   /** The displayed primary key (copied from the graph node) — key icons (spec 08). */
-  primaryKey?: { columns: string[]; virtual: boolean };
+  primaryKey?: TablePrimaryKey;
   /**
    * Handle placements for the handles this node actually uses: keyed by the
    * full handle id (e.g. `customer_id:source:right`), value the side. Only

@@ -146,7 +146,11 @@ describe('buildDiagram', () => {
           constraints: [{ type: 'primary_key', columns: ['order_id'] }],
         },
       ]);
-      expect(graph.nodes[0].primaryKey).toEqual({ columns: ['order_id'], virtual: false });
+      expect(graph.nodes[0].primaryKey).toEqual({
+        columns: ['order_id'],
+        virtual: false,
+        uniqueTest: false,
+      });
     });
 
     it('reads a virtual PK from the meta block (no real constraint)', () => {
@@ -159,7 +163,11 @@ describe('buildDiagram', () => {
           },
         },
       ]);
-      expect(graph.nodes[0].primaryKey).toEqual({ columns: ['product_id'], virtual: true });
+      expect(graph.nodes[0].primaryKey).toEqual({
+        columns: ['product_id'],
+        virtual: true,
+        uniqueTest: false,
+      });
     });
 
     it('prefers the virtual (diagram-written) PK when both exist (c)', () => {
@@ -173,7 +181,60 @@ describe('buildDiagram', () => {
           },
         },
       ]);
-      expect(graph.nodes[0].primaryKey).toEqual({ columns: ['product_id'], virtual: true });
+      expect(graph.nodes[0].primaryKey).toEqual({
+        columns: ['product_id'],
+        virtual: true,
+        uniqueTest: false,
+      });
+    });
+
+    it('reports uniqueTest true when the test exists', () => {
+      const graph = buildDiagram([
+        {
+          name: 'orders',
+          columns: [{ name: 'id' }],
+          constraints: [{ type: 'primary_key', columns: ['id'] }],
+          dataTests: [
+            {
+              'dbt_utils.unique_combination_of_columns': {
+                arguments: { combination_of_columns: ['id'] },
+              },
+            },
+          ],
+        },
+      ]);
+      expect(graph.nodes[0].primaryKey).toEqual({ columns: ['id'], virtual: false, uniqueTest: true });
+    });
+
+    it('reports uniqueTest false when the test is absent', () => {
+      const graph = buildDiagram([
+        {
+          name: 'orders',
+          columns: [{ name: 'id' }],
+          constraints: [{ type: 'primary_key', columns: ['id'] }],
+        },
+      ]);
+      expect(graph.nodes[0].primaryKey).toEqual({ columns: ['id'], virtual: false, uniqueTest: false });
+    });
+
+    it('reports uniqueTest false for a virtual PK', () => {
+      const graph = buildDiagram([
+        {
+          name: 'products',
+          columns: [{ name: 'id' }],
+          config: {
+            meta: { dbtiagram: { virtual: { primary_key: { columns: ['id'] } } } },
+          },
+          dataTests: [
+            {
+              'dbt_utils.unique_combination_of_columns': {
+                arguments: { combination_of_columns: ['id'] },
+              },
+            },
+          ],
+        },
+      ]);
+      expect(graph.nodes[0].primaryKey?.uniqueTest).toBe(false);
     });
   });
 

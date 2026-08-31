@@ -3,9 +3,13 @@
  *
  * The PK columns render as removable chips with a searchable add picker over
  * the model's non-PK columns; the **Virtual** checkbox switches between the
- * meta-stored (virtual) form and the three real dbt constructs. Every change
- * posts a single `setPrimaryKey` with the resulting full column list and the
- * current virtual flag.
+ * meta-stored (virtual) form and the three real dbt constructs. A second
+ * checkbox controls whether the model-level
+ * `dbt_utils.unique_combination_of_columns` data test is written alongside
+ * the `primary_key` constraint and `not_null` checks (spec 33); it is
+ * disabled while Virtual is checked or there are no PK columns. Every change
+ * posts a single `setPrimaryKey` with the resulting full column list, the
+ * current virtual flag, and the current unique-test flag.
  */
 import type { ModelEdit } from '../src/dbt/edit';
 import type { TableNode } from '../src/diagram/graph';
@@ -20,11 +24,12 @@ export function PrimaryKeySection({ node, onEdit }: PrimaryKeySectionProps): JSX
   const pk = node.primaryKey;
   const virtual = pk?.virtual ?? false;
   const columns = pk?.columns ?? [];
+  const uniqueTest = pk?.uniqueTest ?? false;
   const pkSet = new Set(columns);
   const nonPkColumns = node.columns.map((c) => c.name).filter((name) => !pkSet.has(name));
 
   const setColumns = (nextColumns: string[]): void => {
-    onEdit({ kind: 'setPrimaryKey', model: node.id, columns: nextColumns, virtual });
+    onEdit({ kind: 'setPrimaryKey', model: node.id, columns: nextColumns, virtual, uniqueTest });
   };
 
   const addColumn = (name: string): void => setColumns([...columns, name]);
@@ -32,7 +37,11 @@ export function PrimaryKeySection({ node, onEdit }: PrimaryKeySectionProps): JSX
   const removeColumn = (name: string): void => setColumns(columns.filter((c) => c !== name));
 
   const toggleVirtual = (): void => {
-    onEdit({ kind: 'setPrimaryKey', model: node.id, columns, virtual: !virtual });
+    onEdit({ kind: 'setPrimaryKey', model: node.id, columns, virtual: !virtual, uniqueTest });
+  };
+
+  const toggleUniqueTest = (): void => {
+    onEdit({ kind: 'setPrimaryKey', model: node.id, columns, virtual, uniqueTest: !uniqueTest });
   };
 
   return (
@@ -42,10 +51,19 @@ export function PrimaryKeySection({ node, onEdit }: PrimaryKeySectionProps): JSX
         <input type="checkbox" checked={virtual} onChange={toggleVirtual} />
         Virtual
       </label>
+      <label className="details__checkbox-row">
+        <input
+          type="checkbox"
+          checked={!virtual && uniqueTest}
+          disabled={virtual || columns.length === 0}
+          onChange={toggleUniqueTest}
+        />
+        Unique combination of columns test
+      </label>
       {!virtual && columns.length > 0 && (
         <p className="details__note">
-          Saving writes the unique_combination_of_columns data test, the primary_key
-          constraint, and not_null checks to the model file.
+          Writes the primary_key constraint and not_null checks to the model file. The
+          unique combination test is written only while the box above is checked.
         </p>
       )}
       {columns.length === 0 ? (

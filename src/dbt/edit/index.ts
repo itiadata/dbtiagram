@@ -63,7 +63,9 @@ export function applyEdit(models: ModelDefinition[], edit: ModelEdit): ApplyEdit
       );
     case 'setPrimaryKey': {
       const columns = dedupeTrimmed(edit.columns);
-      return mapModel(models, edit.model, (m) => setPrimaryKeyOnModel(m, columns, edit.virtual));
+        return mapModel(models, edit.model, (m) =>
+          setPrimaryKeyOnModel(m, columns, edit.virtual, edit.uniqueTest),
+        );
     }
     case 'setForeignKeyTarget':
       return applyForeignKeyTarget(models, edit.model, edit.fk, edit.target);

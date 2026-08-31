@@ -77,7 +77,11 @@ describe('sample fixture (fixtures/sample-dbt)', () => {
   it('reads the virtual PK and virtual FK off the products node (spec 08)', () => {
     const graph = buildDiagram(loadFixtureModels());
     const products = graph.nodes.find((node) => node.id === 'products');
-    expect(products?.primaryKey).toEqual({ columns: ['product_id'], virtual: true });
+    expect(products?.primaryKey).toEqual({
+      columns: ['product_id'],
+      virtual: true,
+      uniqueTest: false,
+    });
     expect(products?.foreignKeys).toEqual([
       {
         target: 'customers',
@@ -89,7 +93,11 @@ describe('sample fixture (fixtures/sample-dbt)', () => {
     ]);
     // orders keeps its real PK from the fixtures.
     const orders = graph.nodes.find((node) => node.id === 'orders');
-    expect(orders?.primaryKey).toEqual({ columns: ['order_id'], virtual: false });
+    expect(orders?.primaryKey).toEqual({
+      columns: ['order_id'],
+      virtual: false,
+      uniqueTest: true,
+    });
   });
 
   it('labels the two same-named model.yml files with their folder (spec 05)', () => {

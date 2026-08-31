@@ -16,7 +16,18 @@ export type ModelEdit =
   | { kind: 'setColumnDataType'; model: string; column: string; dataType: string }
   | { kind: 'setColumnDescription'; model: string; column: string; description: string }
   | { kind: 'setColumnMeta'; model: string; column: string; key: string; value: string }
-  | { kind: 'setPrimaryKey'; model: string; columns: string[]; virtual: boolean }
+  | {
+      kind: 'setPrimaryKey';
+      model: string;
+      columns: string[];
+      virtual: boolean;
+      /**
+       * Whether the model-level `dbt_utils.unique_combination_of_columns` test
+       * should exist after this edit (spec 33). Omitted means "leave its
+       * presence as it is": update an existing entry, never create one.
+       */
+      uniqueTest?: boolean;
+    }
   | { kind: 'setForeignKeyTarget'; model: string; fk: ForeignKeyDescriptor; target: string }
   | {
       kind: 'setForeignKeyColumns';

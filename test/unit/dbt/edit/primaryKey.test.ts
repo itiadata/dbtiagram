@@ -17,6 +17,7 @@ describe('applyEdit', () => {
         model: 'products',
         columns: ['product_id'],
         virtual: false,
+        uniqueTest: true,
       });
       const product = next[0];
       expect(product.dataTests).toEqual([
@@ -324,6 +325,7 @@ describe('applyEdit', () => {
         model: 'products',
         columns: ['product_id'],
         virtual: false,
+        uniqueTest: true,
       });
       const product = next[0];
       expect(product.config).toBeUndefined();
@@ -393,6 +395,7 @@ describe('applyEdit', () => {
         model: 'products',
         columns: ['product_id'],
         virtual: false,
+        uniqueTest: true,
       });
       const product = next[0];
       expect(product.config).toBeUndefined();
@@ -407,4 +410,282 @@ describe('applyEdit', () => {
     });
   });
 
+  describe('setPrimaryKey uniqueTest flag (spec 33)', () => {
+    it('creates the test when uniqueTest is true', () => {
+      const models: ModelDefinition[] = [
+        {
+          name: 'products',
+          columns: [{ name: 'id' }],
+          constraints: [{ type: 'primary_key', columns: ['id'] }],
+        },
+      ];
+      const { models: next } = applyEdit(models, {
+        kind: 'setPrimaryKey',
+        model: 'products',
+        columns: ['id'],
+        virtual: false,
+        uniqueTest: true,
+      });
+      expect(next[0].dataTests).toEqual([
+        {
+          'dbt_utils.unique_combination_of_columns': {
+            arguments: { combination_of_columns: ['id'] },
+          },
+        },
+      ]);
+    });
+
+    it('removes the test when uniqueTest is false', () => {
+      const models: ModelDefinition[] = [
+        {
+          name: 'products',
+          columns: [{ name: 'id' }],
+          dataTests: [
+            {
+              'dbt_utils.unique_combination_of_columns': {
+                arguments: { combination_of_columns: ['id'] },
+              },
+            },
+          ],
+          constraints: [{ type: 'primary_key', columns: ['id'] }],
+        },
+      ];
+      const { models: next } = applyEdit(models, {
+        kind: 'setPrimaryKey',
+        model: 'products',
+        columns: ['id'],
+        virtual: false,
+        uniqueTest: false,
+      });
+      expect(next[0].dataTests).toBeUndefined();
+      expect(next[0].constraints).toEqual([{ type: 'primary_key', columns: ['id'] }]);
+    });
+
+    it('keeps not_null when the test is removed', () => {
+      const models: ModelDefinition[] = [
+        {
+          name: 'products',
+          columns: [{ name: 'id', dataTests: ['not_null'] }],
+          dataTests: [
+            {
+              'dbt_utils.unique_combination_of_columns': {
+                arguments: { combination_of_columns: ['id'] },
+              },
+            },
+          ],
+          constraints: [{ type: 'primary_key', columns: ['id'] }],
+        },
+      ];
+      const { models: next } = applyEdit(models, {
+        kind: 'setPrimaryKey',
+        model: 'products',
+        columns: ['id'],
+        virtual: false,
+        uniqueTest: false,
+      });
+      expect(next[0].columns?.[0].dataTests).toEqual(['not_null']);
+    });
+
+    it('preserves sibling keys when updating an existing test', () => {
+      const models: ModelDefinition[] = [
+        {
+          name: 'products',
+          columns: [{ name: 'id' }, { name: 'line' }],
+          dataTests: [
+            {
+              'dbt_utils.unique_combination_of_columns': {
+                enabled: true,
+                arguments: { combination_of_columns: ['id'] },
+              },
+            },
+          ],
+          constraints: [{ type: 'primary_key', columns: ['id'] }],
+        },
+      ];
+      const { models: next } = applyEdit(models, {
+        kind: 'setPrimaryKey',
+        model: 'products',
+        columns: ['id', 'line'],
+        virtual: false,
+        uniqueTest: true,
+      });
+      expect(next[0].dataTests).toEqual([
+        {
+          'dbt_utils.unique_combination_of_columns': {
+            enabled: true,
+            arguments: { combination_of_columns: ['id', 'line'] },
+          },
+        },
+      ]);
+    });
+
+    it('does not create the test when uniqueTest is omitted', () => {
+      const models: ModelDefinition[] = [
+        {
+          name: 'products',
+          columns: [{ name: 'id' }],
+          constraints: [{ type: 'primary_key', columns: ['id'] }],
+        },
+      ];
+      const { models: next } = applyEdit(models, {
+        kind: 'setPrimaryKey',
+        model: 'products',
+        columns: ['id'],
+        virtual: false,
+      });
+      expect(next[0].dataTests).toBeUndefined();
+    });
+
+    it('updates an existing test when uniqueTest is omitted', () => {
+      const models: ModelDefinition[] = [
+        {
+          name: 'products',
+          columns: [{ name: 'id' }, { name: 'line' }],
+          dataTests: [
+            {
+              'dbt_utils.unique_combination_of_columns': {
+                arguments: { combination_of_columns: ['id'] },
+              },
+            },
+          ],
+          constraints: [{ type: 'primary_key', columns: ['id'] }],
+        },
+      ];
+      const { models: next } = applyEdit(models, {
+        kind: 'setPrimaryKey',
+        model: 'products',
+        columns: ['id', 'line'],
+        virtual: false,
+      });
+      const value = (next[0].dataTests?.[0] as Record<string, { arguments: { combination_of_columns: string[] } }>)[
+        'dbt_utils.unique_combination_of_columns'
+      ];
+      expect(value.arguments.combination_of_columns).toEqual(['id', 'line']);
+    });
+
+    it('removes the test when the PK is cleared even with uniqueTest true', () => {
+      const models: ModelDefinition[] = [
+        {
+          name: 'products',
+          columns: [{ name: 'id' }],
+          dataTests: [
+            {
+              'dbt_utils.unique_combination_of_columns': {
+                arguments: { combination_of_columns: ['id'] },
+              },
+            },
+          ],
+          constraints: [{ type: 'primary_key', columns: ['id'] }],
+        },
+      ];
+      const { models: next } = applyEdit(models, {
+        kind: 'setPrimaryKey',
+        model: 'products',
+        columns: [],
+        virtual: false,
+        uniqueTest: true,
+      });
+      expect(next[0].dataTests).toBeUndefined();
+    });
+
+    it('a virtual PK ignores uniqueTest', () => {
+      const models: ModelDefinition[] = [
+        {
+          name: 'products',
+          columns: [{ name: 'id' }],
+          dataTests: [
+            {
+              'dbt_utils.unique_combination_of_columns': {
+                arguments: { combination_of_columns: ['id'] },
+              },
+            },
+          ],
+          constraints: [{ type: 'primary_key', columns: ['id'] }],
+        },
+      ];
+      const { models: next } = applyEdit(models, {
+        kind: 'setPrimaryKey',
+        model: 'products',
+        columns: ['id'],
+        virtual: true,
+        uniqueTest: true,
+      });
+      expect(next[0].dataTests).toBeUndefined();
+      expect(next[0].config).toEqual({
+        meta: { dbtiagram: { virtual: { primary_key: { columns: ['id'] } } } },
+      });
+    });
+
+    it('upgrades a bare-string entry', () => {
+      const models: ModelDefinition[] = [
+        {
+          name: 'products',
+          columns: [{ name: 'id' }],
+          dataTests: ['dbt_utils.unique_combination_of_columns'],
+          constraints: [{ type: 'primary_key', columns: ['id'] }],
+        },
+      ];
+      const { models: next } = applyEdit(models, {
+        kind: 'setPrimaryKey',
+        model: 'products',
+        columns: ['id'],
+        virtual: false,
+        uniqueTest: true,
+      });
+      expect(next[0].dataTests).toEqual([
+        {
+          'dbt_utils.unique_combination_of_columns': {
+            arguments: { combination_of_columns: ['id'] },
+          },
+        },
+      ]);
+    });
+
+    it('toggling the flag on a model with no PK still applies', () => {
+      const models: ModelDefinition[] = [
+        {
+          name: 'products',
+          columns: [{ name: 'id' }],
+        },
+      ];
+      const { models: next } = applyEdit(models, {
+        kind: 'setPrimaryKey',
+        model: 'products',
+        columns: ['id'],
+        virtual: false,
+        uniqueTest: true,
+      });
+      expect(next[0].dataTests).toEqual([
+        {
+          'dbt_utils.unique_combination_of_columns': {
+            arguments: { combination_of_columns: ['id'] },
+          },
+        },
+      ]);
+    });
+  });
+
+  describe('hasUniqueCombinationTest', () => {
+    it('detects both forms', async () => {
+      const { hasUniqueCombinationTest } = await import('../../../../src/dbt/edit/primaryKey');
+      const bare: ModelDefinition = {
+        name: 'products',
+        dataTests: ['dbt_utils.unique_combination_of_columns'],
+      };
+      const mapping: ModelDefinition = {
+        name: 'products',
+        dataTests: [
+          {
+            'dbt_utils.unique_combination_of_columns': {
+              arguments: { combination_of_columns: ['id'] },
+            },
+          },
+        ],
+      };
+      const neither: ModelDefinition = { name: 'products' };
+      expect(hasUniqueCombinationTest(bare)).toBe(true);
+      expect(hasUniqueCombinationTest(mapping)).toBe(true);
+      expect(hasUniqueCombinationTest(neither)).toBe(false);
+    });
+  });
 });

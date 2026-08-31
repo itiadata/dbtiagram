@@ -191,6 +191,9 @@ export function FieldsMatrix({
     const next = row.isPrimaryKey
       ? pkColumns.filter((c) => c !== row.column)
       : [...pkColumns, row.column];
+    // `uniqueTest` is intentionally omitted: the matrix updates an existing
+    // unique-combination test but never creates one (spec 33) — the details
+    // sidebar checkbox is the only place it can be brought into existence.
     onEdit({ kind: 'setPrimaryKey', model: row.model, columns: next, virtual });
   }
 
@@ -198,6 +201,7 @@ export function FieldsMatrix({
     const node = graph.nodes.find((n) => n.id === row.model);
     const pkColumns = node?.primaryKey?.columns ?? [];
     const virtual = node?.primaryKey?.virtual ?? false;
+    // See the note above: `uniqueTest` is omitted so this never creates the test.
     onEdit({ kind: 'setPrimaryKey', model: row.model, columns: pkColumns, virtual: !virtual });
   }
 

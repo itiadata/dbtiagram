@@ -8,7 +8,7 @@
  */
 import { readVirtualConstraints, writeVirtualConstraints } from '../virtual';
 import type { DataTestEntry, ModelColumn, ModelDefinition } from '../types';
-import { EditError, arraysEqual, isRecord } from './internal';
+import { EditError, isRecord } from './internal';
 
 /** The model-level data test the PK editor owns (spec 08). */
 const UNIQUE_COMBINATION_TEST = 'dbt_utils.unique_combination_of_columns';
@@ -29,14 +29,18 @@ export function dedupeTrimmed(names: string[]): string[] {
 /**
  * Applies `setPrimaryKey` to one model. The three real constructs stay in sync
  * in this single atomic edit (spec 08, Confirm at Approval (a)/(e)); a virtual
- * PK writes only the `config.meta.dbtiagram.virtual` block. The no-op guard
- * compares against the *displayed* state (virtual-first, per Confirm at
- * Approval (c)) so an unchanged UI selection never rewrites the file.
+ * PK writes only the `config.meta.dbtiagram.virtual` block. The result is
+ * compared against the original model by deep equality (spec 33) so an
+ * unchanged UI selection — including an unchanged unique-test flag — never
+ * rewrites the file; this also correctly upgrades a bare-string
+ * unique-combination entry to the mapping form even when the PK columns
+ * themselves do not change.
  */
 export function setPrimaryKeyOnModel(
   model: ModelDefinition,
   columns: string[],
   virtual: boolean,
+  uniqueTest?: boolean,
 ): ModelDefinition {
   const existing = new Set((model.columns ?? []).map((c) => c.name));
   for (const column of columns) {
@@ -45,52 +49,47 @@ export function setPrimaryKeyOnModel(
     }
   }
 
-  const displayed = readDisplayedPrimaryKey(model);
-  const resulting = columns.length === 0 ? undefined : { columns, virtual };
-  if (displayed === undefined && resulting === undefined) return model;
-  if (
-    displayed !== undefined &&
-    resulting !== undefined &&
-    displayed.virtual === resulting.virtual &&
-    arraysEqual(displayed.columns, resulting.columns)
-  ) {
-    return model;
-  }
-
   const currentReal = readRealPrimaryKeyColumns(model);
+  let next: ModelDefinition;
   if (virtual) {
-    let next = removeRealPrimaryKeyArtifacts(model, currentReal);
+    next = removeRealPrimaryKeyArtifacts(model, currentReal);
     const block = readVirtualConstraints(next);
     next = writeVirtualConstraints(next, {
       ...block,
       primaryKey: columns.length > 0 ? { columns } : undefined,
     });
-    return next;
+  } else {
+    next = writeVirtualConstraints(model, {
+      ...readVirtualConstraints(model),
+      primaryKey: undefined,
+    });
+    next = applyRealPrimaryKeySync(next, columns, currentReal, uniqueTest);
   }
+  return deepEqual(model, next) ? model : next;
+}
 
-  let next = writeVirtualConstraints(model, {
-    ...readVirtualConstraints(model),
-    primaryKey: undefined,
-  });
-  next = applyRealPrimaryKeySync(next, columns, currentReal);
-  return next;
+/** Whether the model already declares the PK unique-combination data test. */
+export function hasUniqueCombinationTest(model: ModelDefinition): boolean {
+  return (model.dataTests ?? []).some(isUniqueCombinationEntry);
+}
+
+/** Structural equality for plain JSON-shaped model data (spec 33's no-op guard). */
+function deepEqual(a: unknown, b: unknown): boolean {
+  if (a === b) return true;
+  if (typeof a !== 'object' || typeof b !== 'object' || a === null || b === null) return false;
+  if (Array.isArray(a) || Array.isArray(b)) {
+    if (!Array.isArray(a) || !Array.isArray(b) || a.length !== b.length) return false;
+    return a.every((value, index) => deepEqual(value, b[index]));
+  }
+  const aRecord = a as Record<string, unknown>;
+  const bRecord = b as Record<string, unknown>;
+  const aKeys = Object.keys(aRecord);
+  const bKeys = Object.keys(bRecord);
+  if (aKeys.length !== bKeys.length) return false;
+  return aKeys.every((key) => bKeys.includes(key) && deepEqual(aRecord[key], bRecord[key]));
 }
 
 /** The PK the webview shows: the virtual block first, else the real constraint. */
-function readDisplayedPrimaryKey(
-  model: ModelDefinition,
-): { columns: string[]; virtual: boolean } | undefined {
-  const virtual = readVirtualConstraints(model);
-  if (virtual.primaryKey !== undefined) {
-    return { columns: virtual.primaryKey.columns, virtual: true };
-  }
-  const constraint = (model.constraints ?? []).find((c) => c.type === 'primary_key');
-  if (constraint !== undefined) {
-    return { columns: constraint.columns ?? [], virtual: false };
-  }
-  return undefined;
-}
-
 function readRealPrimaryKeyColumns(model: ModelDefinition): string[] {
   const constraint = (model.constraints ?? []).find((c) => c.type === 'primary_key');
   return constraint?.columns ?? [];
@@ -101,8 +100,9 @@ function applyRealPrimaryKeySync(
   model: ModelDefinition,
   columns: string[],
   currentReal: string[],
+  uniqueTest?: boolean,
 ): ModelDefinition {
-  let next = syncUniqueCombinationDataTest(model, columns);
+  let next = syncUniqueCombinationDataTest(model, columns, uniqueTest);
   next = syncPrimaryKeyConstraint(next, columns);
   next = syncColumnNotNull(next, currentReal, columns);
   return next;
@@ -110,30 +110,43 @@ function applyRealPrimaryKeySync(
 
 /**
  * Creates/updates/removes the `dbt_utils.unique_combination_of_columns`
- * model-level data test in place. The entry is found by its key; when the PK
- * is empty the entry is removed; other entries are preserved.
+ * model-level data test in place (spec 33).
+ *
+ * | `uniqueTest` | present? | result |
+ * |---|---|---|
+ * | `true`  | yes | updated in place, preserving sibling/`arguments` keys |
+ * | `true`  | no  | fresh entry appended (nothing inherited) |
+ * | `false` | yes | entry removed |
+ * | `false` | no  | no change |
+ * | omitted | yes | updated in place |
+ * | omitted | no  | not created |
+ *
+ * An empty column list always removes the entry, regardless of `uniqueTest`.
  */
 function syncUniqueCombinationDataTest(
   model: ModelDefinition,
   columns: string[],
+  uniqueTest?: boolean,
 ): ModelDefinition {
   const dataTests = model.dataTests;
-  if (dataTests === undefined) {
-    if (columns.length === 0) return model;
-    return { ...model, dataTests: [buildUniqueTest(columns)] };
-  }
-  const index = dataTests.findIndex(isUniqueCombinationEntry);
-  if (index === -1) {
-    if (columns.length === 0) return model;
-    return { ...model, dataTests: [...dataTests, buildUniqueTest(columns)] };
-  }
-  const next = [...dataTests];
-  if (columns.length === 0) {
+  const index = dataTests?.findIndex(isUniqueCombinationEntry) ?? -1;
+  const present = index !== -1;
+
+  if (columns.length === 0 || uniqueTest === false) {
+    if (!present || dataTests === undefined) return model;
+    const next = [...dataTests];
     next.splice(index, 1);
     return { ...model, dataTests: next.length > 0 ? next : undefined };
   }
-  next[index] = buildUniqueTest(columns, dataTests[index]);
-  return { ...model, dataTests: next };
+
+  if (present && dataTests !== undefined) {
+    const next = [...dataTests];
+    next[index] = buildUniqueTest(columns, dataTests[index]);
+    return { ...model, dataTests: next };
+  }
+
+  if (uniqueTest !== true) return model;
+  return { ...model, dataTests: [...(dataTests ?? []), buildUniqueTest(columns)] };
 }
 
 function isUniqueCombinationEntry(entry: DataTestEntry): boolean {

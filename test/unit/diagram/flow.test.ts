@@ -187,7 +187,11 @@ describe('buildFlowElements', () => {
         },
       },
     ]);
-    expect(flow.nodes[0].data.primaryKey).toEqual({ columns: ['product_id'], virtual: true });
+    expect(flow.nodes[0].data.primaryKey).toEqual({
+      columns: ['product_id'],
+      virtual: true,
+      uniqueTest: false,
+    });
   });
 
   it('omits primaryKey from flow data when the graph node has none', () => {
