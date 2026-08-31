@@ -30,7 +30,7 @@ import {
 } from '../src/diagram/flow';
 import { HEADER_HEIGHT, ROW_HEIGHT } from '../src/diagram/layout';
 import { DiagramInteractionContext } from './diagram-interaction-context';
-import { KeyRound, FlaskConical, TriangleAlert } from './icons';
+import { KeyRound, FlaskConical, FlaskConicalOff } from './icons';
 
 const EMPTY_COLUMNS: ReadonlySet<string> = new Set();
 const EMPTY_PK_COLUMNS: readonly string[] = [];
@@ -197,7 +197,7 @@ function TableNodeComponent({ id, data }: NodeProps<FlowNode>): JSX.Element {
                 className="table-node__pk-warning-icon"
                 title="Unique combination of columns test is off"
               >
-                <TriangleAlert size={10} />
+                <FlaskConicalOff size={10} />
               </span>
             )}
             {editingCell === 'name' ? (

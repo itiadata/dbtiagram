@@ -16,5 +16,5 @@ export {
   SquareText,
   KeyRound,
   FlaskConical,
-  TriangleAlert,
+  FlaskConicalOff,
 } from 'lucide-react';

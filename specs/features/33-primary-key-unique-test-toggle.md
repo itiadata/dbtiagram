@@ -125,7 +125,7 @@ Then the "Unique combination of columns test" checkbox is unchecked and disabled
 Given model "customers" has a real primary key on "customer_id"
 And its unique-combination test is off
 When I look at the "customers" table card on the canvas
-Then the PK key icon on "customer_id" shows a red warning badge
+Then the PK key icon on "customer_id" shows a red "test off" badge
   titled "Unique combination of columns test is off"
 ```
 
@@ -135,7 +135,7 @@ Then the PK key icon on "customer_id" shows a red warning badge
 Given model "orders" has a real primary key with the unique-combination test on
 And model "products" has a virtual primary key
 When I look at both table cards on the canvas
-Then neither PK key icon shows the red warning badge
+Then neither PK key icon shows the red "test off" badge
 ```
 
 ## Implementation Plan
@@ -152,7 +152,7 @@ Then neither PK key icon shows the red warning badge
 | `webview-ui/PrimaryKeySection.tsx` | modify | Render the checkbox, post the flag on every `setPrimaryKey`, update the explanatory note. |
 | `webview-ui/FieldsMatrix.tsx` | modify | Leave `uniqueTest` unspecified on its two `setPrimaryKey` posts (documented "preserve" semantics). |
 | `webview-ui/TableNode.tsx` | modify | Render a red warning badge next to the PK key icon when the displayed PK is real and `uniqueTest` is `false`. |
-| `webview-ui/icons.ts` | modify | Re-export the `TriangleAlert` Lucide icon for the warning badge. |
+| `webview-ui/icons.ts` | modify | Re-export the `FlaskConicalOff` Lucide icon for the warning badge. |
 | `webview-ui/styles.css` | modify | Add `.table-node__pk-warning-icon` (uses the existing `--error` theme variable). |
 | `specs/ARCHITECTURE.md` | modify | Update the key exports of `src/dbt/edit/primaryKey.ts` and `src/diagram/graph.ts`. |
 | `test/unit/dbt/edit/primaryKey.test.ts` | modify | Cases for the flag; existing "creates the test" cases pass `uniqueTest: true`. |
@@ -299,7 +299,7 @@ export interface FlowNodeData {
     `pkUniqueTestOff = !pkVirtual && data.primaryKey !== undefined && !data.primaryKey.uniqueTest`.
     On a PK column row (`isPk` true), when `pkUniqueTestOff` is also true, render a
     second small icon right after the existing `table-node__pk-icon` span: a
-    `TriangleAlert` (size 10) inside a `<span className="table-node__pk-warning-icon"
+    `FlaskConicalOff` (size 10) inside a `<span className="table-node__pk-warning-icon"
     title="Unique combination of columns test is off">`. It never renders for a
     virtual PK (`pkVirtual` true) or when the model has no PK at all
     (`data.primaryKey === undefined`) — both already imply `uniqueTest: false` from
