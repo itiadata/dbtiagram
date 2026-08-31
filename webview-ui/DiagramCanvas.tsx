@@ -193,7 +193,7 @@ export function DiagramCanvas({
   useEffect(() => {
     if (!shouldRunPendingFit(nodesInitialized, pendingFitRef.current)) return;
     pendingFitRef.current = false;
-    void fitView({ padding: 0.15, maxZoom: 1 });
+    void fitView();
   }, [rfNodes, nodesInitialized, fitView]);
 
   // Spec 19: the pre-measurement `fitView` prop/`fitViewOptions` run before
