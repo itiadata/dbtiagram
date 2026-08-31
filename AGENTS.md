@@ -33,7 +33,8 @@ The extension has **no runtime AI dependency** — it works fully offline.
   - `src/extension.ts` — `activate` / `deactivate` lifecycles only.
 - `webview-ui/` — React webview front-end (bundled by esbuild into `dist/webview/`).
 - `fixtures/sample-dbt/` — minimal dbt workspace used as the F5 debug target and
-  exercised by `test/unit/fixture.test.ts`.
+  exercised by `test/unit/fixture.test.ts`. **Uncommitted changes here are
+  expected and disposable — see "Sample fixture hygiene" below.**
 - `test/unit/` — Vitest suites for pure domain logic. Run in <1s without the
   VS Code Electron host.
 - `test/integration/` — Mocha + `@vscode/test-electron` suites that launch a
@@ -153,6 +154,26 @@ automatically; no user action is required for routine work.
   `.vscode-test/`, or `*.vsix`.
 - `.certs/zscaler-root-ca.pem` is tracked as a committed baseline (see Corporate
   Network Setup). Do not gitignore it.
+- **Never use `git commit -a`/`-am`.** It sweeps in unrelated working-tree
+  changes — in this repo, typically the sample fixture (see below). Stage
+  explicit paths instead.
+
+### Sample fixture hygiene
+
+The user debugs the extension with F5 against `fixtures/sample-dbt/`, so that
+workspace is routinely left with **uncommitted manual edits**: renamed models,
+placeholder descriptions like `hola`, added columns or tests, and stray
+`fixtures/sample-dbt/diagrams/*.dbtiagram.yml` layout files.
+
+- These changes are **disposable**. The agent may discard them **without
+  asking** whenever they get in the way: `git checkout -- fixtures/sample-dbt`
+  plus deleting untracked files under `fixtures/sample-dbt/diagrams/`.
+- Expect them to break `npm test`: `test/unit/fixture.test.ts` asserts the
+  fixture's parsed contents, so a renamed model or an edited description fails
+  the suite. A fixture-only failure after a debug session is almost always dirt,
+  not a regression — verify by checking `git status` before investigating.
+- **Never commit them.** Stage files under `fixtures/` only when the fixture is
+  being changed deliberately, as part of a spec.
 
 ## Agents & Subagents
 
