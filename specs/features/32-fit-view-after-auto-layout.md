@@ -1,7 +1,7 @@
 ---
 id: 32
 title: Fit the view after auto-layout
-status: implemented
+status: done
 priority: medium
 created: 2026-08-31
 owner: unassigned

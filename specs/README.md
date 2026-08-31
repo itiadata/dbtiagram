@@ -43,7 +43,7 @@ up-to-date spec in `specs/features/`.
 | 28  | Lucide icons for UI buttons | Approved |
 | 30  | Show a test-tube icon on columns that have a data test | Draft |
 | 31  | Group tables inside a named box on the diagram | Draft |
-| 32  | Fit the view after auto-layout | Implemented |
+| 32  | Fit the view after auto-layout | Done |
 | 33  | Opt in or out of the model-level unique-combination test for a primary key | Draft |
 
 Status values: `draft` → `approved` → `implemented` → `done`.
