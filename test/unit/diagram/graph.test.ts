@@ -454,4 +454,56 @@ describe('buildDiagram', () => {
       expect(a.foreignKeyColumns).toEqual(['b_id']);
     });
   });
+
+  describe('column tests (spec 30)', () => {
+    it('carries column test names into the node', () => {
+      const graph = buildDiagram([
+        {
+          name: 'users',
+          columns: [{ name: 'email', dataTests: ['unique'] }],
+        },
+      ]);
+      const node = graph.nodes.find((n) => n.id === 'users')!;
+      const email = node.columns.find((c) => c.name === 'email')!;
+      expect(email.tests).toEqual(['unique']);
+    });
+
+    it('omits tests when a column has none', () => {
+      const graph = buildDiagram([
+        {
+          name: 'users',
+          columns: [{ name: 'amount' }],
+        },
+      ]);
+      const node = graph.nodes.find((n) => n.id === 'users')!;
+      const amount = node.columns.find((c) => c.name === 'amount')!;
+      expect(amount.tests).toBeUndefined();
+    });
+
+    it('excludes the PK-owned not_null from the node', () => {
+      const graph = buildDiagram([
+        {
+          name: 'orders',
+          columns: [{ name: 'order_id', dataTests: ['not_null'] }],
+          constraints: [{ type: 'primary_key', columns: ['order_id'] }],
+        },
+      ]);
+      const node = graph.nodes.find((n) => n.id === 'orders')!;
+      const order_id = node.columns.find((c) => c.name === 'order_id')!;
+      expect(order_id.tests).toBeUndefined();
+    });
+
+    it('keeps extra tests on a PK column beyond not_null', () => {
+      const graph = buildDiagram([
+        {
+          name: 'orders',
+          columns: [{ name: 'order_id', dataTests: ['not_null', 'unique'] }],
+          constraints: [{ type: 'primary_key', columns: ['order_id'] }],
+        },
+      ]);
+      const node = graph.nodes.find((n) => n.id === 'orders')!;
+      const order_id = node.columns.find((c) => c.name === 'order_id')!;
+      expect(order_id.tests).toEqual(['unique']);
+    });
+  });
 });

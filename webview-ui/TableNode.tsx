@@ -30,7 +30,7 @@ import {
 } from '../src/diagram/flow';
 import { HEADER_HEIGHT, ROW_HEIGHT } from '../src/diagram/layout';
 import { DiagramInteractionContext } from './diagram-interaction-context';
-import { KeyRound } from './icons';
+import { KeyRound, FlaskConical } from './icons';
 
 const EMPTY_COLUMNS: ReadonlySet<string> = new Set();
 const EMPTY_PK_COLUMNS: readonly string[] = [];
@@ -213,6 +213,14 @@ function TableNodeComponent({ id, data }: NodeProps<FlowNode>): JSX.Element {
                 }}
               >
                 {column.name}
+              </span>
+            )}
+            {column.tests !== undefined && column.tests.length > 0 && (
+              <span
+                className="table-node__test-icon"
+                title={`Tests: ${column.tests.join(', ')}`}
+              >
+                <FlaskConical size={10} />
               </span>
             )}
             {editingCell === 'type' ? (

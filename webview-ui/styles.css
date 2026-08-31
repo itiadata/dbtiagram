@@ -961,6 +961,13 @@ body {
   color: var(--muted);
 }
 
+/* Test icon after the column name (spec 30): muted, same sizing as the PK icon. */
+.table-node__test-icon {
+  flex-shrink: 0;
+  display: inline-flex;
+  color: var(--muted);
+}
+
 /* Inline cell editor (spec 06): fills the cell, inherits the row font, and
    carries `nodrag` so editing never starts a node drag. */
 .table-node__inline-edit {

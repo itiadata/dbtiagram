@@ -23,6 +23,7 @@ lines** under `test/unit/` (see `specs/features/17-modular-source-layout.md`).
 | Path | Layer | Responsibility | Key exports |
 |------|-------|----------------|-------------|
 | `src/dbt/types.ts` | pure | The dbt model.yml data model shared across parsing, editing and diagramming. | `ModelYmlFile`, `ModelDefinition`, `ModelColumn`, `ModelConfig`, `ModelConstraint`, `DataTestEntry`, `ForeignKeyDescriptor`, `VirtualPrimaryKey`, `VirtualForeignKey`, `VirtualConstraintsBlock` |
+| `src/dbt/tests.ts` | pure | Pure helpers for resolving a column's displayable data-test names, excluding the PK-owned `not_null` (spec 30). | `dataTestName`, `columnTestNames` |
 | `src/dbt/parse.ts` | pure | Parse model.yml text into `ModelYmlFile`, raising a typed error on malformed YAML. | `parseModelYml`, `ModelYmlParseError` |
 | `src/dbt/serialize.ts` | pure | Regenerate a whole `ModelYmlFile` as YAML text. **Fallback** write path only (spec 29); it drops comments and on-disk key order. | `serializeModelYml` |
 | `src/dbt/merge/index.ts` | pure | Surgical write-back (spec 29): patch the existing YAML text with the desired state so unknown keys, key order and comments survive; falls back to `serializeModelYml`. Owns the per-level merge policies. | `mergeModelYml` |

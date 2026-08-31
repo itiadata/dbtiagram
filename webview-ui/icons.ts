@@ -15,4 +15,5 @@ export {
   BetweenHorizontalStart,
   SquareText,
   KeyRound,
+  FlaskConical,
 } from 'lucide-react';

@@ -3,6 +3,7 @@
  * MUST NOT import `vscode`.
  */
 import { parseRef } from '../dbt/refs';
+import { columnTestNames } from '../dbt/tests';
 import { readVirtualConstraints } from '../dbt/virtual';
 import type { ForeignKeyDescriptor, ModelColumn, ModelDefinition } from '../dbt/types';
 
@@ -11,6 +12,8 @@ export interface TableNodeColumn {
   dataType?: string;
   description?: string;
   meta?: Record<string, unknown>;
+  /** Display names of this column's data tests (spec 30); omitted when empty. */
+  tests?: string[];
 }
 
 export interface TableNode {
@@ -99,12 +102,17 @@ export function buildDiagram(models: ModelDefinition[]): DiagramGraph {
       id: m.name,
       label: m.name,
       description: m.description,
-      columns: (m.columns ?? []).map((c: ModelColumn) => ({
-        name: c.name,
-        dataType: c.dataType,
-        description: c.description,
-        meta: c.meta,
-      })),
+      columns: (m.columns ?? []).map((c: ModelColumn) => {
+        const isPk = primaryKey?.columns.includes(c.name) ?? false;
+        const tests = columnTestNames(c, isPk);
+        const base = {
+          name: c.name,
+          dataType: c.dataType,
+          description: c.description,
+          meta: c.meta,
+        };
+        return tests.length > 0 ? { ...base, tests } : base;
+      }),
       ...(primaryKey !== undefined ? { primaryKey } : {}),
       foreignKeys,
       foreignKeyColumns: [],
