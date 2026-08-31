@@ -1,5 +1,5 @@
-/**
- * Surgical write-back for dbt `model.yml` files (spec 29). Pure logic — MUST
+﻿/**
+ * Surgical write-back for dbt `model.yml` files (spec 29). Pure logic â€” MUST
  * NOT import `vscode`.
  *
  * Instead of regenerating the file from the domain model, `mergeModelYml`
@@ -13,10 +13,15 @@ import { serializeModelYml } from '../serialize';
 import type { ModelYmlFile } from '../types';
 import { toDbtShape } from './shape';
 import { COLUMN_KEY_ORDER, FREE_KEY_ORDER, MODEL_KEY_ORDER } from './order';
-import { deepEqual, reconcileNode, type MergePolicy } from './reconcile';
+import {
+  deepEqual,
+  reconcileNode,
+  type ManagedShape,
+  type MergePolicy,
+} from './reconcile';
 
 export { toDbtShape } from './shape';
-export { reconcileNode, type MergePolicy } from './reconcile';
+export { reconcileNode, type ManagedShape, type MergePolicy } from './reconcile';
 export {
   COLUMN_KEY_ORDER,
   FREE_KEY_ORDER,
@@ -25,21 +30,26 @@ export {
   type KeyOrder,
 } from './order';
 
-const MODEL_DELETABLE: ReadonlySet<string> = new Set([
-  'description',
-  'data_tests',
-  'constraints',
-  'config',
-  'columns',
-  'meta',
+/**
+ * Managed keys, each with the on-disk value shape `parseModelYml` recognizes.
+ * A key whose value has any other shape is invisible to the domain model, so
+ * the merge must never delete it.
+ */
+const MODEL_DELETABLE: ReadonlyMap<string, ManagedShape> = new Map<string, ManagedShape>([
+  ['description', 'string'],
+  ['data_tests', 'sequence'],
+  ['constraints', 'sequence'],
+  ['config', 'mapping'],
+  ['columns', 'sequence'],
+  ['meta', 'mapping'],
 ]);
 
-const COLUMN_DELETABLE: ReadonlySet<string> = new Set([
-  'data_type',
-  'description',
-  'tests',
-  'data_tests',
-  'meta',
+const COLUMN_DELETABLE: ReadonlyMap<string, ManagedShape> = new Map<string, ManagedShape>([
+  ['data_type', 'string'],
+  ['description', 'string'],
+  ['tests', 'sequence'],
+  ['data_tests', 'sequence'],
+  ['meta', 'mapping'],
 ]);
 
 /**
@@ -78,7 +88,7 @@ const MODELS_SEQ_POLICY: MergePolicy = {
 
 /** Nothing at the root of a model.yml is ever removed. */
 const ROOT_POLICY: MergePolicy = {
-  deletable: new Set<string>(),
+  deletable: new Map<string, ManagedShape>(),
   order: FREE_KEY_ORDER,
   child: (key) => (key === 'models' ? MODELS_SEQ_POLICY : FREE_POLICY),
 };

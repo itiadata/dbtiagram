@@ -121,6 +121,50 @@ models:
     expect(out).toContain('tags: [finance]');
   });
 
+  it('keeps a managed column key whose value shape the parser ignores', () => {
+    const text = `version: 2
+models:
+  - name: products
+    columns:
+      - name: product_id
+        data_type: integer
+        data_tests:
+          - not_null
+        meta: test
+`;
+    // Clearing the PK drops the column's data_tests. `meta: test` is a scalar,
+    // so `parseModelYml` never sees it and it is absent from the desired
+    // state -- it must survive all the same.
+    const file = edited(text, (f) => {
+      delete f.models[0].columns![0].dataTests;
+    });
+    const out = mergeModelYml(text, file);
+
+    expect(out).not.toContain('data_tests');
+    expect(out).not.toContain('not_null');
+    expect(out).toContain('meta: test');
+    expect(columnKeys(out)).toEqual(['name', 'data_type', 'meta']);
+  });
+
+  it('keeps other column tests when only one is removed', () => {
+    const text = `version: 2
+models:
+  - name: products
+    columns:
+      - name: product_id
+        data_tests:
+          - not_null
+          - unique
+`;
+    const file = edited(text, (f) => {
+      f.models[0].columns![0].dataTests = ['unique'];
+    });
+    const out = mergeModelYml(text, file);
+
+    expect(out).toContain('unique');
+    expect(out).not.toContain('not_null');
+  });
+
   it('never removes an unmanaged model key absent from desired', () => {
     const text = `version: 2
 models:

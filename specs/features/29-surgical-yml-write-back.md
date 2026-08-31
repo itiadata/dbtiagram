@@ -72,70 +72,79 @@ YAML document, changing only the nodes that actually differ.
 
 ### A custom column key survives a description edit
 
-```
+``
 Given a column `order_item_id` with keys name, data_type, description, custom_tag
 When I change its description in the diagram
 Then only the `description` value changes on disk
 And `custom_tag: a value` is still present with its original value
 And the key order name, data_type, description, custom_tag is unchanged
-```
+``
 
 ### Model-level keys keep their on-disk order
 
-```
+``
 Given a model whose keys on disk are, in order, name, tags, description, columns
 When I change the model description in the diagram
 Then the keys on disk are still, in order, name, tags, description, columns
 And `tags` is byte-identical to before
-```
+``
 
 ### Comments and untouched models are preserved
 
-```
+``
 Given a model.yml with comments above and beside several keys
 And two models in the file
 When I change a column description in the first model
 Then every comment in the file is still present
 And the text of the second model is byte-identical to before
-```
+``
 
 ### A newly created model-level key uses the standard order
 
-```
+``
 Given a model with keys name, description, tags, columns and no constraints
 When I mark a column as a primary key so `constraints` and `data_tests` must be created
 Then `data_tests` is inserted immediately after `description`
 And `constraints` is inserted immediately after `data_tests`
 And `tags` and `columns` keep their relative order, with `columns` last
-```
+``
 
 ### A newly created column-level key uses the standard order
 
-```
+``
 Given a column with keys name, description, custom_tag and no data_type
 When the diagram sets its data type
 Then `data_type` is inserted between `name` and `description`
 And `custom_tag` remains the last key
-```
+``
 
 ### Removing a primary key removes only managed keys
 
-```
+``
 Given a model with `constraints` holding a single primary_key entry
 And a model-level `tags` key
 When I clear the primary key in the diagram
 Then the `constraints` key is removed
 And `tags` is untouched
-```
+``
+
+### A managed key the parser cannot read is never deleted
+
+``
+Given a column with data_tests [not_null] and a scalar `meta: test`
+When I clear the primary key so `data_tests` must be removed
+Then `data_tests` is removed from the column
+And `meta: test` is still present with its original value
+``
 
 ### A file that cannot be patched still gets written
 
-```
+``
 Given the on-disk text of a model.yml cannot be read or parsed as a YAML mapping
 When the extension persists an edit to that file
 Then the file is written using the existing full serializer
 And no edit is silently dropped
-```
+``
 
 ## Implementation Plan
 
@@ -155,7 +164,7 @@ And no edit is silently dropped
 
 ### Signatures
 
-```ts
+``ts
 // src/dbt/merge/index.ts  (pure â€” must not import `vscode`)
 export function mergeModelYml(originalText: string, file: ModelYmlFile): string;
 
@@ -167,13 +176,20 @@ export function toDbtShape(file: ModelYmlFile): Record<string, unknown>;
 export function reconcileNode(node: unknown, desired: unknown, policy: MergePolicy): void;
 
 export interface MergePolicy {
-  /** Keys this level is allowed to delete when absent from `desired`. */
-  deletable: ReadonlySet<string> | 'all';
+  /**
+   * Keys this level may delete when absent from `desired`, each mapped to the
+   * on-disk value shape the editor understands. A key whose current value has
+   * a different shape is never deleted.
+   */
+  deletable: ReadonlyMap<string, ManagedShape> | 'all';
   /** Ordering used when a key must be created at this level. */
   order: KeyOrder;
   /** Policy for a child value, by key (maps) or by index (sequences). */
   child(key: string | number): MergePolicy;
 }
+
+/** The value shapes `parseModelYml` recognizes for a managed key. */
+export type ManagedShape = 'string' | 'sequence' | 'mapping';
 
 // src/dbt/merge/order.ts  (pure)
 export interface KeyOrder {
@@ -189,12 +205,12 @@ export const FREE_KEY_ORDER: KeyOrder;
 
 /** Index at which `key` should be inserted into a mapping with `existing` keys. */
 export function insertionIndex(existing: readonly string[], key: string, order: KeyOrder): number;
-```
+``
 
-```ts
+``ts
 // src/vscode/project.ts  (vscode-facing)
 export async function writeModelYmlFile(uri: vscode.Uri, file: ModelYmlFile): Promise<void>;
-```
+``
 
 ### Behavior notes
 
@@ -214,11 +230,20 @@ converted back to `\r\n`; otherwise output uses `\n`.
    if** it is in `policy.deletable`; otherwise leave it. This is the rule that
    makes unknown keys safe.
 
-**Deletion allowlists.**
+**Deletion allowlists.** A managed key may be deleted only when **both** hold:
+it is on the level's allowlist, **and** its current on-disk value has the shape
+`parseModelYml` recognizes for that key. The second condition matters because
+the parser silently ignores a managed key whose value has an unexpected shape
+(e.g. `meta: test` is a scalar, not a mapping), so such a key never reaches the
+desired state and "absent from desired" would otherwise be misread as "the user
+removed it". The editor does not understand those values, so it must not
+destroy them.
 
-- root mapping: `deletable` is the empty set â€” nothing at the root is removed.
-- model mapping: `{ description, data_tests, constraints, config, columns, meta }`.
-- column mapping: `{ data_type, description, tests, data_tests, meta }`.
+- root mapping: `deletable` is empty — nothing at the root is removed.
+- model mapping: `description` (string), `data_tests` (sequence), `constraints`
+  (sequence), `config` (mapping), `columns` (sequence), `meta` (mapping).
+- column mapping: `data_type` (string), `description` (string), `tests`
+  (sequence), `data_tests` (sequence), `meta` (mapping).
 - every deeper level (inside `config`, `meta`, a constraint entry, a data test
   entry, any sequence item): `'all'`, because `parseModelYml` preserves those
   sub-trees verbatim, so absence from `desired` is a genuine removal.
@@ -274,6 +299,7 @@ plain objects key-by-key ignoring key order, and arrays index-by-index.
 | `test/unit/dbt/merge/reconcile.test.ts` | `keeps on-disk model key order` | model keys `name, tags, description, columns`; description edited | key order in output is exactly `name, tags, description, columns` |
 | `test/unit/dbt/merge/reconcile.test.ts` | `preserves comments and untouched models` | 2-model file with `# lead` and trailing comments; edit in model 1 | every comment string still present; the substring of model 2 is byte-identical |
 | `test/unit/dbt/merge/reconcile.test.ts` | `removes only managed keys` | model with `constraints` + `tags`; desired drops `constraints` | `constraints:` absent, `tags:` present |
+| `test/unit/dbt/merge/reconcile.test.ts` | `keeps a managed column key whose value shape the parser ignores` | column with `data_tests: [not_null]` and `meta: test`; desired drops `data_tests` | `data_tests` absent, `meta: test` present |
 | `test/unit/dbt/merge/reconcile.test.ts` | `never removes an unmanaged model key absent from desired` | model with `unknown_thing`; desired has no such key | `unknown_thing` present |
 | `test/unit/dbt/merge/reconcile.test.ts` | `returns byte-identical text for a no-op merge` | any file, desired equals parsed file | output `===` input |
 | `test/unit/dbt/merge/reconcile.test.ts` | `preserves CRLF line endings` | CRLF input, description edited | output contains `\r\n` and no bare `\n` |
@@ -311,6 +337,7 @@ plain objects key-by-key ignoring key order, and arrays index-by-index.
 - [x] A merge whose desired state equals the parsed file returns the input text
       unchanged.
 - [x] Newly created keys follow the model/column standard orders.
-- [x] Only allowlisted managed keys can be deleted.
+- [x] Only allowlisted managed keys can be deleted, and only when their on-disk
+      value has the shape the parser recognizes.
 - [x] Unreadable/unparseable files still get written via `serializeModelYml`.
 - [x] `npm run verify` is green.

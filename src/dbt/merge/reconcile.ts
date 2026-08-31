@@ -11,13 +11,20 @@ import { Pair, Scalar, YAMLMap, YAMLSeq, isMap, isPair, isScalar, isSeq } from '
 import { insertionIndex, type KeyOrder } from './order';
 
 export interface MergePolicy {
-  /** Keys this level is allowed to delete when absent from `desired`. */
-  deletable: ReadonlySet<string> | 'all';
+  /**
+   * Keys this level may delete when absent from `desired`, each mapped to the
+   * on-disk value shape the editor understands. A key whose current value has
+   * a different shape is never deleted.
+   */
+  deletable: ReadonlyMap<string, ManagedShape> | 'all';
   /** Ordering used when a key must be created at this level. */
   order: KeyOrder;
   /** Policy for a child value, by key (maps) or by index (sequences). */
   child(key: string | number): MergePolicy;
 }
+
+/** The value shapes `parseModelYml` recognizes for a managed key. */
+export type ManagedShape = 'string' | 'sequence' | 'mapping';
 
 /** Reconciles `desired` into the YAML node `node` in place. */
 export function reconcileNode(node: unknown, desired: unknown, policy: MergePolicy): void {
@@ -62,8 +69,27 @@ function reconcileMap(
   node.items = node.items.filter((item) => {
     const key = pairKey(item);
     if (key === undefined || hasDefined(desired, key)) return true;
-    return !deletable.has(key);
+
+    const shape = deletable.get(key);
+    if (shape === undefined) return true;
+
+    // `parseModelYml` ignores a managed key whose value has an unexpected
+    // shape (e.g. a scalar `meta:`), so it never reaches the desired state.
+    // Absence there means "the editor cannot read it", not "delete it".
+    return !matchesShape(isPair(item) ? item.value : undefined, shape);
   });
+}
+
+/** Whether a value node has the shape the parser recognizes for a managed key. */
+function matchesShape(value: unknown, shape: ManagedShape): boolean {
+  switch (shape) {
+    case 'string':
+      return isScalar(value) && typeof value.value === 'string';
+    case 'sequence':
+      return isSeq(value);
+    case 'mapping':
+      return isMap(value);
+  }
 }
 
 function reconcileSeq(
