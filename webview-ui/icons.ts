@@ -17,4 +17,5 @@ export {
   KeyRound,
   FlaskConical,
   FlaskConicalOff,
+  Trash2,
 } from 'lucide-react';

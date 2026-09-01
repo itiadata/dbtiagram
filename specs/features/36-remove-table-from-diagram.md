@@ -1,7 +1,7 @@
 ---
 id: 36
 title: Remove a table from the diagram
-status: approved
+status: implemented
 priority: high
 created: 2026-09-01
 owner: unassigned

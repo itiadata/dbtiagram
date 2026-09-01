@@ -6,6 +6,7 @@ import {
   filterGraph,
   matchesSearch,
   reconcileSelection,
+  removeModels,
   scopeSelectionToFile,
 } from '../../../src/shared/filter';
 import type { DiagramModelFile } from '../../../src/shared/protocol';
@@ -175,5 +176,37 @@ describe('scopeSelectionToFile', () => {
 
   it('returns null when there are no files at all', () => {
     expect(scopeSelectionToFile([], 'C:/repo/models/orders.yml')).toBeNull();
+  });
+});
+
+describe('removeModels', () => {
+  it('drops the named models', () => {
+    const result = removeModels(new Set(['orders', 'customers', 'items']), ['orders']);
+    expect(result).toEqual(new Set(['customers', 'items']));
+  });
+
+  it('ignores unknown names', () => {
+    const result = removeModels(new Set(['orders']), ['nope']);
+    expect(result).toEqual(new Set(['orders']));
+  });
+
+  it('does not mutate its input', () => {
+    const selected = new Set(['orders', 'customers']);
+    removeModels(selected, ['orders']);
+    expect(selected).toEqual(new Set(['orders', 'customers']));
+  });
+
+  it('removes several models at once', () => {
+    const result = removeModels(new Set(['a', 'b', 'c']), ['a', 'c']);
+    expect(result).toEqual(new Set(['b']));
+  });
+
+  it('hides a removed model from computeVisibleModels', () => {
+    const singleFile: DiagramModelFile[] = [
+      { uri: 'f', label: 'f', models: ['orders', 'customers'] },
+    ];
+    const selectedModels = removeModels(new Set(['orders', 'customers']), ['orders']);
+    const visible = computeVisibleModels(singleFile, new Set(['f']), selectedModels);
+    expect(visible).toEqual(new Set(['customers']));
   });
 });

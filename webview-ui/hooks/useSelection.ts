@@ -36,6 +36,8 @@ export interface SelectionState {
   clearPendingRename: () => void;
   /** Confirms a pending rename and drops selections whose entity vanished. */
   reconcileToGraph: (diagram: DiagramGraph) => void;
+  /** Clears the selection when it points at `model` (table or a column) (spec 36). */
+  clearSelectionForModel: (model: string) => void;
 }
 
 export function useSelection(): SelectionState {
@@ -133,6 +135,20 @@ export function useSelection(): SelectionState {
     });
   }, []);
 
+  // Spec 36: an explicit removal clears the selection when it points at the
+  // removed table (or one of its columns) — a deliberate exception to spec
+  // 06's "a filtered-out selection stays editable" rule.
+  const clearSelectionForModel = useCallback((model: string): void => {
+    const current = selectionRef.current;
+    const matches =
+      current !== null &&
+      ((current.kind === 'table' && current.id === model) ||
+        (current.kind === 'column' && current.model === model));
+    if (!matches) return;
+    setSelection(null);
+    setFocusedFk(null);
+  }, []);
+
   return {
     selection,
     focusedFk,
@@ -143,5 +159,6 @@ export function useSelection(): SelectionState {
     notePendingRename,
     clearPendingRename,
     reconcileToGraph,
+    clearSelectionForModel,
   };
 }

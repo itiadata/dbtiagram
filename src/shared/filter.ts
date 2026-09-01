@@ -104,6 +104,19 @@ export function scopeSelectionToFile(
 }
 
 /**
+ * The checked-model set with `names` removed (spec 36). Pure; never mutates
+ * `selected`. Names not present in `selected` are ignored.
+ */
+export function removeModels(
+  selected: ReadonlySet<string>,
+  names: readonly string[],
+): Set<string> {
+  const next = new Set(selected);
+  for (const name of names) next.delete(name);
+  return next;
+}
+
+/**
  * Keeps the nodes whose id is visible and the edges whose source AND target
  * are both visible (an edge to a hidden table is dropped, mirroring
  * `buildDiagram`'s own "only known targets" rule).

@@ -43,7 +43,7 @@ import { useSelection } from './hooks/useSelection';
 import { useSettings } from './hooks/useSettings';
 import { SidebarRail, SidebarResizer } from './SidebarChrome';
 import { SIDEBAR_DEFAULT_WIDTH } from './sidebar-constants';
-import { Settings, SavePlus, Save, SaveCheck, StickyNotePlus, Grid3x3, ChartNoAxesGantt, BetweenHorizontalStart } from './icons';
+import { Settings, SavePlus, Save, SaveCheck, StickyNotePlus, Grid3x3, ChartNoAxesGantt, BetweenHorizontalStart, Trash2 } from './icons';
 
 export function App(): JSX.Element {
   const [graph, setGraph] = useState<DiagramGraph | null>(null);
@@ -337,6 +337,25 @@ export function App(): JSX.Element {
     }
   }, [notes]);
 
+  // Spec 36: removal is filter-only — it unchecks the model in the sidebar
+  // and drops the selection if it pointed at the removed table; no
+  // `diagram:edit` message is posted, so no model.yml is written.
+  const onRemoveTable = useCallback(
+    (model: string): void => {
+      filter.removeModels([model]);
+      selection.clearSelectionForModel(model);
+    },
+    [filter, selection],
+  );
+
+  // Spec 36: Delete/Backspace removes the selected table; a no-op unless the
+  // current selection is a table (a selected column does not remove it).
+  const onRemoveSelectedTable = useCallback((): void => {
+    const current = selection.selection;
+    if (current === null || current.kind !== 'table') return;
+    onRemoveTable(current.id);
+  }, [selection.selection, onRemoveTable]);
+
   // Spec 15 (extended by spec 25): the table card's context menu is the same
   // whether opened from the header or a column row — only what "Reveal in
   // model.yml" reveals differs, based on whether `column` is given.
@@ -355,9 +374,10 @@ export function App(): JSX.Element {
           })),
         },
         { label: 'Edit fields matrix', icon: <Grid3x3 size={16} />, onSelect: () => fieldsMatrix.openForModel(model) },
+        { label: 'Remove from diagram', icon: <Trash2 size={16} />, onSelect: () => onRemoveTable(model) },
       ];
     },
-    [columnDisplay, onOpenModelSource, fieldsMatrix],
+    [columnDisplay, onOpenModelSource, fieldsMatrix, onRemoveTable],
   );
 
   const onColumnContextMenu = useCallback(
@@ -612,6 +632,7 @@ export function App(): JSX.Element {
                     onNoteNodeChanges={notes.applyNoteNodeChanges}
                     onPaneContextMenu={onPaneContextMenu}
                     onDeleteSelectedNotes={onDeleteSelectedNotes}
+                    onRemoveSelectedTable={onRemoveSelectedTable}
                     onAddNoteAt={onAddNoteAt}
                     onOpenFieldsMatrix={fieldsMatrix.openGlobal}
                     fkSource={fkPickedSource}                    fkCreateActive={fkCreate.state.active}

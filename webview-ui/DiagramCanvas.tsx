@@ -88,6 +88,8 @@ export interface DiagramCanvasProps {
   /** Right-click on empty canvas; opens the "Add note here" menu (spec 16). */
   onPaneContextMenu: (event: ReactMouseEvent, flowPoint: { x: number; y: number }) => void;
   onDeleteSelectedNotes: () => void;
+  /** Delete/Backspace on the canvas: removes the selected table (spec 36). */
+  onRemoveSelectedTable: () => void;
   /** Creates a note at the given flow point (spec 26's "Add note" toolbar button). */
   onAddNoteAt: (point: { x: number; y: number }) => void;
   /** Opens the global fields matrix (spec 27's toolbar button). */
@@ -123,6 +125,7 @@ export function DiagramCanvas({
   onNoteNodeChanges,
   onPaneContextMenu,
   onDeleteSelectedNotes,
+  onRemoveSelectedTable,
   onAddNoteAt,
   onOpenFieldsMatrix,
   fkSource,
@@ -416,8 +419,9 @@ export function DiagramCanvas({
         return;
       }
       onDeleteSelectedNotes();
+      onRemoveSelectedTable();
     },
-    [onDeleteSelectedNotes],
+    [onDeleteSelectedNotes, onRemoveSelectedTable],
   );
 
   const onPaneContextMenuInternal = useCallback(

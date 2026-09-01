@@ -10,6 +10,7 @@ import {
   computeVisibleModels,
   INITIAL_MODEL_SELECTION_LIMIT,
   reconcileSelection,
+  removeModels,
   scopeSelectionToFile,
 } from '../../src/shared/filter';
 import type { DiagramModelFile } from '../../src/shared/protocol';
@@ -37,6 +38,8 @@ export interface DiagramFilterState {
   clearFiles: () => void;
   selectAllModels: () => void;
   clearModels: () => void;
+  /** Unchecks these models, exactly as the sidebar checkbox would (spec 36). */
+  removeModels: (names: readonly string[]) => void;
   /** Adopts new host metadata, keeping the user's checked state (spec 05). */
   applyModelFiles: (files: DiagramModelFile[]) => void;
   /** Scopes to one model.yml unless a layout already won (spec 14). */
@@ -203,6 +206,13 @@ export function useDiagramFilter(): DiagramFilterState {
     setInitialCapNotice(null);
   }, []);
 
+  // Spec 36: removal is filter-only — the same effect as unchecking the model
+  // in the sidebar, including the refit-triggering filterTick bump.
+  const removeModelsCallback = useCallback((names: readonly string[]): void => {
+    setSelectedModels((current) => removeModels(current, names));
+    setFilterTick((tick) => tick + 1);
+  }, []);
+
   return {
     modelFiles,
     selectedFiles,
@@ -220,6 +230,7 @@ export function useDiagramFilter(): DiagramFilterState {
     clearFiles,
     selectAllModels,
     clearModels,
+    removeModels: removeModelsCallback,
     applyModelFiles,
     applyScope,
     applyLayoutTables,

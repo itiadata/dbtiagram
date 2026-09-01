@@ -70,7 +70,7 @@ including sticky notes (spec 16) and per-table/diagram-wide column-display modes
 | Path | Layer | Responsibility | Key exports |
 |------|-------|----------------|-------------|
 | `src/shared/protocol.ts` | shared | The **only** message contract between extension host and webview. | `MessageToWebview`, `MessageToExtension`, `DiagramModelFile`, `DiagramPendingError` |
-| `src/shared/filter.ts` | shared | File/model filtering and selection reconciliation for the filter sidebar, plus the initial model-selection cap for large workspaces (spec 35). | `filterGraph`, `computeVisibleModels`, `reconcileSelection`, `scopeSelectionToFile`, `matchesSearch`, `capInitialSelection`, `INITIAL_MODEL_SELECTION_LIMIT` |
+| `src/shared/filter.ts` | shared | File/model filtering and selection reconciliation for the filter sidebar, the initial model-selection cap for large workspaces (spec 35), and the pure `removeModels` unchecking helper for table removal (spec 36). | `filterGraph`, `computeVisibleModels`, `reconcileSelection`, `scopeSelectionToFile`, `matchesSearch`, `capInitialSelection`, `INITIAL_MODEL_SELECTION_LIMIT`, `removeModels` |
 | `src/shared/glob.ts` | shared | Minimal glob matching used for model file discovery patterns. | `matchesGlob`, `globToRegExp`, `normalizePathForGlob` |
 | `src/shared/labels.ts` | shared | Disambiguate display labels for files that share a base name. | `disambiguateFileLabels`, `FileLabelMap` |
 | `src/shared/openBehavior.ts` | shared | The "Open new diagrams" setting's type, default and UI option text (spec 23). | `OpenBehavior`, `DEFAULT_OPEN_BEHAVIOR`, `OpenBehaviorOption`, `OPEN_BEHAVIOR_OPTIONS` |
@@ -141,11 +141,11 @@ via `ExtensionContext.workspaceState` (spec 27). | `readMatrixColumnPrefs`, `wri
 | `webview-ui/styles.css` | webview | Webview styling, themed from VS Code CSS variables. | — |
 | `webview-ui/hooks/useHostMessages.ts` | webview | Subscribe to host → webview messages and dispatch to handlers. | `useHostMessages`, `HostMessageHandlers`, `DiagramUpdateMessage`, `LayoutApplyMessage`, `LayoutActiveMessage` |
 | `webview-ui/hooks/useSettings.ts` | webview | Settings overlay state: current `OpenBehavior`, open/close, and posting `settings:setOpenBehavior` (spec 23). | `useSettings`, `SettingsState` |
-| `webview-ui/hooks/useSelection.ts` | webview | Current model/column selection state. | `useSelection`, `Selection`, `SelectionState` |
+| `webview-ui/hooks/useSelection.ts` | webview | Current model/column selection state, including clearing the selection when its table is explicitly removed from the diagram (spec 36). | `useSelection`, `Selection`, `SelectionState` |
 | `webview-ui/hooks/useContextMenu.ts` | webview | Open/close state (point + items) for the shared context menu (spec 15). | `useContextMenu`, `ContextMenuState` |
 | `webview-ui/hooks/useRevealModel.ts` | webview | "Reveal in diagram" target state and callback (spec 15). | `useRevealModel`, `RevealTarget`, `RevealModelState` |
 | `webview-ui/hooks/useNotes.ts` | webview | Sticky note state: persisted notes, runtime collapse map, node projection, mutations (spec 16). | `useNotes`, `NotesState` |
-| `webview-ui/hooks/useDiagramFilter.ts` | webview | Filter sidebar state on top of `src/shared/filter.ts`, including the one-time initial model-selection cap and its popup notice for large workspaces (spec 35). | `useDiagramFilter`, `DiagramFilterState`, `InitialCapNotice` |
+| `webview-ui/hooks/useDiagramFilter.ts` | webview | Filter sidebar state on top of `src/shared/filter.ts`, including the one-time initial model-selection cap and its popup notice for large workspaces (spec 35), and unchecking models for table removal (spec 36). | `useDiagramFilter`, `DiagramFilterState`, `InitialCapNotice` |
 | `webview-ui/hooks/useDraftForeignKeys.ts` | webview | Track in-progress FK edits that are not yet persistable. | `useDraftForeignKeys`, `DraftForeignKeysState` |
 | `webview-ui/hooks/useEdgeHighlighting.ts` | webview | Hover/selection highlighting of FK edges and handle dots. | `useEdgeHighlighting`, `EdgeHighlightingState` |
 | `webview-ui/hooks/useColumnDisplay.ts` | webview | React state wrapper around `column-display-state.ts`: the diagram default, per-table overrides, effective-mode lookup, and seeding from an opened layout (spec 24). | `useColumnDisplay`, `ColumnDisplayHookState` |
