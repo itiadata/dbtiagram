@@ -5,8 +5,8 @@
 
 export type OpenBehavior = 'newTab' | 'splitTab' | 'reuseWindow' | 'newWindow';
 
-/** Matches today's behavior (spec 14) exactly until a user opens settings. */
-export const DEFAULT_OPEN_BEHAVIOR: OpenBehavior = 'splitTab';
+/** Default is "always separate window" (spec 23 fix). */
+export const DEFAULT_OPEN_BEHAVIOR: OpenBehavior = 'newWindow';
 
 export interface OpenBehaviorOption {
   value: OpenBehavior;
@@ -23,7 +23,7 @@ export const OPEN_BEHAVIOR_OPTIONS: readonly OpenBehaviorOption[] = [
   {
     value: 'splitTab',
     label: 'Split and new tab',
-    description: 'Opens beside the last focused tab (default, current behavior).',
+    description: 'Opens beside the last focused tab.',
   },
   {
     value: 'reuseWindow',
@@ -34,6 +34,6 @@ export const OPEN_BEHAVIOR_OPTIONS: readonly OpenBehaviorOption[] = [
   {
     value: 'newWindow',
     label: 'Always separate window',
-    description: 'Every diagram always opens in its own new window.',
+    description: 'Every diagram always opens in its own new window (default).',
   },
 ];

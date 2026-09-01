@@ -20,7 +20,7 @@ describe('OPEN_BEHAVIOR_OPTIONS', () => {
 });
 
 describe('DEFAULT_OPEN_BEHAVIOR', () => {
-  it('matches spec 14 current behavior (splitTab)', () => {
-    expect(DEFAULT_OPEN_BEHAVIOR).toBe('splitTab');
+  it('defaults to always opening a separate window', () => {
+    expect(DEFAULT_OPEN_BEHAVIOR).toBe('newWindow');
   });
 });

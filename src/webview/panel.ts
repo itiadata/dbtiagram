@@ -160,7 +160,7 @@ export class DiagramPanel {
     }
 
     // Where the new tab/window lands is governed by dbtiagram.openBehavior
-    // (spec 23); the default (`splitTab`) matches spec 14's fixed behavior.
+    // (spec 23); the default is `newWindow` (always a separate window).
     const placement = resolvePlacement(DiagramPanel.openBehavior());
     const panel = vscode.window.createWebviewPanel(
       DiagramPanel.viewType,

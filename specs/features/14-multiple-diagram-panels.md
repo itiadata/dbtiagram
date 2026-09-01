@@ -328,5 +328,5 @@ And opening order-marts.dbtiagram.yml from the editor title bar reveals that
   visible in a narrow tab, the OS taskbar, or Alt-Tab — this matters more once
   spec 23 lets diagrams open in their own separate window.
 - **(b) superseded.** Placement is no longer always `ViewColumn.Beside`; spec
-  23's `dbtiagram.openBehavior` setting governs it (`splitTab` remains the
-  default, matching this note's original intent).
+  23's `dbtiagram.openBehavior` setting governs it (default changed to
+  `newWindow` — see spec 23's addendum).

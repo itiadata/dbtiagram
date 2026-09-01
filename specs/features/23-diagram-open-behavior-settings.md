@@ -201,7 +201,7 @@ Then both of their settings panels show the new value if reopened
 
 | Path | Action | Responsibility |
 |------|--------|----------------|
-| `package.json` | modify | Add `dbtiagram.openBehavior` configuration property (`enum`, default `"splitTab"`). |
+| `package.json` | modify | Add `dbtiagram.openBehavior` configuration property (`enum`, default `"newWindow"`). |
 | `src/shared/openBehavior.ts` | create | Pure shared type + label/description text for the four options. |
 | `src/shared/protocol.ts` | modify | Add `settings:current` (host→webview) and `settings:setOpenBehavior` (webview→host) messages. |
 | `src/vscode/openBehaviorWindows.ts` | create | vscode-facing: tracks this extension's separate-window tab groups and resolves where a new panel should be created for a given `OpenBehavior` (`resolvePlacement`). Wraps `tabGroups.all` + `moveEditorToNewWindow`. |
@@ -271,8 +271,8 @@ export function SettingsPanel(props: SettingsPanelProps): JSX.Element;
 
 ### Behavior notes
 
-- **Default** is `splitTab`, matching current behavior exactly — installing
-  this feature changes nothing for existing users until they open settings.
+- **Default** is `newWindow` (always a separate window) — see the "Default
+  changed to `newWindow`" addendum below.
 - **Reveal-existing-tab always wins** (spec 14): `resolvePlacement` is
   consulted only in `DiagramPanel.createOrShow`'s "no existing panel for this
   key" branch; the existing-panel branch is untouched.
@@ -344,6 +344,22 @@ thin wrapper. Flag this split back to the user if it changes the Files table.
   `DiagramPanel.createOrShow` — the existing-panel branch is unchanged.
 - `src/dbt/*` and `src/diagram/*` — unaffected.
 - The default `ViewColumn.Beside` behavior for users who never open settings.
+
+## Addendum: default changed to `newWindow`
+
+Following user feedback, the default value of `dbtiagram.openBehavior`
+changed from `splitTab` to `newWindow` ("Always separate window"). Every new
+install (and every existing install that never explicitly set the setting)
+now opens diagrams in their own separate OS window by default. Users who
+already set the setting explicitly (including to `splitTab`) are unaffected,
+since VS Code only applies a configuration `default` when no value is stored.
+
+Files touched: `package.json` (`default`), `src/shared/openBehavior.ts`
+(`DEFAULT_OPEN_BEHAVIOR`, and the now-inaccurate "(default, current
+behavior)" wording removed from the `splitTab` option's description, plus
+"(default)" added to `newWindow`'s), `src/webview/panel.ts` (comment only),
+`test/unit/shared/openBehavior.test.ts` (assertion updated).
+
 
 ## Acceptance Criteria
 
