@@ -21,6 +21,19 @@ export class ModelYmlParseError extends Error {
   }
 }
 
+/**
+ * Raised when a YAML file is well-formed but simply isn't a dbt model.yml
+ * (no top-level "models" key at all — e.g. a `sources.yml`). Callers treat
+ * this distinctly from `ModelYmlParseError`: the file is silently skipped
+ * rather than surfaced as a "waiting for valid YAML" error.
+ */
+export class NotAModelYmlFileError extends ModelYmlParseError {
+  constructor(source: string) {
+    super(source, 'File has no top-level "models" array; not a dbt model.yml');
+    this.name = 'NotAModelYmlFileError';
+  }
+}
+
 /** Parses the content of a model.yml file into a `ModelYmlFile`. */
 export function parseModelYml(content: string, source = '<unknown>'): ModelYmlFile {
   let raw: unknown;
@@ -36,6 +49,10 @@ export function parseModelYml(content: string, source = '<unknown>'): ModelYmlFi
 
   const record = raw;
   const models = record.models;
+
+  if (models === undefined) {
+    throw new NotAModelYmlFileError(source);
+  }
 
   if (!Array.isArray(models)) {
     throw new ModelYmlParseError(source, 'model.yml is missing the required "models" array');

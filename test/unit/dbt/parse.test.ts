@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { ModelYmlParseError, parseModelYml } from '../../../src/dbt/parse';
+import { ModelYmlParseError, NotAModelYmlFileError, parseModelYml } from '../../../src/dbt/parse';
 import { serializeModelYml } from '../../../src/dbt/serialize';
 
 const SAMPLE = `version: 2
@@ -93,8 +93,12 @@ models:
     expect(() => parseModelYml('::: not yaml', 'bad.yml')).toThrow(ModelYmlParseError);
   });
 
-  it('throws ModelYmlParseError when models is missing', () => {
-    expect(() => parseModelYml('version: 2')).toThrow(ModelYmlParseError);
+  it('throws NotAModelYmlFileError when models key is absent', () => {
+    expect(() => parseModelYml('version: 2')).toThrow(NotAModelYmlFileError);
+  });
+
+  it('throws ModelYmlParseError when models is present but not an array', () => {
+    expect(() => parseModelYml('models: not-an-array')).toThrow(ModelYmlParseError);
   });
 
   it('throws ModelYmlParseError for models without a name', () => {

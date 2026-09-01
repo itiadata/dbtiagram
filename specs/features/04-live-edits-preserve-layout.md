@@ -383,3 +383,29 @@ confirmation at approval time:
   Auto-layout only — not on ordinary edits.
 - **(e) Error surfacing.** Modal `showWarningMessage` calls for model-file parse
   failures are replaced by the non-modal `pendingErrors` banner in the diagram.
+
+## Addendum: ignore non-model YAML files; collapsible banner
+
+Two follow-up fixes, both scoped to the parse-failure path introduced above:
+
+- **Non-model YAML files are ignored, not reported.** A YAML file with no
+  top-level `models` key at all (e.g. a dbt `sources.yml`, `exposures.yml`, or
+  any other schema file living under `models/`) is silently skipped instead of
+  appearing in the "Waiting for valid YAML" banner. `src/dbt/parse.ts` raises a
+  distinct `NotAModelYmlFileError` (extends `ModelYmlParseError`) for this case;
+  `src/vscode/project.ts::loadModelYmlFiles` and
+  `src/dbt/modelStore.ts::applyTextChange` special-case it to skip/drop the
+  file rather than adding it to `failures`/`pendingErrors`. A YAML file whose
+  `models` key is present but the wrong type (e.g. `models: "foo"`) still
+  reports the original "model.yml is missing the required "models" array"
+  error, since that is a genuine model.yml mistake, not an unrelated schema
+  file.
+- **The banner is collapsible.** `webview-ui/App.tsx` adds a
+  `pendingErrorsExpanded` boolean (default collapsed/`false`). Collapsed shows
+  only the first pending error plus a count and a "Show all" toggle; expanded
+  shows the full list with a "Collapse" toggle. The toggle only renders when
+  there is more than one pending error.
+
+Files touched: `src/dbt/parse.ts` (`NotAModelYmlFileError`),
+`src/vscode/project.ts`, `src/dbt/modelStore.ts`, `webview-ui/App.tsx`,
+`webview-ui/styles.css` (`.banner__header`, `.banner__toggle`).

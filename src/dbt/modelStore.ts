@@ -8,7 +8,7 @@
  * tracked in `pendingErrors` while their **last good** record stays in
  * `records`, so a mid-edit (as-you-type) YAML slip never blanks the diagram.
  */
-import { ModelYmlParseError, parseModelYml } from './parse';
+import { ModelYmlParseError, NotAModelYmlFileError, parseModelYml } from './parse';
 import type { ModelDefinition, ModelYmlFile } from './types';
 
 /** A parsed model.yml file keyed by its file-system path. */
@@ -67,6 +67,11 @@ export function applyTextChange(store: ModelStore, uri: string, content: string)
   try {
     return upsertRecord(store, uri, parseModelYml(content, uri));
   } catch (err) {
+    if (err instanceof NotAModelYmlFileError) {
+      // Not a dbt model.yml (e.g. sources.yml with no "models" key): drop any
+      // stale record/pending error for it and ignore silently (spec 04).
+      return applyFileDeleted(store, uri);
+    }
     const message = err instanceof ModelYmlParseError ? err.message : String(err);
     const pendingErrors = new Map(store.pendingErrors);
     pendingErrors.set(uri, message);

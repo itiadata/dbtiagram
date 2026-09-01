@@ -95,6 +95,21 @@ describe('modelStore', () => {
     expect(store.pendingErrors.size).toBe(0);
   });
 
+  it('applyTextChange silently ignores a YAML file with no "models" key', () => {
+    const store = applyTextChange(createModelStore(), '/a/sources.yml', 'sources:\n  - name: raw\n');
+    expect(store.records).toEqual([]);
+    expect(store.pendingErrors.size).toBe(0);
+  });
+
+  it('applyTextChange drops a stale record if a valid model.yml is edited to remove "models"', () => {
+    let store = applyTextChange(createModelStore(), '/a/orders.yml', ORDERS_YML);
+    expect(store.records).toHaveLength(1);
+
+    store = applyTextChange(store, '/a/orders.yml', 'sources:\n  - name: raw\n');
+    expect(store.records).toEqual([]);
+    expect(store.pendingErrors.size).toBe(0);
+  });
+
   it('applyTextChange on a brand-new broken file leaves no record', () => {
     const store = applyTextChange(createModelStore(), '/a/new.yml', BROKEN_YML);
     expect(store.records).toEqual([]);

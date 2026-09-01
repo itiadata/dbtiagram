@@ -3,7 +3,7 @@
  * This module is the ONLY place that reads/writes workspace files.
  */
 import * as vscode from 'vscode';
-import { parseModelYml, ModelYmlParseError } from '../dbt/parse';
+import { parseModelYml, ModelYmlParseError, NotAModelYmlFileError } from '../dbt/parse';
 import { serializeModelYml } from '../dbt/serialize';
 import { mergeModelYml } from '../dbt/merge';
 import { isLayoutFilePath } from '../diagram/layoutFile';
@@ -52,6 +52,11 @@ export async function loadModelYmlFiles(glob = '**/models/**/*.yml'): Promise<Mo
       const content = await readFileText(uri);
       records.push({ uri, file: parseModelYml(content, uri.fsPath) });
     } catch (err) {
+      // Non-model YAML files (e.g. sources.yml with no "models" key) are
+      // silently ignored rather than reported as parse failures (spec 04).
+      if (err instanceof NotAModelYmlFileError) {
+        continue;
+      }
       const message =
         err instanceof ModelYmlParseError
           ? err.message
