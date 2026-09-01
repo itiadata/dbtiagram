@@ -36,11 +36,17 @@ function findReuseTarget(): vscode.TabGroup | undefined {
   return trackedGroups[0];
 }
 
-/** The tab group a just-created/moved webview panel now belongs to, if found. */
-function findGroupForPanel(panel: vscode.WebviewPanel): vscode.TabGroup | undefined {
+/**
+ * The tab group holding a webview panel in `viewColumn`, if found.
+ *
+ * Takes the column rather than the panel because the one caller that runs
+ * during teardown (`untrackPanel`) has only a DISPOSED panel to hand, and
+ * `WebviewPanel.viewColumn` throws "Webview is disposed" once that happens.
+ */
+function findGroupForColumn(viewColumn: vscode.ViewColumn): vscode.TabGroup | undefined {
   return vscode.window.tabGroups.all.find(
     (group) =>
-      group.viewColumn === panel.viewColumn &&
+      group.viewColumn === viewColumn &&
       group.tabs.some((tab) => tab.input instanceof vscode.TabInputWebview),
   );
 }
@@ -78,7 +84,7 @@ export function resolvePlacement(behavior: OpenBehavior): PanelPlacement {
             // Older VS Code builds may not have this command; degrade silently.
           }
           if (decision.shouldTrack) {
-            const group = findGroupForPanel(panel);
+            const group = findGroupForColumn(panel.viewColumn ?? vscode.ViewColumn.Active);
             if (group !== undefined) {
               trackedGroups.push(group);
             }
@@ -88,9 +94,19 @@ export function resolvePlacement(behavior: OpenBehavior): PanelPlacement {
   }
 }
 
-/** Forgets a tracked window (panel disposed / group no longer found). */
-export function untrackPanel(panel: vscode.WebviewPanel): void {
-  const group = findGroupForPanel(panel);
+/**
+ * Forgets a tracked window (panel disposed / group no longer found).
+ *
+ * Callers must pass the column captured while the panel was still ALIVE:
+ * `DiagramPanel.dispose` runs after `onDidDispose`, and may additionally await
+ * a save prompt first, so reading `panel.viewColumn` at that point throws
+ * "Webview is disposed" and the untrack silently never happened.
+ */
+export function untrackPanel(viewColumn: vscode.ViewColumn | undefined): void {
+  if (viewColumn === undefined) {
+    return;
+  }
+  const group = findGroupForColumn(viewColumn);
   if (group === undefined) {
     return;
   }

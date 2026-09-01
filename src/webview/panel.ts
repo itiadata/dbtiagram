@@ -70,6 +70,12 @@ export class DiagramPanel {
   private source: DiagramSource;
   private key: string;
   private readonly workspaceState: vscode.Memento;
+  /**
+   * The panel's last known column, mirrored because `panel.viewColumn` throws
+   * "Webview is disposed" from `onDidDispose` onwards - which is exactly when
+   * `dispose` needs it to untrack a reuse window (spec 23).
+   */
+  private lastViewColumn: vscode.ViewColumn | undefined;
 
   private constructor(
     panel: vscode.WebviewPanel,
@@ -108,6 +114,17 @@ export class DiagramPanel {
     );
 
     panel.onDidDispose(() => void this.dispose(), undefined, this.disposables);
+
+    // Keep the mirrored column fresh: the user can drag the tab to another
+    // group at any time, and by dispose-time the getter is unreadable.
+    this.lastViewColumn = panel.viewColumn;
+    panel.onDidChangeViewState(
+      () => {
+        this.lastViewColumn = panel.viewColumn;
+      },
+      undefined,
+      this.disposables,
+    );
 
     // Spec 23: every open panel's settings overlay reflects the newest value
     // as soon as any of them changes it.
@@ -460,6 +477,8 @@ export class DiagramPanel {
   }
 
   private async dispose(): Promise<void> {
+    // The panel is already disposed by the time this runs, so the untrack
+    // below uses the mirrored column rather than reading `panel.viewColumn`.
     // Spec 22: this panel is a plain WebviewPanel, so `onDidDispose` fires
     // after the tab has already closed — there is no way to block the close
     // pending user input. This modal is the closest available approximation:
@@ -488,7 +507,7 @@ export class DiagramPanel {
     if (DiagramPanel.panels.get(this.key) === this) {
       DiagramPanel.panels.delete(this.key);
     }
-    untrackPanel(this.panel);
+    untrackPanel(this.lastViewColumn);
     for (const disposable of this.disposables) {
       disposable.dispose();
     }

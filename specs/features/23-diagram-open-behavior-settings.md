@@ -239,8 +239,15 @@ export interface PanelPlacement {
   afterCreate: (panel: vscode.WebviewPanel) => Promise<void>;
 }
 export function resolvePlacement(behavior: OpenBehavior): PanelPlacement;
-/** Forgets a tracked window (panel disposed / group no longer found). */
-export function untrackPanel(panel: vscode.WebviewPanel): void;
+/**
+ * Forgets a tracked window (panel disposed / group no longer found).
+ *
+ * Takes the COLUMN, not the panel: `dispose` runs from `onDidDispose`, where
+ * `WebviewPanel.viewColumn` throws "Webview is disposed". `DiagramPanel`
+ * mirrors the column into `lastViewColumn` (kept fresh via
+ * `onDidChangeViewState`) and passes that value here.
+ */
+export function untrackPanel(viewColumn: vscode.ViewColumn | undefined): void;
 
 // webview-ui/hooks/useSettings.ts (webview)
 export interface SettingsState {
