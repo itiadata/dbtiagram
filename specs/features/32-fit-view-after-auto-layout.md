@@ -121,32 +121,53 @@ export function shouldRunPendingFit(nodesInitialized: boolean, fitPending: boole
 
    The inline `void fitView(...)` on that line is removed. No other line of the
    adopt effect changes, and its dependency array is unchanged.
-2. Add a new effect immediately after the adopt effect:
+2. Add a new effect immediately after the adopt effect. The owed fit must wait
+   until React Flow has **measured** the new cards, not merely until the new
+   node list is committed:
 
    ```ts
    useEffect(() => {
      if (!shouldRunPendingFit(nodesInitialized, pendingFitRef.current)) return;
      pendingFitRef.current = false;
-     const timer = setTimeout(() => {
-       void fitView();
-     }, 0);
-     return () => clearTimeout(timer);
-   }, [rfNodes, nodesInitialized, fitView]);
+     let attempts = 0;
+     const runWhenMeasured = (): void => {
+       const nodes = getNodes();
+       const allMeasured =
+         nodes.length > 0 &&
+         nodes.every(
+           (node) => node.measured?.width !== undefined && node.measured.height !== undefined,
+         );
+       if (allMeasured || attempts >= MAX_FIT_WAIT_FRAMES) {
+         pendingFitFrameRef.current = undefined;
+         void fitView();
+         return;
+       }
+       attempts += 1;
+       pendingFitFrameRef.current = requestAnimationFrame(runWhenMeasured);
+     };
+     pendingFitFrameRef.current = requestAnimationFrame(runWhenMeasured);
+   }, [rfNodes, nodesInitialized, fitView, getNodes]);
    ```
 
-   Keying on `rfNodes` is what buys the deferral: the effect runs after the new
-   node list has been committed and pushed into React Flow's store. That alone
-   still runs inside the same commit that applied the new positions, before
-   React Flow's internal store/DOM have fully settled — which produces a
-   measurably different padding/zoom than a user clicking the Controls "Fit
-   View" button afterward. Wrapping the actual `fitView()` call in
-   `setTimeout(..., 0)` pushes it into a fresh macrotask, after the current
-   render cycle has completely flushed, so it reproduces exactly what a manual
-   click does. `fitView()` is called with no arguments (not the
-   `{ padding: 0.15, maxZoom: 1 }` used elsewhere) because that is what the
-   Controls button itself passes — `<Controls>` forwards its own
-   `fitViewOptions` prop, which this app leaves unset, not the one passed to
+   Rationale: after Auto-layout the adopt effect replaces `rfNodes` with brand
+   new node objects from `buildFlowElements` that carry no measured dimensions,
+   while `useNodesInitialized` is still stale-`true` from the previous node set.
+   Fitting at that point measures the cards at their fallback sizes, producing
+   bounds that are too small and a viewport noticeably more zoomed in than the
+   Controls "Fit View" button. Polling frames until every node reports
+   `measured.width`/`measured.height` reproduces the exact state the canvas is
+   in when the user clicks Fit View manually. `MAX_FIT_WAIT_FRAMES` (120, ~2s)
+   caps the wait so a never-measuring node cannot leave the fit pending forever.
+
+   `fitView()` takes no arguments (not `{ padding: 0.15, maxZoom: 1 }`) because
+   that is what the Controls button passes — `<Controls>` forwards its own
+   `fitViewOptions` prop, which this app leaves unset, not the one given to
    `<ReactFlow>`.
+
+   The frame handle lives in `pendingFitFrameRef` and is cancelled only on
+   unmount, never as this effect's own cleanup: the measurement updates being
+   waited on themselves change `rfNodes`, and a per-run cleanup would cancel the
+   very fit they are supposed to trigger.
 3. `pendingFitRef` is a ref, not state, so setting it never causes a render; the
    `rfNodes` change that the adopt effect already causes is what schedules the
    consuming effect. When the adopt effect requests a fit without changing

@@ -50,6 +50,10 @@ const nodeTypes: NodeTypes = { table: TableNode, note: NoteNode };
 // The obstacle-aware FK edge (spec 12) — it draws the routed polyline.
 const edgeTypes: EdgeTypes = { [FK_EDGE_TYPE]: FkEdge };
 
+// Upper bound on how many frames the spec 32 owed fit waits for React Flow to
+// measure every card before fitting anyway (~2s at 60fps).
+const MAX_FIT_WAIT_FRAMES = 120;
+
 export interface DiagramCanvasProps {
   flow: FlowElements;
   edges: Edge[];
@@ -126,7 +130,7 @@ export function DiagramCanvas({
   onStartFkCreate,
   onCancelFkCreate,
 }: DiagramCanvasProps): JSX.Element {
-  const { fitView, setCenter, getZoom, screenToFlowPosition } = useReactFlow();
+  const { fitView, setCenter, getZoom, getNodes, screenToFlowPosition } = useReactFlow();
   const containerRef = useRef<HTMLDivElement | null>(null);
   // Seed the node list from the current flow so the first paint already has
   // full node rects (the live edge pass runs during render, before the adopt
@@ -142,7 +146,7 @@ export function DiagramCanvas({
   // before any child's `stopPropagation`. Read only by the corrective fit.
   const userInteractedRef = useRef(false);
   const pendingFitRef = useRef(false);
-  const pendingFitTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const pendingFitFrameRef = useRef<number | undefined>(undefined);
   const nodesInitialized = useNodesInitialized();
 
   // Adopt each new diagram without disturbing the layout: existing nodes keep
@@ -188,35 +192,57 @@ export function DiagramCanvas({
   }, [flow, layoutTick, filterTick, seedTick, seedPositions, fitView]);
 
   // Spec 32: deferred fit — the adopt effect sets `pendingFitRef` instead of
-  // calling `fitView` inline. `rfNodes` alone is not enough of a delay: this
-  // effect can still run within the same commit that just applied the new
-  // positions, before React Flow's internal store/DOM have fully settled,
-  // which measurably (a few px of padding/zoom) differs from a user clicking
-  // the Controls "Fit View" button afterward. Deferring the actual call to a
-  // fresh macrotask (`setTimeout(0)`) makes it run exactly like that manual
-  // click — after the current render cycle has completely flushed — so the
-  // result matches pixel-for-pixel.
+  // calling `fitView` inline.
   //
-  // The timer is tracked in a ref rather than returned as this effect's own
-  // cleanup: a dimension-measurement update commonly changes `rfNodes` again
-  // right after auto-layout (as React Flow reports each card's measured
-  // size), which would re-run this effect and — if the timer were cleared in
-  // a per-run cleanup — cancel the pending fit before it ever fires, since
-  // `pendingFitRef.current` is already false on that later run. The timer is
-  // only ever cleared on unmount.
+  // Simply deferring by one commit (or one macrotask) is not enough. After
+  // Auto-layout the adopt effect replaces `rfNodes` with brand-new node
+  // objects straight from `buildFlowElements`, which carry no measured
+  // dimensions yet, while `useNodesInitialized` is still stale-`true` from the
+  // previous node set. Fitting at that moment measures the cards at their
+  // fallback sizes — smaller than the real rendered cards — so the bounds come
+  // out too small and the result is noticeably more zoomed in than the
+  // Controls "Fit View" button gives.
+  //
+  // So the owed fit waits, frame by frame, until React Flow reports a measured
+  // width/height for every current node, and only then fits. That is exactly
+  // the state the canvas is in when the user clicks Fit View manually, so the
+  // two produce the same viewport. `fitView()` is called with no arguments for
+  // the same reason: `<Controls>` forwards its own (unset) `fitViewOptions`.
+  //
+  // The frame handle lives in a ref cleared only on unmount — never as this
+  // effect's own cleanup, because the measurement updates we are waiting for
+  // change `rfNodes` and would otherwise cancel the very fit they should
+  // trigger.
   useEffect(() => {
     if (!shouldRunPendingFit(nodesInitialized, pendingFitRef.current)) return;
     pendingFitRef.current = false;
-    pendingFitTimerRef.current = setTimeout(() => {
-      pendingFitTimerRef.current = undefined;
-      void fitView();
-    }, 0);
-  }, [rfNodes, nodesInitialized, fitView]);
+
+    let attempts = 0;
+    const runWhenMeasured = (): void => {
+      const nodes = getNodes();
+      const allMeasured =
+        nodes.length > 0 &&
+        nodes.every(
+          (node) =>
+            node.measured?.width !== undefined && node.measured.height !== undefined,
+        );
+      // Bail out after ~2s of frames so a node that never measures (e.g. one
+      // rendered with zero size) can't leave the fit permanently pending.
+      if (allMeasured || attempts >= MAX_FIT_WAIT_FRAMES) {
+        pendingFitFrameRef.current = undefined;
+        void fitView();
+        return;
+      }
+      attempts += 1;
+      pendingFitFrameRef.current = requestAnimationFrame(runWhenMeasured);
+    };
+    pendingFitFrameRef.current = requestAnimationFrame(runWhenMeasured);
+  }, [rfNodes, nodesInitialized, fitView, getNodes]);
 
   useEffect(
     () => () => {
-      if (pendingFitTimerRef.current !== undefined) {
-        clearTimeout(pendingFitTimerRef.current);
+      if (pendingFitFrameRef.current !== undefined) {
+        cancelAnimationFrame(pendingFitFrameRef.current);
       }
     },
     [],
