@@ -1,7 +1,7 @@
 ---
 id: 35
 title: Cap the initial model selection for large workspaces
-status: done
+status: implemented
 priority: medium
 created: 2026-09-01
 owner: unassigned
@@ -61,6 +61,15 @@ remain the way the user changes the selection afterward.
 - Reopening the diagram (a new panel/webview instance) re-evaluates the cap
   and can show the popup again, consistent with spec 05's filter selection
   already resetting on reopen.
+- **The per-file scope path (spec 14)**: a diagram opened from a single
+  model.yml's editor-title button arrives scoped to just that file (`filter:scope`
+  narrows `selectedFiles`/`selectedModels` to exactly that file's models,
+  overriding whatever `diagram:update` just seeded). When **that file alone**
+  defines more than 20 models, the same cap and popup apply to it — the shown
+  count is scoped to the file's own total, not the workspace-wide total, since
+  that is what the user is actually looking at. A workspace-level popup a
+  moment earlier is superseded (cleared) by the scope-level decision so the
+  user never sees a stale/incorrect count.
 
 **Out of scope**
 
@@ -126,6 +135,25 @@ Then the fresh panel again shows only the first 20 models checked
 And the popup appears again
 ```
 
+### A single big model.yml file opened via its editor button is also capped
+
+```
+Given a model.yml file that alone defines 30 models, opened via its editor-title button (spec 14 scoping)
+When the dbt Diagram opens
+Then the diagram is scoped to that one file (its checkbox checked, all others unchecked) as spec 14 already does
+And only the first 20 of that file's 30 models start checked
+And the popup reads something like "Showing 20 of 30 models — use the Filter section in the sidebar to change which models are loaded."
+```
+
+### Scoping to a small file clears a workspace-level cap notice
+
+```
+Given a workspace with 47 models total, where the file the user opens defines only 10 of them
+When the dbt Diagram opens via that file's editor-title button
+Then the diagram is scoped to that file and all 10 of its models are checked
+And no popup is shown (or a workspace-level one that briefly appeared is dismissed), since the file the user is actually looking at is under the cap
+```
+
 ## Implementation Plan
 
 ### Files
@@ -134,7 +162,7 @@ And the popup appears again
 |------|--------|----------------|
 | `src/shared/filter.ts` | modify | Add `INITIAL_MODEL_SELECTION_LIMIT` and pure `capInitialSelection` helper. |
 | `test/unit/shared/filter.test.ts` | modify | Unit tests for `capInitialSelection`. |
-| `webview-ui/hooks/useDiagramFilter.ts` | modify | On the first-ever `applyModelFiles` call, seed `selectedModels` via `capInitialSelection` when the total exceeds the limit, and expose an `initialCapNotice` + `dismissInitialCapNotice`. |
+| `webview-ui/hooks/useDiagramFilter.ts` | modify | On the first-ever `applyModelFiles` call, seed `selectedModels` via `capInitialSelection` when the total exceeds the limit, and expose an `initialCapNotice` + `dismissInitialCapNotice`. Also apply the same cap inside `applyScope` (spec 14's per-file scoping), against that file's own model count, since scoping supersedes the workspace-wide seed. |
 | `webview-ui/Toast.tsx` | create | Small presentational auto-dismissing popup component. |
 | `webview-ui/App.tsx` | modify | Render `<Toast>` when `filter.initialCapNotice` is set. |
 | `webview-ui/styles.css` | modify | `.toast` styles (fixed position, dark-theme aware, dismiss button). |
@@ -219,6 +247,23 @@ export function Toast(props: ToastProps): JSX.Element;
   timer, which is a one-line effect — no dedicated pure module needed).
 - **No protocol change.** The host is untouched; `diagram:update` keeps sending
   the full graph and `modelFiles` exactly as spec 05 defined.
+- **Scope supersedes the workspace-wide seed.** `applyScope` (spec 14) always
+  runs, when it runs, strictly after `applyModelFiles` in the same startup
+  sequence (`webview:ready` triggers `this.publish()` then `this.publishScope()`
+  host-side, in that order). Because it unconditionally overwrites
+  `selectedFiles`/`selectedModels` to exactly the one scoped file's models, any
+  cap decision `applyModelFiles` made moments earlier is about to be replaced
+  regardless — so `applyScope` must make its **own** cap decision against the
+  scoped file's own model count (not the workspace total), and must
+  unconditionally set (or clear, when the file is under the limit)
+  `initialCapNotice` itself rather than leaving whatever `applyModelFiles` set.
+  This is what fixes the manual-verify regression: previously `applyScope`
+  always checked every model of the scoped file with no cap, silently undoing
+  `applyModelFiles`'s cap while its popup stayed on screen.
+- **No extra one-time guard needed for `applyScope`.** The host only sends
+  `filter:scope` once per panel lifetime (constructor + the `webview:ready`
+  re-send race guard, both gated on `source.kind === 'model'`), so `applyScope`
+  naturally runs at most once per webview instance.
 
 ### Tests
 

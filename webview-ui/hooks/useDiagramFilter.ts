@@ -118,12 +118,27 @@ export function useDiagramFilter(): DiagramFilterState {
   // Spec 14: this tab was opened from a single model.yml, so it starts showing
   // only that file's models. A layout always wins, and an unknown file leaves
   // spec 05's all-checked default alone.
+  //
+  // Spec 35: this always runs strictly after `applyModelFiles` in the startup
+  // sequence and unconditionally overwrites the model selection, so whatever
+  // cap decision `applyModelFiles` made a moment earlier is about to be
+  // replaced regardless. The cap must therefore be re-decided here, against
+  // the scoped file's own model count (not the workspace total) — and the
+  // notice explicitly set or cleared, rather than leaving `applyModelFiles`'s
+  // (possibly now-irrelevant) notice on screen.
   const applyScope = useCallback((uri: string): void => {
     if (layoutAppliedRef.current) return;
     const scoped = scopeSelectionToFile(modelFilesRef.current, uri);
     if (scoped === null) return;
     setSelectedFiles(scoped.files);
-    setSelectedModels(scoped.models);
+    const scopedNames = [...scoped.models];
+    if (scopedNames.length > INITIAL_MODEL_SELECTION_LIMIT) {
+      setSelectedModels(capInitialSelection(scopedNames));
+      setInitialCapNotice({ shown: INITIAL_MODEL_SELECTION_LIMIT, total: scopedNames.length });
+    } else {
+      setSelectedModels(scoped.models);
+      setInitialCapNotice(null);
+    }
     setFilterTick((tick) => tick + 1);
   }, []);
 

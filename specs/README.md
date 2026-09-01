@@ -45,7 +45,7 @@ up-to-date spec in `specs/features/`.
 | 31  | Group tables inside a named box on the diagram | Draft |
 | 32  | Fit the view after auto-layout | Done |
 | 33  | Opt in or out of the model-level unique-combination test for a primary key | Draft |
-| 35  | Cap the initial model selection for large workspaces | Done |
+| 35  | Cap the initial model selection for large workspaces | Implemented |
 
 Status values: `draft` → `approved` → `implemented` → `done`.
 
