@@ -1,4 +1,5 @@
 node_modules/
+.github/**
 src/**
 webview-ui/**
 specs/**
