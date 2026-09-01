@@ -4,12 +4,14 @@
  * The PK columns render as removable chips with a searchable add picker over
  * the model's non-PK columns; the **Virtual** checkbox switches between the
  * meta-stored (virtual) form and the three real dbt constructs. A second
- * checkbox controls whether the model-level
- * `dbt_utils.unique_combination_of_columns` data test is written alongside
- * the `primary_key` constraint and `not_null` checks (spec 33); it is
- * disabled while Virtual is checked or there are no PK columns. Every change
- * posts a single `setPrimaryKey` with the resulting full column list, the
- * current virtual flag, and the current unique-test flag.
+ * checkbox, **"Omit unique combination test"**, controls whether the
+ * model-level `dbt_utils.unique_combination_of_columns` data test is written
+ * alongside the `primary_key` constraint and `not_null` checks (spec 33); its
+ * `checked` state is negated relative to the underlying `uniqueTest` flag
+ * (checked = test omitted), and it is disabled while Virtual is checked or
+ * there are no PK columns. Every change posts a single `setPrimaryKey` with
+ * the resulting full column list, the current virtual flag, and the current
+ * unique-test flag.
  */
 import type { ModelEdit } from '../src/dbt/edit';
 import type { TableNode } from '../src/diagram/graph';
@@ -54,16 +56,16 @@ export function PrimaryKeySection({ node, onEdit }: PrimaryKeySectionProps): JSX
       <label className="details__checkbox-row">
         <input
           type="checkbox"
-          checked={!virtual && uniqueTest}
+          checked={!uniqueTest}
           disabled={virtual || columns.length === 0}
           onChange={toggleUniqueTest}
         />
-        Unique combination of columns test
+        Omit unique combination test
       </label>
       {!virtual && columns.length > 0 && (
         <p className="details__note">
           Writes the primary_key constraint and not_null checks to the model file. The
-          unique combination test is written only while the box above is checked.
+          unique combination test is omitted while the box above is checked.
         </p>
       )}
       {columns.length === 0 ? (

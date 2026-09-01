@@ -16,7 +16,10 @@ As a data engineer, I want a checkbox that controls whether setting a primary ke
 also writes the model-level `dbt_utils.unique_combination_of_columns` data test,
 so that I can declare a primary key on models where that test is not wanted
 (unenforceable, too expensive, or already covered elsewhere) without the editor
-adding it back behind my back.
+adding it back behind my back. The checkbox reads **"Omit unique combination
+test"**: checking it means the test is *not* written, matching how users think
+about this — the default (unchecked) keeps the test, and checking is an
+explicit opt-out.
 
 ## Background
 
@@ -28,7 +31,7 @@ constraint and the `not_null` checks without the unique-combination test.
 
 That third construct is the one users disagree about. The other two are cheap
 metadata; the unique-combination test is an actual query that runs on every
-`dbt test`. Making it opt-in per model, with the checkbox reflecting whatever the
+`dbt test`. Making it opt-out per model, with the checkbox reflecting whatever the
 YAML already says, keeps dbtiagram honest about the file on disk.
 
 ## Scope
@@ -36,9 +39,11 @@ YAML already says, keeps dbtiagram honest about the file on disk.
 **In scope**
 
 - A `uniqueTest` flag on the `setPrimaryKey` edit.
-- A "Unique combination of columns test" checkbox in the details sidebar's
-  Primary key section, initialised from the model's current YAML.
-- Writing the test when the box is checked, removing it entirely when unchecked.
+- An "Omit unique combination test" checkbox in the details sidebar's Primary
+  key section, initialised from the model's current YAML — **checked means the
+  test is omitted** (negated relative to the flag's own name: `uniqueTest:
+  false` shows as checked, `uniqueTest: true` shows as unchecked).
+- Writing the test when the box is unchecked, removing it entirely when checked.
 - Surfacing the current state through `TableNode.primaryKey`.
 - A small red warning badge next to the diagram's PK key icon (spec 08) on real
   primary keys whose unique-combination test is off, so the state is visible on
@@ -51,72 +56,72 @@ YAML already says, keeps dbtiagram honest about the file on disk.
 - Column-level tests, including the PK-owned `not_null` (unchanged) and the
   read-only flask icon of spec 30.
 - Virtual primary keys, which by definition write nothing to the model file. The
-  checkbox is disabled while Virtual is checked.
+  checkbox reads checked (omitted) and is disabled while Virtual is checked.
 - Editing the test's other options (`enabled`, extra `arguments`) from the UI.
 
 ## Scenarios
 
-### The checkbox reflects an existing test
+### The checkbox is unchecked when a test exists
 
 ```
 Given model "orders" has a primary key on "order_id"
 And its model.yml has a `dbt_utils.unique_combination_of_columns` data test
 When I select the "orders" table and look at the Primary key section
-Then the "Unique combination of columns test" checkbox is checked
+Then the "Omit unique combination test" checkbox is unchecked
 ```
 
-### The checkbox is unchecked when the test is absent
+### The checkbox is checked when the test is absent
 
 ```
 Given model "customers" has a `primary_key` constraint on "customer_id"
 And its model.yml has no `dbt_utils.unique_combination_of_columns` data test
 When I select the "customers" table
-Then the "Unique combination of columns test" checkbox is unchecked
+Then the "Omit unique combination test" checkbox is checked
 ```
 
-### Unchecking removes the test
+### Checking the box removes the test
 
 ```
-Given the checkbox is checked for model "orders"
-When I uncheck it
+Given the checkbox is unchecked for model "orders" (test present)
+When I check it
 Then the `dbt_utils.unique_combination_of_columns` entry is removed from the model's data_tests
 And the `primary_key` constraint is unchanged
 And `not_null` on "order_id" is unchanged
 ```
 
-### Checking writes a fresh test
+### Unchecking the box writes a fresh test
 
 ```
-Given model "customers" has a primary key on "customer_id" and no unique-combination test
-When I check the checkbox
+Given model "customers" has a primary key on "customer_id" and the checkbox is checked (no test)
+When I uncheck it
 Then the model gains a data test
   `dbt_utils.unique_combination_of_columns: { arguments: { combination_of_columns: [customer_id] } }`
 ```
 
-### Changing PK columns while the test is on updates it in place
+### Changing PK columns while the test is on (box unchecked) updates it in place
 
 ```
-Given model "orders" has a primary key on "order_id" and the checkbox is checked
+Given model "orders" has a primary key on "order_id" and the checkbox is unchecked
 And its unique-combination test entry also carries `enabled: true`
 When I add "line_id" to the primary key
 Then the test's `combination_of_columns` becomes [order_id, line_id]
 And `enabled: true` is preserved
 ```
 
-### Changing PK columns while the test is off does not resurrect it
+### Changing PK columns while the test is off (box checked) does not resurrect it
 
 ```
-Given model "customers" has a primary key on "customer_id" and the checkbox is unchecked
+Given model "customers" has a primary key on "customer_id" and the checkbox is checked
 When I add "region" to the primary key
 Then the model still has no `dbt_utils.unique_combination_of_columns` data test
 ```
 
-### The checkbox is disabled for a virtual primary key
+### The checkbox is checked and disabled for a virtual primary key
 
 ```
 Given model "orders" has a virtual primary key
 When I look at the Primary key section
-Then the "Unique combination of columns test" checkbox is unchecked and disabled
+Then the "Omit unique combination test" checkbox is checked and disabled
 ```
 
 ### The diagram warns when the test is off
@@ -276,11 +281,17 @@ export interface FlowNodeData {
    `src/diagram/graph.ts` importing from `src/dbt/edit/primaryKey.ts` is within
    the rules — both are `pure`, neither imports `vscode`.
 8. **UI.** The checkbox is a second `details__checkbox-row` directly beneath the
-   Virtual row, labelled exactly `Unique combination of columns test`. It is
-   `checked={node.primaryKey?.uniqueTest ?? false}` and
+   Virtual row, labelled exactly `Omit unique combination test`. Its `checked`
+   state is **negated** relative to `uniqueTest`:
+   `checked={!(node.primaryKey?.uniqueTest ?? false)}` — since `uniqueTest` is
+   already `false` for both the virtual and no-PK-columns cases (see behavior
+   note 3 and `buildDiagram`), this single expression naturally reads as
+   checked (omitted) there too, with no special-casing needed. It stays
    `disabled={virtual || columns.length === 0}` — there is nothing to assert
-   without PK columns, and nothing is written for a virtual PK. Toggling it posts
-   `{ kind: 'setPrimaryKey', model: node.id, columns, virtual, uniqueTest: !current }`.
+   without PK columns, and nothing is written for a virtual PK. Toggling it
+   posts `{ kind: 'setPrimaryKey', model: node.id, columns, virtual, uniqueTest: !current }`
+   exactly as before — only the checkbox's own `checked`/label is negated, not
+   the underlying flag or edit semantics.
 9. **Every `setPrimaryKey` post from `PrimaryKeySection` carries the flag**,
    including the chip add/remove and the Virtual toggle, using the checkbox's
    current value. That is what makes scenario "Changing PK columns while the test
@@ -290,10 +301,10 @@ export interface FlowNodeData {
     existing test but never introduces one. This is a deliberate change from
     today's always-create behavior and is what makes the checkbox the single place
     the test can be brought into existence.
-    unique_combination_of_columns data test, the primary_key constraint, and
-    not_null checks to the model file." It becomes: `Writes the primary_key
-    constraint and not_null checks to the model file. The unique combination test
-    is written only while the box above is checked.`
+11. **Explanatory note text is negated to match.** The note beneath the
+    checkboxes reads: `Writes the primary_key constraint and not_null checks to
+    the model file. The unique combination test is omitted while the box above
+    is checked.`
 12. **Diagram warning badge (`TableNode.tsx`).** Next to the existing
     `pkColumns`/`pkVirtual` derivation, compute
     `pkUniqueTestOff = !pkVirtual && data.primaryKey !== undefined && !data.primaryKey.uniqueTest`.
@@ -342,10 +353,10 @@ test need no change.
 - `npm run verify` — typecheck + unit suites, must be green.
 - `npm test` — before the commit, must be green.
 - Manual: on `fixtures/sample-dbt/models/orders.yml` (which already has the test)
-  confirm the box is checked; uncheck it and confirm only the `data_tests` entry
-  disappears from the file; re-check it and confirm a fresh entry is written.
-- Manual: with the test unchecked, confirm the "orders" table card shows a red
-  warning badge next to the `order_id` key icon; re-check the box and confirm
+  confirm the box is unchecked; check it and confirm only the `data_tests` entry
+  disappears from the file; uncheck it again and confirm a fresh entry is written.
+- Manual: with the box checked (test off), confirm the "orders" table card shows a
+  red warning badge next to the `order_id` key icon; uncheck the box and confirm
   the badge disappears. Confirm "products" (virtual PK, spec 08 fixture) never
   shows the badge.
 
@@ -363,13 +374,14 @@ test need no change.
 
 ## Acceptance Criteria
 
-- [ ] The Primary key section shows a "Unique combination of columns test"
-      checkbox reflecting the model's YAML.
-- [ ] Unchecking it removes the model-level test and leaves the `primary_key`
+- [ ] The Primary key section shows an "Omit unique combination test" checkbox
+      reflecting the model's YAML, negated relative to the test's presence
+      (checked = test omitted/absent, unchecked = test present).
+- [ ] Checking it removes the model-level test and leaves the `primary_key`
       constraint and `not_null` checks intact.
-- [ ] Checking it writes a fresh mapping-form test for the current PK columns.
-- [ ] Changing PK columns while it is unchecked never re-creates the test.
-- [ ] The checkbox is unchecked and disabled for a virtual primary key and when
+- [ ] Unchecking it writes a fresh mapping-form test for the current PK columns.
+- [ ] Changing PK columns while it is checked never re-creates the test.
+- [ ] The checkbox is checked and disabled for a virtual primary key and when
       there are no PK columns.
 - [ ] A real primary key with the test off shows a red warning badge next to
       its key icon on the diagram canvas; the badge disappears once the test is
