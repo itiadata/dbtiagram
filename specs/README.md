@@ -53,7 +53,7 @@ up-to-date spec in `specs/features/`.
 | 33  | Opt in or out of the model-level unique-combination test for a primary key | Draft |
 | 34  | Column primary-key toggle and a Reveal in model.yml button in the details sidebar | Implemented |
 | 35  | Cap the initial model selection for large workspaces | Done |
-| 36  | Remove a table from the diagram | Draft |
+| 36  | Remove a table from the diagram | Approved |
 | 37  | Add related tables to the diagram | Draft |
 | 38  | Open a model's .sql file from the diagram and the sidebar | Draft |
 
