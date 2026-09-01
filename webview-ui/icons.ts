@@ -18,4 +18,5 @@ export {
   FlaskConical,
   FlaskConicalOff,
   Trash2,
+  Waypoints,
 } from 'lucide-react';

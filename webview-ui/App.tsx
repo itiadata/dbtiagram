@@ -15,6 +15,7 @@ import type { DiagramGraph } from '../src/diagram/graph';
 import { buildFlowElements, columnRowIndexLookup, type FlowEdgeData, type FlowElements } from '../src/diagram/flow';
 import { layoutDiagram } from '../src/diagram/layout';
 import { filterGraph } from '../src/shared/filter';
+import { relatedModels } from '../src/shared/relations';
 import { DetailsSidebar, type SelectedEntity } from './DetailsSidebar';
 import { DiagramCanvas } from './DiagramCanvas';
 import { ContextMenu, type ContextMenuItem } from './ContextMenu';
@@ -43,7 +44,7 @@ import { useSelection } from './hooks/useSelection';
 import { useSettings } from './hooks/useSettings';
 import { SidebarRail, SidebarResizer } from './SidebarChrome';
 import { SIDEBAR_DEFAULT_WIDTH } from './sidebar-constants';
-import { Settings, SavePlus, Save, SaveCheck, StickyNotePlus, Grid3x3, ChartNoAxesGantt, BetweenHorizontalStart, Trash2 } from './icons';
+import { Settings, SavePlus, Save, SaveCheck, StickyNotePlus, Grid3x3, ChartNoAxesGantt, BetweenHorizontalStart, Trash2, Waypoints } from './icons';
 
 export function App(): JSX.Element {
   const [graph, setGraph] = useState<DiagramGraph | null>(null);
@@ -362,8 +363,17 @@ export function App(): JSX.Element {
   const buildTableMenuItems = useCallback(
     (model: string, column?: string): ContextMenuItem[] => {
       const currentMode = columnDisplay.effectiveMode(model);
+      const related = graph === null ? [] : relatedModels(graph, model);
+      const missingRelated = related.filter((name) => !filter.visibleModels.has(name));
       return [
         { label: 'Reveal in model.yml', icon: <ChartNoAxesGantt size={16} />, onSelect: () => onOpenModelSource(model, column) },
+        {
+          label: 'Add related tables',
+          icon: <Waypoints size={16} />,
+          disabled: missingRelated.length === 0,
+          title: missingRelated.length === 0 ? 'No related tables to add' : undefined,
+          onSelect: () => filter.addModels(related),
+        },
         {
           label: 'Show columns',
           icon: <BetweenHorizontalStart size={16} />,
@@ -377,7 +387,7 @@ export function App(): JSX.Element {
         { label: 'Remove from diagram', icon: <Trash2 size={16} />, onSelect: () => onRemoveTable(model) },
       ];
     },
-    [columnDisplay, onOpenModelSource, fieldsMatrix, onRemoveTable],
+    [columnDisplay, onOpenModelSource, fieldsMatrix, onRemoveTable, graph, filter],
   );
 
   const onColumnContextMenu = useCallback(

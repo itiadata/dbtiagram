@@ -14,6 +14,7 @@ import {
   scopeSelectionToFile,
 } from '../../src/shared/filter';
 import type { DiagramModelFile } from '../../src/shared/protocol';
+import { filesDeclaring } from '../../src/shared/relations';
 
 /** Spec 35: the one-time popup naming how many models were initially shown. */
 export interface InitialCapNotice {
@@ -40,6 +41,11 @@ export interface DiagramFilterState {
   clearModels: () => void;
   /** Unchecks these models, exactly as the sidebar checkbox would (spec 36). */
   removeModels: (names: readonly string[]) => void;
+  /**
+   * Checks `names` and the files declaring them (spec 37). Names already
+   * checked are left as they are; nothing is ever unchecked.
+   */
+  addModels: (names: readonly string[]) => void;
   /** Adopts new host metadata, keeping the user's checked state (spec 05). */
   applyModelFiles: (files: DiagramModelFile[]) => void;
   /** Scopes to one model.yml unless a layout already won (spec 14). */
@@ -213,6 +219,15 @@ export function useDiagramFilter(): DiagramFilterState {
     setFilterTick((tick) => tick + 1);
   }, []);
 
+  // Spec 37: additive only — checks the models and the files declaring them
+  // so file precedence (spec 05) cannot keep the newly added tables hidden.
+  const addModelsCallback = useCallback((names: readonly string[]): void => {
+    const uris = filesDeclaring(modelFilesRef.current, names);
+    setSelectedFiles((current) => new Set([...current, ...uris]));
+    setSelectedModels((current) => new Set([...current, ...names]));
+    setFilterTick((tick) => tick + 1);
+  }, []);
+
   return {
     modelFiles,
     selectedFiles,
@@ -231,6 +246,7 @@ export function useDiagramFilter(): DiagramFilterState {
     selectAllModels,
     clearModels,
     removeModels: removeModelsCallback,
+    addModels: addModelsCallback,
     applyModelFiles,
     applyScope,
     applyLayoutTables,

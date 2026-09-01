@@ -54,7 +54,7 @@ up-to-date spec in `specs/features/`.
 | 34  | Column primary-key toggle and a Reveal in model.yml button in the details sidebar | Implemented |
 | 35  | Cap the initial model selection for large workspaces | Done |
 | 36  | Remove a table from the diagram | Done |
-| 37  | Add related tables to the diagram | Draft |
+| 37  | Add related tables to the diagram | Implemented |
 | 38  | Open a model's .sql file from the diagram and the sidebar | Draft |
 
 Status values: `draft` → `approved` → `implemented` → `done`.
