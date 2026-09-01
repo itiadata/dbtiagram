@@ -23,6 +23,8 @@ export interface HostMessageHandlers {
   onLayoutActive: (message: LayoutActiveMessage) => void;
   onSettingsCurrent: (openBehavior: OpenBehavior) => void;
   onMatrixColumnPrefs: (scope: MatrixScope, columns: StoredMatrixColumnPref[]) => void;
+  /** Model names that have a `.sql` file in the workspace (spec 38). */
+  onSqlFiles: (models: string[]) => void;
 }
 
 export function useHostMessages(handlers: HostMessageHandlers): void {
@@ -54,6 +56,9 @@ export function useHostMessages(handlers: HostMessageHandlers): void {
           break;
         case 'matrix:columnPrefs':
           current.onMatrixColumnPrefs(message.scope, message.columns);
+          break;
+        case 'model:sqlFiles':
+          current.onSqlFiles(message.models);
           break;
       }
     };

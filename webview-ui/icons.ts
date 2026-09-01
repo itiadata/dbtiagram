@@ -19,4 +19,5 @@ export {
   FlaskConicalOff,
   Trash2,
   Waypoints,
+  FileCode2,
 } from 'lucide-react';

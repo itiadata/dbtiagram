@@ -11,6 +11,7 @@ import { useState, type CSSProperties, type ReactNode } from 'react';
 import { matchesSearch } from '../src/shared/filter';
 import type { DiagramModelFile } from '../src/shared/protocol';
 import type { ContextMenuItem } from './ContextMenu';
+import { FileCode2 } from './icons';
 
 interface CollapsibleSectionProps {
   title: string;
@@ -91,6 +92,10 @@ interface FilterSidebarProps {
   onRevealModel: (name: string) => void;
   /** Opens the model.yml declaring a model at its declaration line (spec 15). */
   onOpenModelSource: (name: string) => void;
+  /** Model names with a `.sql` file; drives the item's enabled state (spec 38). */
+  sqlModels: ReadonlySet<string>;
+  /** Opens the model's `.sql` file (spec 38). */
+  onOpenModelSql: (name: string) => void;
   /** Opens the shared context menu (spec 15); the sidebar supplies the items. */
   onOpenMenu: (x: number, y: number, items: ContextMenuItem[]) => void;
   /** Hides the whole sidebar, leaving its reopen rail (spec 11). */
@@ -116,6 +121,8 @@ export function FilterSidebar({
   onClearModels,
   onRevealModel,
   onOpenModelSource,
+  sqlModels,
+  onOpenModelSql,
   onOpenMenu,
   onCollapse,
   style,
@@ -142,6 +149,13 @@ export function FilterSidebar({
       onSelect: () => onRevealModel(name),
     },
     { label: 'Reveal in model.yml', onSelect: () => onOpenModelSource(name) },
+    {
+      label: 'Open SQL file',
+      icon: <FileCode2 size={16} />,
+      disabled: !sqlModels.has(name),
+      title: sqlModels.has(name) ? undefined : `No .sql file found for "${name}"`,
+      onSelect: () => onOpenModelSql(name),
+    },
   ];
 
   return (

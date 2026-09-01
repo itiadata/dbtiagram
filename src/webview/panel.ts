@@ -32,8 +32,11 @@ import { registerModelWatcher } from '../vscode/modelWatcher';
 import { resolvePlacement, untrackPanel } from '../vscode/openBehaviorWindows';
 import { promptForLayoutPath, readLayoutFile, writeLayoutFile } from '../vscode/layoutFiles';
 import { loadModelYmlFiles, readFileText, revealInEditor, writeModelYmlFile } from '../vscode/project';
+import { findSqlFiles, openSqlFile } from '../vscode/sqlFiles';
+import { sqlGlobForModelGlob } from '../shared/sqlFiles';
 import { buildWebviewHtml } from './html';
 import { openModelSource, type OpenSourceHost } from './openSource';
+import { openModelSql, type OpenSqlHost } from './openSql';
 import {
   openLayout,
   publishActiveLayout,
@@ -76,6 +79,8 @@ export class DiagramPanel {
    * `dispose` needs it to untrack a reuse window (spec 23).
    */
   private lastViewColumn: vscode.ViewColumn | undefined;
+  /** Model name -> `.sql` fs path, refreshed on ready/refresh/rescan (spec 38). */
+  private sqlPaths: Map<string, string> = new Map();
 
   private constructor(
     panel: vscode.WebviewPanel,
@@ -293,6 +298,8 @@ export class DiagramPanel {
       result.failures.map((failure) => ({ uri: failure.uri.fsPath, error: failure.message })),
     );
     this.publish();
+    this.sqlPaths = await findSqlFiles(sqlGlobForModelGlob(this.modelGlob));
+    this.postMessage({ type: 'model:sqlFiles', models: [...this.sqlPaths.keys()] });
   }
 
   private onDocumentChanged(uri: vscode.Uri, content: string): void {
@@ -366,6 +373,8 @@ export class DiagramPanel {
         this.postMessage({ type: 'settings:current', openBehavior: DiagramPanel.openBehavior() });
         this.publishMatrixColumnPrefs('model');
         this.publishMatrixColumnPrefs('global');
+        this.sqlPaths = await findSqlFiles(sqlGlobForModelGlob(this.modelGlob));
+        this.postMessage({ type: 'model:sqlFiles', models: [...this.sqlPaths.keys()] });
         return;
       case 'diagram:edit': {
         try {
@@ -386,6 +395,9 @@ export class DiagramPanel {
         return;
         case 'model:openSource':
           await openModelSource(this.openSourceHost, message.model, message.column);
+          return;
+        case 'model:openSql':
+          await openModelSql(this.openSqlHost, message.model);
           return;
       case 'settings:setOpenBehavior':
         await vscode.workspace
@@ -420,6 +432,20 @@ export class DiagramPanel {
       showWarning: (message) => {
         void vscode.window.showWarningMessage(message);
       },
+      postError: (message) => this.postMessage({ type: 'diagram:error', message }),
+    };
+  }
+
+  /** Adapter handing the pure "Open SQL file" orchestration its host port. */
+  private get openSqlHost(): OpenSqlHost {
+    return {
+      lookup: (model) => this.sqlPaths.get(model),
+      rescan: async () => {
+        this.sqlPaths = await findSqlFiles(sqlGlobForModelGlob(this.modelGlob));
+        return this.sqlPaths;
+      },
+      open: (fsPath) => openSqlFile(vscode.Uri.file(fsPath)),
+      publish: (models) => this.postMessage({ type: 'model:sqlFiles', models }),
       postError: (message) => this.postMessage({ type: 'diagram:error', message }),
     };
   }

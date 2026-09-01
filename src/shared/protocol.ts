@@ -56,7 +56,12 @@ export type MessageToWebview =
    */
   | { type: 'settings:current'; openBehavior: OpenBehavior }
   /** The stored grid column preferences for one matrix scope (spec 27). */
-  | { type: 'matrix:columnPrefs'; scope: MatrixScope; columns: StoredMatrixColumnPref[] };
+  | { type: 'matrix:columnPrefs'; scope: MatrixScope; columns: StoredMatrixColumnPref[] }
+  /**
+   * The model names that currently have a `.sql` file in the workspace (spec
+   * 38). The webview only needs existence, so the paths stay on the host.
+   */
+  | { type: 'model:sqlFiles'; models: string[] };
 
 /** Messages sent from the webview to the extension host. */
 export type MessageToExtension =
@@ -75,4 +80,6 @@ export type MessageToExtension =
   /** Persist a new "Open new diagrams" choice as a VS Code user setting (spec 23). */
   | { type: 'settings:setOpenBehavior'; openBehavior: OpenBehavior }
   /** Persist grid column visibility/order for one matrix scope (spec 27). */
-  | { type: 'matrix:setColumnPrefs'; scope: MatrixScope; columns: StoredMatrixColumnPref[] };
+  | { type: 'matrix:setColumnPrefs'; scope: MatrixScope; columns: StoredMatrixColumnPref[] }
+  /** Open (or focus) the `.sql` file implementing `model` (spec 38). */
+  | { type: 'model:openSql'; model: string };

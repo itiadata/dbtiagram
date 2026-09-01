@@ -127,7 +127,7 @@ export async function revealInEditor(
  * editors are checked first; `tabGroups` then catches tabs that are open but
  * currently in the background of their group.
  */
-function findOpenViewColumn(uri: vscode.Uri): vscode.ViewColumn | undefined {
+export function findOpenViewColumn(uri: vscode.Uri): vscode.ViewColumn | undefined {
   const visible = vscode.window.visibleTextEditors.find(
     (editor) => editor.document.uri.fsPath === uri.fsPath,
   );

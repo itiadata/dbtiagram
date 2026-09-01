@@ -44,7 +44,7 @@ import { useSelection } from './hooks/useSelection';
 import { useSettings } from './hooks/useSettings';
 import { SidebarRail, SidebarResizer } from './SidebarChrome';
 import { SIDEBAR_DEFAULT_WIDTH } from './sidebar-constants';
-import { Settings, SavePlus, Save, SaveCheck, StickyNotePlus, Grid3x3, ChartNoAxesGantt, BetweenHorizontalStart, Trash2, Waypoints } from './icons';
+import { Settings, SavePlus, Save, SaveCheck, StickyNotePlus, Grid3x3, ChartNoAxesGantt, BetweenHorizontalStart, Trash2, Waypoints, FileCode2 } from './icons';
 
 export function App(): JSX.Element {
   const [graph, setGraph] = useState<DiagramGraph | null>(null);
@@ -59,6 +59,8 @@ export function App(): JSX.Element {
   const detailsVisible = details.visible;
   const [filterWidth, setFilterWidth] = useState(SIDEBAR_DEFAULT_WIDTH);
   const [detailsWidth, setDetailsWidth] = useState(SIDEBAR_DEFAULT_WIDTH);
+  // Spec 38: models with a discovered .sql file; drives "Open SQL file" state.
+  const [sqlModels, setSqlModels] = useState<Set<string>>(new Set());
 
   const selection = useSelection();
   const filter = useDiagramFilter();
@@ -124,6 +126,7 @@ export function App(): JSX.Element {
     onLayoutActive: (message) => layout.applyActiveLayout(message),
     onSettingsCurrent: (openBehavior) => settings.applyCurrent(openBehavior),
     onMatrixColumnPrefs: (scope, columns) => fieldsMatrix.applyColumnPrefs(scope, columns),
+    onSqlFiles: (models) => setSqlModels(new Set(models)),
   });
   const visibleGraph = useMemo(
     () => (graph === null ? null : filterGraph(graph, filter.visibleModels)),
@@ -283,6 +286,11 @@ export function App(): JSX.Element {
     postToHost({ type: 'model:openSource', model, column });
   }, []);
 
+  // Spec 38: opens (or focuses) the model's .sql file beside the diagram.
+  const onOpenModelSql = useCallback((model: string): void => {
+    postToHost({ type: 'model:openSql', model });
+  }, []);
+
   // Spec 16: React Flow tags each rendered node with its id, so focusing a
   // note's editor after it is created (or via "Edit text") needs no extra
   // plumbing through the node data. The frame wait lets the node mount first.
@@ -368,6 +376,13 @@ export function App(): JSX.Element {
       return [
         { label: 'Reveal in model.yml', icon: <ChartNoAxesGantt size={16} />, onSelect: () => onOpenModelSource(model, column) },
         {
+          label: 'Open SQL file',
+          icon: <FileCode2 size={16} />,
+          disabled: !sqlModels.has(model),
+          title: sqlModels.has(model) ? undefined : `No .sql file found for "${model}"`,
+          onSelect: () => onOpenModelSql(model),
+        },
+        {
           label: 'Add related tables',
           icon: <Waypoints size={16} />,
           disabled: missingRelated.length === 0,
@@ -387,7 +402,7 @@ export function App(): JSX.Element {
         { label: 'Remove from diagram', icon: <Trash2 size={16} />, onSelect: () => onRemoveTable(model) },
       ];
     },
-    [columnDisplay, onOpenModelSource, fieldsMatrix, onRemoveTable, graph, filter],
+    [columnDisplay, onOpenModelSource, onOpenModelSql, sqlModels, fieldsMatrix, onRemoveTable, graph, filter],
   );
 
   const onColumnContextMenu = useCallback(
@@ -523,6 +538,8 @@ export function App(): JSX.Element {
             onClearModels={filter.clearModels}
             onRevealModel={revealModel}
             onOpenModelSource={onOpenModelSource}
+            sqlModels={sqlModels}
+            onOpenModelSql={onOpenModelSql}
             onOpenMenu={openMenu}
             onCollapse={() => setFilterVisible(false)}
           />

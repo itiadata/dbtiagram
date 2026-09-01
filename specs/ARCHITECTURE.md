@@ -82,12 +82,13 @@ given the setting and whether a reusable separate-window tab group was found (sp
 show/hide, reorder, and merging with stored preferences. Used by both the webview and the extension host. | 
 `MatrixScope`, `MatrixColumnId`, `MatrixColumnDef`, `StoredMatrixColumnPref`, `defaultMatrixColumns`, 
 `toggleColumnVisible`, `reorderColumn`, `applyStoredPrefs`, `toStoredPrefs`, `mergeStoredPrefs` |
+| `src/shared/sqlFiles.ts` | shared | Pure derivation of the `.sql` discovery glob from the model glob, the model name of a `.sql` path, and the name -> path index (spec 38). | `DEFAULT_SQL_GLOB`, `sqlGlobForModelGlob`, `modelNameFromSqlPath`, `indexSqlPaths` |
 
 ## `src/vscode/` — VS Code API wrappers
 
 | Path | Layer | Responsibility | Key exports |
 |------|-------|----------------|-------------|
-| `src/vscode/project.ts` | vscode-facing | Discover, read and write model.yml files in the workspace, and reveal a declaration in an editor. `writeModelYmlFile` re-reads the on-disk text and patches it via `mergeModelYml` (spec 29). | `loadModelYmlFiles`, `readFileText`, `writeModelYmlFile`, `revealInEditor`, `ModelYmlRecord`, `ModelYmlFailure`, `ModelYmlLoadResult` |
+| `src/vscode/project.ts` | vscode-facing | Discover, read and write model.yml files in the workspace, and reveal a declaration in an editor. `writeModelYmlFile` re-reads the on-disk text and patches it via `mergeModelYml` (spec 29). `findOpenViewColumn` is exported for reuse by `sqlFiles.ts` (spec 38). | `loadModelYmlFiles`, `readFileText`, `writeModelYmlFile`, `revealInEditor`, `findOpenViewColumn`, `ModelYmlRecord`, `ModelYmlFailure`, `ModelYmlLoadResult` |
 | `src/vscode/modelWatcher.ts` | vscode-facing | File-system watcher that pushes create/change/delete events to the panel. | `registerModelWatcher`, `ModelWatcherCallbacks` |
 | `src/vscode/editorButton.ts` | pure | Decision logic for whether the editor-title button shows for a document. | `shouldShowButton`, `isDiagramLayoutFile`, `modelFileContextKey`, `layoutFileContextKey` |
 | `src/vscode/editorButtonContext.ts` | vscode-facing | Registers the editor-title button and keeps its `when`-clause context keys in sync. | `registerEditorTitleButton` |
@@ -95,15 +96,17 @@ show/hide, reorder, and merging with stored preferences. Used by both the webvie
 | `src/vscode/openBehaviorWindows.ts` | vscode-facing | Resolves where a new diagram panel should be created for the current `OpenBehavior`, and tracks this extension's separate-window tab groups for "Separate window (reuse)" (spec 23). | `resolvePlacement`, `untrackPanel`, `PanelPlacement` |
 | `src/vscode/matrixColumnPrefs.ts` | vscode-facing | Reads/writes matrix grid column preferences per `MatrixScope` 
 via `ExtensionContext.workspaceState` (spec 27). | `readMatrixColumnPrefs`, `writeMatrixColumnPrefs` |
+| `src/vscode/sqlFiles.ts` | vscode-facing | Discovers `.sql` files by glob and opens/focuses one, reusing `findOpenViewColumn` from `project.ts` but setting no selection (spec 38). | `findSqlFiles`, `openSqlFile` |
 
 ## `src/webview/` — extension-host side of the panel
 
 | Path | Layer | Responsibility | Key exports |
 |------|-------|----------------|-------------|
-| `src/webview/panel.ts` | vscode-facing | The diagram panel: lifecycle, message pump, model store wiring, write-back, in-memory pending-layout cache and close-time save prompt (spec 22). | `DiagramPanel` |
+| `src/webview/panel.ts` | vscode-facing | The diagram panel: lifecycle, message pump, model store wiring, write-back, in-memory pending-layout cache and close-time save prompt (spec 22); also holds the model → `.sql` path map and republishes it on ready/refresh/rescan (spec 38). | `DiagramPanel` |
 | `src/webview/html.ts` | vscode-facing | Build the webview HTML shell (CSP, nonce, asset URIs). | `buildWebviewHtml` |
 | `src/webview/panelKey.ts` | pure | One panel per source file: key and title derivation. | `diagramPanelKey`, `diagramPanelTitle`, `DiagramSource`, `defaultCaseInsensitive` |
 | `src/webview/openSource.ts` | pure | Orchestrates "Reveal in model.yml" against a host port: resolve, read, locate (model or a specific column, falling back to the model), reveal or report (spec 15, extended by spec 25). | `openModelSource`, `OpenSourceHost` |
+| `src/webview/openSql.ts` | pure | Orchestrates "Open SQL file" against a host port: lookup, rescan-on-miss (or on a stale cached path), republish, open or report (spec 38). | `openModelSql`, `OpenSqlHost` |
 | `src/webview/layoutMessages.ts` | pure | Layout-related message handling against a small `LayoutHost` port, so it stays testable. Manual save (spec 22): `cachePendingLayout` only caches the webview's latest layout in host memory, never writes to disk. | `publishActiveLayout`, `openLayout`, `sendActiveLayout`, `saveLayout`, `cachePendingLayout`, `ActiveLayout`, `LayoutHost` |
 | `src/extension.ts` | vscode-facing | `activate` / `deactivate` only — command registration and disposal. | `activate`, `deactivate` |
 
@@ -126,7 +129,7 @@ via `ExtensionContext.workspaceState` (spec 27). | `readMatrixColumnPrefs`, `wri
 | `webview-ui/layout-dirty.ts` | webview (pure) | Compares a current layout snapshot against the last-saved one to drive the manual-save header button's dirty state (spec 22), including the diagram-wide default and per-table column-display modes (spec 24). | `isLayoutDirty`, `LayoutSnapshot` |
 | `webview-ui/column-display-state.ts` | webview (pure) | The diagram-wide default column-display mode and per-table overrides; setting the default clears every override (spec 24). | `ColumnDisplayState`, `seedColumnDisplay`, `setTableOverride`, `setDefaultMode`, `effectiveMode` |
 | `webview-ui/fk-create-state.ts` | webview (pure) | Two-click gesture state machine for the mouse-drawn foreign key (spec 26): idle -> source-picked -> completed/cancelled. | `ColumnRef`, `FkCreateState`, `FK_CREATE_IDLE`, `startFkCreate`, `cancelFkCreate`, `FkClickOutcome`, `clickColumnForFk` || `webview-ui/settings-state.ts` | webview (pure) | Pure reducer applying a `settings:current` value without forcing the settings overlay open (spec 23). | `applySettingsCurrent`, `SettingsPanelState` |
-| `webview-ui/FilterSidebar.tsx` | webview | Left sidebar: file/model filtering, search, locate. | `FilterSidebar` |
+| `webview-ui/FilterSidebar.tsx` | webview | Left sidebar: file/model filtering, search, locate, and the model row's "Open SQL file" item (spec 38). | `FilterSidebar` |
 | `webview-ui/DetailsSidebar.tsx` | webview | Right sidebar: edit the selected model or column; renders the "Columns shown" section between Description and Primary key for a table (spec 24); Column section has a "Primary key" checkbox and both sections have a "Reveal in model.yml" button (spec 34). | `DetailsSidebar`, `SelectedEntity` |
 | `webview-ui/columnPrimaryKey.ts` | webview (pure) | Derives whether a column is part of its table's displayed primary key, and the `setPrimaryKey` edit toggling its membership (spec 34). | `isPrimaryKeyColumn`, `toggleColumnPrimaryKey` |
 | `webview-ui/PrimaryKeySection.tsx` | webview | Primary key editing UI inside the details sidebar. | `PrimaryKeySection` |
