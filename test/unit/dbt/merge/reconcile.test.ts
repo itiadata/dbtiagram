@@ -401,4 +401,45 @@ models:
 
     expect(out).toContain(`description: ${LONG}`);
   });
+
+  // The `yaml` serializer re-emits double-quoted scalars from their parsed
+  // value, so a literal TAB comes back as `\t`. That is accepted (semantically
+  // inert) on the condition that it happens at most once per file — see spec
+  // 29's "Known and accepted: one-time escape normalization".
+  it('does not re-normalize an already-normalized file', () => {
+    const text = `version: 2
+models:
+  - name: orders
+    columns:
+      - name: id
+        data_type: varchar
+        description: "EN: Identifier.\\\\nES: \tIdentificador con auditoria."
+      - name: other
+        description: "EN: Second.\\\\nES: \tSegundo con tabulador."
+`;
+    // First save: the one-time normalization is allowed to happen here.
+    const first = mergeModelYml(
+      text,
+      edited(text, (f) => {
+        f.models[0].columns![0].dataType = 'varchar(33)';
+      }),
+    );
+
+    // Second save: must not touch the descriptions again.
+    const second = mergeModelYml(
+      first,
+      edited(first, (f) => {
+        f.models[0].columns![0].dataType = 'varchar(64)';
+      }),
+    );
+
+    expect(second).toBe(first.replace('varchar(33)', 'varchar(64)'));
+
+    // And the normalization is semantically inert: still a real tab.
+    const before = parseModelYml(text).models[0].columns!;
+    const after = parseModelYml(first).models[0].columns!;
+    expect(after[0].description).toBe(before[0].description);
+    expect(after[1].description).toBe(before[1].description);
+    expect(after[0].description).toContain('\t');
+  });
 });

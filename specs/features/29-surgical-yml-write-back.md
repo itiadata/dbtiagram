@@ -395,3 +395,48 @@ fixtures and real-world dbt files are written.
 |-----------|-----------|-------|----------|
 | `test/unit/dbt/merge/reconcile.test.ts` | `does not re-wrap an untouched long description` | 2-column model where column 2 has a 150-character double-quoted single-line description; edit column 1's `data_type` | column 2's description line is byte-identical in the output |
 | `test/unit/dbt/merge/reconcile.test.ts` | `writes a new long description on a single line` | set a column description to a 150-character string | the written description occupies one line (no continuation line) |
+
+### Known and accepted: one-time escape normalization
+
+`lineWidth: 0` removes the *wrapping* normalization, but not every one. The
+`yaml` AST serializer regenerates each double-quoted scalar from its parsed
+**value** via `JSON.stringify` (`stringifyString.js`, `doubleQuotedString`), so
+characters written literally in the source are re-emitted in escaped form. The
+common case in real dbt files is a literal TAB inside a double-quoted
+description, which comes back as `\t`:
+
+```yaml
+# on disk
+description: "EN: Identifier of the user.\\nES: <TAB>Identificador del usuario."
+# after the first save
+description: "EN: Identifier of the user.\\nES: \tIdentificador del usuario."
+```
+
+No serializer option prevents this — `doubleQuotedAsJSON` only makes the output
+*more* JSON-like. It applies to every double-quoted scalar in the document, not
+just the edited one, because `doc.toString()` re-emits the whole tree.
+
+**Decision: accepted, not fixed.** The rewrite is:
+
+- **Semantically inert.** `\t` in a double-quoted YAML scalar *is* a tab; the
+  parsed value is unchanged (verified: values compare equal before and after,
+  and the tab is still present in the parsed string).
+- **One-time and idempotent.** The normalized text re-serializes to itself, so
+  a file is rewritten at most once — on the first save after this change — and
+  is stable on every save thereafter (verified: pass2 === pass1 === pass3).
+
+Eliminating it entirely would mean moving the write-back off the AST and onto
+the CST layer, which does preserve source bytes exactly (verified: a CST
+round-trip is byte-identical, and a targeted scalar edit changes only that
+scalar). That is a substantial rewrite of `reconcile.ts` — CST tokens are much
+lower-level, and inserting new keys/columns means hand-building tokens with
+correct indentation. It was judged not worth the risk for a cosmetic, one-time,
+semantically-inert diff. **If this class of defect resurfaces a fourth time,
+reopen the CST migration rather than patching another normalization.**
+
+The `does not re-normalize an already-normalized file` test below is what keeps
+the "one-time" property honest.
+
+| Test file | Test name | Input | Expected |
+|-----------|-----------|-------|----------|
+| `test/unit/dbt/merge/reconcile.test.ts` | `does not re-normalize an already-normalized file` | description containing a literal TAB; edit a `data_type`, then edit a `data_type` again on the result | the second merge leaves every description byte-identical, and the parsed description value still contains a real tab |
