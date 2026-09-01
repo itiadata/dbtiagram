@@ -19,6 +19,11 @@ jobs:
   release:
     if: "!contains(github.event.head_commit.message, '[skip ci]')"
     runs-on: ubuntu-latest
+    env:
+      # Override the project .npmrc's corporate-CA cafile (used for local
+      # Zscaler-intercepted networks); GitHub-hosted runners don't need it
+      # and it would otherwise replace npm's trust store entirely.
+      NPM_CONFIG_CAFILE: ''
     steps:
       - name: Checkout
         uses: actions/checkout@v4
