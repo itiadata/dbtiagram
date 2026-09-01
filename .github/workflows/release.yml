@@ -21,9 +21,9 @@ jobs:
     runs-on: ubuntu-latest
     env:
       # Override the project .npmrc's corporate-CA cafile (used for local
-      # Zscaler-intercepted networks); GitHub-hosted runners don't need it
-      # and it would otherwise replace npm's trust store entirely.
-      NPM_CONFIG_CAFILE: ''
+      # Zscaler-intercepted networks); point npm at the runner's own system
+      # CA bundle instead so it can reach the public npm registry.
+      NPM_CONFIG_CAFILE: /etc/ssl/certs/ca-certificates.crt
     steps:
       - name: Checkout
         uses: actions/checkout@v4
