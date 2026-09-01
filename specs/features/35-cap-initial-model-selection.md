@@ -1,7 +1,7 @@
 ---
 id: 35
 title: Cap the initial model selection for large workspaces
-status: implemented
+status: done
 priority: medium
 created: 2026-09-01
 owner: unassigned
