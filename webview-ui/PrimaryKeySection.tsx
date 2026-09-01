@@ -9,9 +9,13 @@
  * alongside the `primary_key` constraint and `not_null` checks (spec 33); its
  * `checked` state is negated relative to the underlying `uniqueTest` flag
  * (checked = test omitted), and it is disabled while Virtual is checked or
- * there are no PK columns. Every change posts a single `setPrimaryKey` with
- * the resulting full column list, the current virtual flag, and the current
- * unique-test flag.
+ * there are no PK columns. Omitting the test is meant to stay exceptional, so
+ * when a model has no primary key yet (`node.primaryKey` is `undefined`) the
+ * local `uniqueTest` defaults to `true` — adding the very first PK column
+ * creates the test, matching the pre-spec-33 always-create behavior; the user
+ * must explicitly check the box to opt out. Every change posts a single
+ * `setPrimaryKey` with the resulting full column list, the current virtual
+ * flag, and the current unique-test flag.
  */
 import type { ModelEdit } from '../src/dbt/edit';
 import type { TableNode } from '../src/diagram/graph';
@@ -26,7 +30,7 @@ export function PrimaryKeySection({ node, onEdit }: PrimaryKeySectionProps): JSX
   const pk = node.primaryKey;
   const virtual = pk?.virtual ?? false;
   const columns = pk?.columns ?? [];
-  const uniqueTest = pk?.uniqueTest ?? false;
+  const uniqueTest = pk?.uniqueTest ?? true;
   const pkSet = new Set(columns);
   const nonPkColumns = node.columns.map((c) => c.name).filter((name) => !pkSet.has(name));
 

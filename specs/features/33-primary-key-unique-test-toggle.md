@@ -45,6 +45,9 @@ YAML already says, keeps dbtiagram honest about the file on disk.
   false` shows as checked, `uniqueTest: true` shows as unchecked).
 - Writing the test when the box is unchecked, removing it entirely when checked.
 - Surfacing the current state through `TableNode.primaryKey`.
+- Defaulting to **unchecked** (test written) when a model has no primary key
+  yet — omitting the test stays an exceptional, explicit opt-out rather than
+  something a user can trigger by accident while creating a brand-new PK.
 - A small red warning badge next to the diagram's PK key icon (spec 08) on real
   primary keys whose unique-combination test is off, so the state is visible on
   the canvas, not only in the details sidebar.
@@ -122,6 +125,18 @@ Then the model still has no `dbt_utils.unique_combination_of_columns` data test
 Given model "orders" has a virtual primary key
 When I look at the Primary key section
 Then the "Omit unique combination test" checkbox is checked and disabled
+```
+
+### Adding the first PK column defaults to unchecked (test written)
+
+```
+Given model "products" has no primary key
+When I select the "products" table
+Then the "Omit unique combination test" checkbox is unchecked and disabled
+When I add "product_id" as the first primary key column
+Then the model gains a `primary_key` constraint on "product_id"
+And the model gains a `dbt_utils.unique_combination_of_columns` data test on ["product_id"]
+And the "Omit unique combination test" checkbox is now unchecked and enabled
 ```
 
 ### The diagram warns when the test is off
@@ -283,15 +298,21 @@ export interface FlowNodeData {
 8. **UI.** The checkbox is a second `details__checkbox-row` directly beneath the
    Virtual row, labelled exactly `Omit unique combination test`. Its `checked`
    state is **negated** relative to `uniqueTest`:
-   `checked={!(node.primaryKey?.uniqueTest ?? false)}` — since `uniqueTest` is
-   already `false` for both the virtual and no-PK-columns cases (see behavior
-   note 3 and `buildDiagram`), this single expression naturally reads as
-   checked (omitted) there too, with no special-casing needed. It stays
+   `checked={!uniqueTest}`, where the local `uniqueTest` is
+   `node.primaryKey?.uniqueTest ?? true`. Omitting the test is meant to stay
+   exceptional, so when there is no PK yet (`node.primaryKey === undefined`)
+   this defaults to `true` (test present, checkbox unchecked) rather than to
+   `false` — otherwise adding the very first PK column would silently create
+   the PK *without* the test, the opposite of "exceptional". For an existing
+   virtual PK, `uniqueTest` is always `false` (`buildDiagram`, behavior note
+   3), so the checkbox reads checked (omitted) and disabled, which is correct:
+   nothing is ever written for a virtual PK. It stays
    `disabled={virtual || columns.length === 0}` — there is nothing to assert
    without PK columns, and nothing is written for a virtual PK. Toggling it
    posts `{ kind: 'setPrimaryKey', model: node.id, columns, virtual, uniqueTest: !current }`
-   exactly as before — only the checkbox's own `checked`/label is negated, not
-   the underlying flag or edit semantics.
+   exactly as before — only the checkbox's own `checked`/label and the
+   no-PK-yet default are negated/changed, not the underlying flag or edit
+   semantics elsewhere.
 9. **Every `setPrimaryKey` post from `PrimaryKeySection` carries the flag**,
    including the chip add/remove and the Virtual toggle, using the checkbox's
    current value. That is what makes scenario "Changing PK columns while the test
@@ -381,8 +402,9 @@ test need no change.
       constraint and `not_null` checks intact.
 - [ ] Unchecking it writes a fresh mapping-form test for the current PK columns.
 - [ ] Changing PK columns while it is checked never re-creates the test.
-- [ ] The checkbox is checked and disabled for a virtual primary key and when
-      there are no PK columns.
+- [ ] The checkbox is checked and disabled for a virtual primary key.
+- [ ] The checkbox defaults to unchecked and disabled when a model has no
+      primary key yet; adding the first PK column creates the test.
 - [ ] A real primary key with the test off shows a red warning badge next to
       its key icon on the diagram canvas; the badge disappears once the test is
       on, and never appears for a virtual primary key.
