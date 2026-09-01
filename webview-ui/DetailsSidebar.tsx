@@ -24,7 +24,9 @@ import type { ForeignKeyDescriptor } from '../src/dbt/types';
 import type { ColumnDisplayMode } from '../src/diagram/columnDisplay';
 import type { TableNode, TableNodeColumn } from '../src/diagram/graph';
 import { ColumnDisplaySection } from './ColumnDisplaySection';
+import { isPrimaryKeyColumn, toggleColumnPrimaryKey } from './columnPrimaryKey';
 import { ForeignKeySection, type DraftForeignKey } from './ForeignKeySection';
+import { ChartNoAxesGantt } from './icons';
 import { PrimaryKeySection } from './PrimaryKeySection';
 
 /** The entity the sidebar renders: a table, or a column within its table. */
@@ -48,6 +50,8 @@ interface DetailsSidebarProps {
   onRemoveLastPair: (fk: ForeignKeyDescriptor) => void;
   /** Hides the whole sidebar, leaving its reopen rail (spec 11). */
   onCollapse: () => void;
+  /** Posts `model:openSource`; `column` omitted reveals the model declaration (spec 15/25). */
+  onOpenModelSource: (model: string, column?: string) => void;
   /** The selected table's effective column-display mode (spec 24); ignored for a column entity. */
   columnDisplayMode: ColumnDisplayMode;
   onColumnDisplayModeChange: (mode: ColumnDisplayMode) => void;
@@ -67,6 +71,7 @@ export function DetailsSidebar({
   onDraftAddPair,
   onRemoveLastPair,
   onCollapse,
+  onOpenModelSource,
   columnDisplayMode,
   onColumnDisplayModeChange,
   style,
@@ -90,6 +95,15 @@ export function DetailsSidebar({
       ) : entity.kind === 'table' ? (
         <div className="details__section">
           <h2 className="details__section-title">Table</h2>
+          <button
+            type="button"
+            className="details__reveal"
+            title="Reveal in model.yml"
+            onClick={() => onOpenModelSource(entity.node.id)}
+          >
+            <ChartNoAxesGantt size={14} />
+            Reveal in model.yml
+          </button>
           <EditableField
             label="Name"
             value={entity.node.label}
@@ -131,6 +145,15 @@ export function DetailsSidebar({
           <p className="details__context">
             {entity.node.id}.{entity.column.name}
           </p>
+          <button
+            type="button"
+            className="details__reveal"
+            title="Reveal in model.yml"
+            onClick={() => onOpenModelSource(entity.node.id, entity.column.name)}
+          >
+            <ChartNoAxesGantt size={14} />
+            Reveal in model.yml
+          </button>
           <EditableField
             label="Name"
             value={entity.column.name}
@@ -169,6 +192,14 @@ export function DetailsSidebar({
               })
             }
           />
+          <label className="details__checkbox-row">
+            <input
+              type="checkbox"
+              checked={isPrimaryKeyColumn(entity.node, entity.column.name)}
+              onChange={() => onEdit(toggleColumnPrimaryKey(entity.node, entity.column.name))}
+            />
+            Primary key
+          </label>
         </div>
       )}
     </aside>

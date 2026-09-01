@@ -571,6 +571,26 @@ body {
   accent-color: var(--accent);
 }
 
+/* Reveal in model.yml button (Table/Column sections) */
+.details__reveal {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  padding: 4px 8px;
+  margin-bottom: 8px;
+  border: none;
+  border-radius: 2px;
+  cursor: pointer;
+  background: var(--vscode-button-secondaryBackground);
+  color: var(--vscode-button-secondaryForeground);
+}
+
+.details__reveal:hover {
+  background: var(--vscode-button-secondaryHoverBackground);
+}
+
+
 /* Removable PK column chips */
 .pk-chips {
   display: flex;

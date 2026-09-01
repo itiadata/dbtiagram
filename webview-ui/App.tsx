@@ -618,6 +618,7 @@ export function App(): JSX.Element {
             focusedFk={selection.focusedFk}
             drafts={selectedTableId === null ? [] : (drafts.draftFks[selectedTableId] ?? [])}
             onEdit={onEdit}
+            onOpenModelSource={onOpenModelSource}
             columnDisplayMode={
               selectedTableId === null ? 'all' : columnDisplay.effectiveMode(selectedTableId)
             }
