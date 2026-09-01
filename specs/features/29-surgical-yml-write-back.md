@@ -341,3 +341,57 @@ plain objects key-by-key ignoring key order, and arrays index-by-index.
       value has the shape the parser recognizes.
 - [x] Unreadable/unparseable files still get written via `serializeModelYml`.
 - [x] `npm run verify` is green.
+
+## Addendum: never re-wrap scalars the merge did not touch
+
+`mergeModelYml` calls `doc.toString({ flowCollectionPadding })` with no
+`lineWidth`. The `yaml` library defaults to `lineWidth: 80` and re-emits every
+scalar from the AST — not just the nodes the reconciler mutated. A long
+single-line description therefore gets folded across several lines on any save,
+even when that column was never edited:
+
+```yaml
+# before an unrelated edit elsewhere in the file
+description: "It identifies the customer to whom the data belongs, ensuring the separation and security of information between different customers in the system."
+
+# after
+description: "It identifies the customer to whom the data belongs, ensuring the
+  separation and security of information between different customers in
+  the system."
+```
+
+This directly violates this spec's central guarantee — *"a node that already
+matches the desired state is left completely untouched"* — and the Acceptance
+Criterion that editing one key leaves every other key byte-identical. The
+reconciler was doing its job correctly; the loss happened during serialization.
+
+### Decided behavior
+
+`mergeModelYml` passes `lineWidth: 0` (wrapping disabled) alongside the
+existing `flowCollectionPadding` option:
+
+```ts
+const output = doc.toString({
+  flowCollectionPadding: usesFlowPadding(originalText),
+  lineWidth: 0,
+});
+```
+
+Untouched long scalars keep their on-disk line breaks. Newly written long
+values stay on one line rather than being folded, which matches how the
+fixtures and real-world dbt files are written.
+
+### Scope notes
+
+- `src/dbt/serialize.ts` is **out of scope** and keeps its current `stringify`
+  options. The full serializer is only the fallback for files that cannot be
+  parsed as YAML at all, and regenerates the file wholesale by definition.
+- The no-op short-circuit (`deepEqual` → return `originalText` byte for byte)
+  and the CRLF re-normalization in `mergeModelYml` are unchanged.
+
+### Tests
+
+| Test file | Test name | Input | Expected |
+|-----------|-----------|-------|----------|
+| `test/unit/dbt/merge/reconcile.test.ts` | `does not re-wrap an untouched long description` | 2-column model where column 2 has a 150-character double-quoted single-line description; edit column 1's `data_type` | column 2's description line is byte-identical in the output |
+| `test/unit/dbt/merge/reconcile.test.ts` | `writes a new long description on a single line` | set a column description to a 150-character string | the written description occupies one line (no continuation line) |

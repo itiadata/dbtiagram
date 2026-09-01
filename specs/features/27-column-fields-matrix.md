@@ -551,3 +551,147 @@ export interface DiagramCanvasProps {
       `workspaceState`), while the filter always starts empty; neither is
       written to `.dbtiagram.yml`.
 - [x] `npm run verify` is green.
+
+## Addendum: column meta is stored in `config.meta`, in flow style
+
+This spec's prose and scenarios always said column meta lives in `config.meta`
+(see Scope, and the scenario "a GDPR key is added"), but its Implementation
+Plan never covered `src/dbt/parse.ts` or `src/dbt/merge/shape.ts` — it worked
+purely on the domain `ModelColumn.meta` field. The on-disk shape was inherited
+unexamined from the repository baseline, which stored column meta as a **flat
+top-level `meta:`** key. Commit `ca8efa8` later fixed the *read* side to prefer
+`config.meta`, but left the *write* side emitting flat `meta:`.
+
+That asymmetry is a live bug: for every column whose meta is on disk under
+`config.meta`, the desired shape contains a flat `meta` key the file lacks, so
+the reconciler inserts one — duplicating the whole meta block onto **every**
+column in the file on any unrelated edit (e.g. changing one column's
+`data_type`).
+
+### Decided behavior
+
+- **`config.meta` is the one and only location.** The editor reads column meta
+  from `config.meta` and writes it back to `config.meta`. The flat top-level
+  fallback read added by `ca8efa8` is removed.
+- **A flat column-level `meta:` is ignored, not migrated and not deleted.** It
+  is invisible to the domain model, so its keys do not appear in the diagram or
+  the fields matrix; it is also never rewritten or removed, and stays exactly
+  where the user put it. (Consequence accepted at approval time: flat
+  column-level `meta:` is valid older dbt, and such keys will no longer be
+  shown.)
+- **A `config.meta` mapping created by the editor is emitted in flow style**
+  (`meta: {GDPR: "true"}`), matching the convention users write meta in. A
+  `config.meta` that already exists on disk keeps whatever style it has — a
+  block-style block stays block-style.
+
+### Implementation
+
+| Path | Action | Responsibility |
+|------|--------|----------------|
+| `src/dbt/types.ts` | modify | Add `config` to `ModelColumn`. |
+| `src/dbt/parse.ts` | modify | Read column meta from `config.meta` only; keep the rest of `config`. |
+| `src/dbt/merge/shape.ts` | modify | `toDbtColumn` emits meta inside `config`, never flat. |
+| `src/dbt/merge/reconcile.ts` | modify | Add `flowOnCreate` to `MergePolicy`. |
+| `src/dbt/merge/index.ts` | modify | Column `config` policy + drop `meta` from `COLUMN_DELETABLE`. |
+| `test/unit/dbt/parse.test.ts` | modify | Parse cases below. |
+| `test/unit/dbt/merge/reconcile.test.ts` | modify | Merge cases below. |
+| `specs/ARCHITECTURE.md` | modify | Update the `parse.ts` / `shape.ts` / `reconcile.ts` rows. |
+
+```ts
+// src/dbt/types.ts  (pure — must not import `vscode`)
+export interface ModelColumn {
+  name: string;
+  dataType?: string;
+  description?: string;
+  tests?: string[];
+  dataTests?: DataTestEntry[];
+  /** The column's meta mapping, read from and written to `config.meta`. */
+  meta?: Record<string, unknown>;
+  /**
+   * The column's on-disk `config` mapping **with `meta` removed**; `meta` is
+   * spliced back in by `toDbtColumn`. Round-tripping the remainder here is what
+   * stops the reconciler's `deletable: 'all'` policy from wiping sibling
+   * `config` keys such as `tags`.
+   */
+  config?: Record<string, unknown>;
+}
+```
+
+```ts
+// src/dbt/merge/reconcile.ts  (pure — must not import `vscode`)
+export interface MergePolicy {
+  deletable: ReadonlyMap<string, ManagedShape> | 'all';
+  order: KeyOrder;
+  child(key: string | number): MergePolicy;
+  /**
+   * When this node is *created* from a plain object whose values are all
+   * scalars, emit it as a flow mapping (`{a: b}`). Ignored for nodes that
+   * already exist on disk, whose style is always preserved.
+   */
+  flowOnCreate?: boolean;
+}
+```
+
+`parseModelYml`, `toDbtColumn`, `mergeModelYml` and `setColumnMetaValue` keep
+their existing exported signatures.
+
+### Behavior notes
+
+- **`normalizeColumn`.** When `raw.config` is a record and `raw.config.meta` is
+  a record: `meta = raw.config.meta`, and `config` = the rest of `raw.config`
+  with `meta` removed (omit `config` entirely when that remainder is empty).
+  Otherwise: no `meta`, and `config = raw.config` when it is a record. A flat
+  `raw.meta` is never consulted for a column. Model-level `meta` is unaffected.
+- **`toDbtColumn`.** Key order `name`, `data_type`, `description`, `tests`,
+  `data_tests`, `config`. Emit `config: {...column.config, ...(meta ? {meta} :
+  {})}`, omitting `config` entirely when that object would be empty. Never emit
+  a top-level `meta` key.
+- **Deletion policy.** Remove the `['meta', 'mapping']` entry from
+  `COLUMN_DELETABLE`. This spec's Out of scope already guarantees a meta key is
+  never deleted (clearing a cell blanks it to `""`), so `meta` never needs to be
+  deletable at column level — and keeping it deletable would delete the flat
+  `meta:` this addendum promises to leave alone. Do **not** add `config` to
+  `COLUMN_DELETABLE`.
+- **Column `config` policy.** Add `COLUMN_CONFIG_POLICY` (`deletable: 'all'`,
+  `order: FREE_KEY_ORDER`, `child(key) => key === 'meta' ? FLOW_FREE_POLICY :
+  FREE_POLICY`), where `FLOW_FREE_POLICY` is `FREE_POLICY` plus `flowOnCreate:
+  true`. Wire via `COLUMN_POLICY.child = (key) => key === 'config' ?
+  COLUMN_CONFIG_POLICY : FREE_POLICY`. `deletable: 'all'` is safe here only
+  because `column.config` now round-trips the full on-disk mapping.
+- **Flow creation.** In `reconcileMap`'s "pair not found" branch, when
+  `policy.child(key).flowOnCreate` is true and the value is a non-empty plain
+  object whose every value is a scalar (`string | number | boolean | null`),
+  build a `YAMLMap` with `flow = true` and one `Pair` per entry instead of
+  passing the raw object. Otherwise fall back to the plain object (block
+  style) — a block mapping nested inside a flow mapping is invalid YAML.
+  Existing nodes are never restyled.
+
+### Tests
+
+| Test file | Test name | Input | Expected |
+|-----------|-----------|-------|----------|
+| `test/unit/dbt/parse.test.ts` | `reads column meta from config.meta and keeps sibling config keys` | column `{name: a, config: {tags: [pii], meta: {GDPR: "false"}}}` | `meta` = `{GDPR: "false"}`, `config` = `{tags: ["pii"]}` |
+| `test/unit/dbt/parse.test.ts` | `ignores a flat column-level meta key` | column `{name: a, meta: {GDPR: "false"}}` | `meta` undefined, `config` undefined |
+| `test/unit/dbt/parse.test.ts` | `prefers config.meta over a flat column meta` | column `{name: a, meta: {GDPR: "x"}, config: {meta: {GDPR: "y"}}}` | `meta` = `{GDPR: "y"}`, `config` undefined |
+| `test/unit/dbt/merge/reconcile.test.ts` | `a data-type edit does not duplicate config.meta onto any column` | 2-column model, both with `config: {meta: {c: "internal"}}`; edit column 1's `data_type` to `varchar(33)` | no top-level `meta:` under either column; column 2's text byte-identical; `varchar(33)` present |
+| `test/unit/dbt/merge/reconcile.test.ts` | `writes a meta edit into config.meta, keeping sibling config keys` | column with `config: {tags: ["pii"], meta: {GDPR: "false"}}`; `setColumnMetaValue(..., 'GDPR', 'true')` | `config.meta.GDPR` is `"true"`, `config.tags` still `["pii"]`, no top-level `meta:` |
+| `test/unit/dbt/merge/reconcile.test.ts` | `leaves a flat column-level meta untouched` | column with `config: {meta: {GDPR: "false"}}` and a flat `meta: {GDPR: "false"}`; set `GDPR` to `true` | `config.meta.GDPR` is `"true"`; the flat `meta:` block still present, unchanged, with `"false"` |
+| `test/unit/dbt/merge/reconcile.test.ts` | `creates a new config.meta mapping in flow style` | column with no `meta` and no `config`; set `GDPR` to `true` | output contains `meta: {GDPR: "true"}` on one line under `config:` |
+| `test/unit/dbt/merge/reconcile.test.ts` | `keeps an existing block-style config.meta in block style` | column whose `config.meta` is a block map; set a key's value | meta still block style (no `{`) |
+
+Existing assertions elsewhere that encode the old flat-`meta` shape are
+corrections of this bug, not regressions, and are updated to the `config.meta`
+expectation.
+
+### Do not touch
+
+- `src/dbt/virtual.ts` and the `config.meta.dbtiagram.virtual` namespace (specs
+  08/33). Model-level virtual PK/FK storage is already correct and its
+  block-style output must not change; `flowOnCreate` is scoped to a *column's*
+  `config > meta` only.
+- `MODEL_DELETABLE`'s `['meta', 'mapping']` entry — model-level meta keeps its
+  current read location and deletion semantics.
+- `src/diagram/matrix.ts`, `src/diagram/graph.ts`, and `setColumnMetaValue` in
+  `src/dbt/edit/column.ts`. They read/write `column.meta`, whose meaning is
+  unchanged; the location logic is confined to parse + shape so no consumer
+  changes.
