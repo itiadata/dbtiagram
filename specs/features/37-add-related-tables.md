@@ -1,7 +1,7 @@
 ---
 id: 37
 title: Add related tables to the diagram
-status: approved
+status: done
 priority: high
 created: 2026-09-01
 owner: unassigned
