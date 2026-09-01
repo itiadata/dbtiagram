@@ -39,13 +39,23 @@ up-to-date spec in `specs/features/`.
 | 19  | Diagram viewport and chrome polish | Done |
 | 20  | Show foreign keys with missing columns as broken instead of dropping them | Implemented |
 | 21  | Fix details pane auto-reveal and the lost first click after opening a diagram | Done |
+| 22  | Manual save for diagram layout files | Implemented |
+| 23  | Diagram open-behavior settings panel | Implemented |
+| 24  | Per-table column visibility in the diagram | Done |
+| 25  | Reveal a specific column in model.yml | Done |
+| 26  | Draw a foreign key with the mouse | Done |
 | 27  | Column fields matrix (spreadsheet-style batch editor) | Done |
 | 28  | Lucide icons for UI buttons | Approved |
+| 29  | Surgical model.yml write-back that only touches edited keys | Done |
 | 30  | Show a test-tube icon on columns that have a data test | Draft |
 | 31  | Group tables inside a named box on the diagram | Draft |
 | 32  | Fit the view after auto-layout | Done |
 | 33  | Opt in or out of the model-level unique-combination test for a primary key | Draft |
+| 34  | Column primary-key toggle and a Reveal in model.yml button in the details sidebar | Implemented |
 | 35  | Cap the initial model selection for large workspaces | Done |
+| 36  | Remove a table from the diagram | Draft |
+| 37  | Add related tables to the diagram | Draft |
+| 38  | Open a model's .sql file from the diagram and the sidebar | Draft |
 
 Status values: `draft` → `approved` → `implemented` → `done`.
 
