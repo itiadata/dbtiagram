@@ -1,7 +1,7 @@
 ---
 id: 33
 title: Opt in or out of the model-level unique-combination test for a primary key
-status: implemented
+status: done
 priority: high
 created: 2026-08-31
 owner: unassigned
