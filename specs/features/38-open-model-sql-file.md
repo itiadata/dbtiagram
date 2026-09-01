@@ -62,7 +62,8 @@ greyed one with a tooltip reads as "this model has no SQL yet".
 Given the workspace contains models/marts/orders.sql
 And the diagram shows the "orders" table
 When the user right-clicks the "orders" header and chooses "Open SQL file"
-Then models/marts/orders.sql opens in an editor beside the diagram
+Then models/marts/orders.sql opens in a normal editor tab, without splitting
+the view
 And it is not opened as a preview tab
 ```
 
@@ -224,9 +225,10 @@ export function openModelSql(host: OpenSqlHost, model: string): Promise<void>;
 export function findSqlFiles(glob: string): Promise<Map<string, string>>;
 
 /**
- * Opens `uri`, reusing an existing tab where the file is already open. Unlike
- * `revealInEditor`, it never sets a selection, so the caret in an already-open
- * file is left exactly where the user left it.
+ * Opens `uri` as a normal tab in the active editor group (no split), reusing
+ * an existing tab where the file is already open. Unlike `revealInEditor`, it
+ * never sets a selection, so the caret in an already-open file is left
+ * exactly where the user left it.
  */
 export function openSqlFile(uri: vscode.Uri): Promise<void>;
 ```
@@ -288,8 +290,10 @@ interface FilterSidebarProps {
 - **Message error text is the literal string**
   `No .sql file found for "<model>"` (double quotes around the model name) in
   both the disabled tooltip and the error banner, so the two read identically.
-- **Opening.** `openSqlFile` mirrors `revealInEditor`'s tab-reuse rules —
-  `viewColumn: findOpenViewColumn(uri) ?? vscode.ViewColumn.Beside`,
+- **Opening.** `openSqlFile` mostly mirrors `revealInEditor`'s tab-reuse rules
+  but opens into the active editor group rather than splitting beside the
+  diagram —
+  `viewColumn: findOpenViewColumn(uri) ?? vscode.ViewColumn.Active`,
   `preserveFocus: false`, `preview: existingColumn === undefined` — but sets no
   selection and calls no `revealRange`, so an already-open file keeps its caret
   (scenario 4). `findOpenViewColumn` is exported from `project.ts` unchanged in
@@ -370,7 +374,8 @@ file falls back to the rescan and reports`.
 
 - [ ] `Open SQL file` appears on the table card's context menu from both the
       header and a column row, and on the sidebar model row's menu.
-- [ ] Choosing it opens the model's `.sql` file beside the diagram.
+- [ ] Choosing it opens the model's `.sql` file as a normal tab, without
+      splitting the view.
 - [ ] An already-open `.sql` file is focused rather than reopened, and its
       caret position is preserved.
 - [ ] With no `.sql` file, the item is shown disabled with the tooltip
