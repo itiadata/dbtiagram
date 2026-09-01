@@ -142,6 +142,7 @@ export function DiagramCanvas({
   // before any child's `stopPropagation`. Read only by the corrective fit.
   const userInteractedRef = useRef(false);
   const pendingFitRef = useRef(false);
+  const pendingFitTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const nodesInitialized = useNodesInitialized();
 
   // Adopt each new diagram without disturbing the layout: existing nodes keep
@@ -195,14 +196,31 @@ export function DiagramCanvas({
   // fresh macrotask (`setTimeout(0)`) makes it run exactly like that manual
   // click — after the current render cycle has completely flushed — so the
   // result matches pixel-for-pixel.
+  //
+  // The timer is tracked in a ref rather than returned as this effect's own
+  // cleanup: a dimension-measurement update commonly changes `rfNodes` again
+  // right after auto-layout (as React Flow reports each card's measured
+  // size), which would re-run this effect and — if the timer were cleared in
+  // a per-run cleanup — cancel the pending fit before it ever fires, since
+  // `pendingFitRef.current` is already false on that later run. The timer is
+  // only ever cleared on unmount.
   useEffect(() => {
     if (!shouldRunPendingFit(nodesInitialized, pendingFitRef.current)) return;
     pendingFitRef.current = false;
-    const timer = setTimeout(() => {
+    pendingFitTimerRef.current = setTimeout(() => {
+      pendingFitTimerRef.current = undefined;
       void fitView();
     }, 0);
-    return () => clearTimeout(timer);
   }, [rfNodes, nodesInitialized, fitView]);
+
+  useEffect(
+    () => () => {
+      if (pendingFitTimerRef.current !== undefined) {
+        clearTimeout(pendingFitTimerRef.current);
+      }
+    },
+    [],
+  );
 
   // Spec 19: the pre-measurement `fitView` prop/`fitViewOptions` run before
   // React Flow has measured the table cards, so the initial fit is against
