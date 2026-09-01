@@ -55,7 +55,7 @@ up-to-date spec in `specs/features/`.
 | 35  | Cap the initial model selection for large workspaces | Done |
 | 36  | Remove a table from the diagram | Done |
 | 37  | Add related tables to the diagram | Done |
-| 38  | Open a model's .sql file from the diagram and the sidebar | Draft |
+| 38  | Open a model's .sql file from the diagram and the sidebar | Implemented |
 
 Status values: `draft` → `approved` → `implemented` → `done`.
 
