@@ -187,13 +187,21 @@ export function DiagramCanvas({
   }, [flow, layoutTick, filterTick, seedTick, seedPositions, fitView]);
 
   // Spec 32: deferred fit — the adopt effect sets `pendingFitRef` instead of
-  // calling `fitView` inline, so the new node positions are committed before
-  // React Flow measures them. Keying on `rfNodes` ensures this effect runs
-  // after the updated node list has reached the store.
+  // calling `fitView` inline. `rfNodes` alone is not enough of a delay: this
+  // effect can still run within the same commit that just applied the new
+  // positions, before React Flow's internal store/DOM have fully settled,
+  // which measurably (a few px of padding/zoom) differs from a user clicking
+  // the Controls "Fit View" button afterward. Deferring the actual call to a
+  // fresh macrotask (`setTimeout(0)`) makes it run exactly like that manual
+  // click — after the current render cycle has completely flushed — so the
+  // result matches pixel-for-pixel.
   useEffect(() => {
     if (!shouldRunPendingFit(nodesInitialized, pendingFitRef.current)) return;
     pendingFitRef.current = false;
-    void fitView();
+    const timer = setTimeout(() => {
+      void fitView();
+    }, 0);
+    return () => clearTimeout(timer);
   }, [rfNodes, nodesInitialized, fitView]);
 
   // Spec 19: the pre-measurement `fitView` prop/`fitViewOptions` run before

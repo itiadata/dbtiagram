@@ -127,13 +127,26 @@ export function shouldRunPendingFit(nodesInitialized: boolean, fitPending: boole
    useEffect(() => {
      if (!shouldRunPendingFit(nodesInitialized, pendingFitRef.current)) return;
      pendingFitRef.current = false;
-     void fitView({ padding: 0.15, maxZoom: 1 });
+     const timer = setTimeout(() => {
+       void fitView();
+     }, 0);
+     return () => clearTimeout(timer);
    }, [rfNodes, nodesInitialized, fitView]);
    ```
 
    Keying on `rfNodes` is what buys the deferral: the effect runs after the new
-   node list has been committed and pushed into React Flow's store, so `fitView`
-   measures the arrangement the user just asked for.
+   node list has been committed and pushed into React Flow's store. That alone
+   still runs inside the same commit that applied the new positions, before
+   React Flow's internal store/DOM have fully settled — which produces a
+   measurably different padding/zoom than a user clicking the Controls "Fit
+   View" button afterward. Wrapping the actual `fitView()` call in
+   `setTimeout(..., 0)` pushes it into a fresh macrotask, after the current
+   render cycle has completely flushed, so it reproduces exactly what a manual
+   click does. `fitView()` is called with no arguments (not the
+   `{ padding: 0.15, maxZoom: 1 }` used elsewhere) because that is what the
+   Controls button itself passes — `<Controls>` forwards its own
+   `fitViewOptions` prop, which this app leaves unset, not the one passed to
+   `<ReactFlow>`.
 3. `pendingFitRef` is a ref, not state, so setting it never causes a render; the
    `rfNodes` change that the adopt effect already causes is what schedules the
    consuming effect. When the adopt effect requests a fit without changing
