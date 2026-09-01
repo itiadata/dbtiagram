@@ -6,11 +6,19 @@
  */
 import { useCallback, useMemo, useRef, useState } from 'react';
 import {
+  capInitialSelection,
   computeVisibleModels,
+  INITIAL_MODEL_SELECTION_LIMIT,
   reconcileSelection,
   scopeSelectionToFile,
 } from '../../src/shared/filter';
 import type { DiagramModelFile } from '../../src/shared/protocol';
+
+/** Spec 35: the one-time popup naming how many models were initially shown. */
+export interface InitialCapNotice {
+  shown: number;
+  total: number;
+}
 
 export interface DiagramFilterState {
   modelFiles: DiagramModelFile[];
@@ -35,6 +43,10 @@ export interface DiagramFilterState {
   applyScope: (uri: string) => void;
   /** A saved layout's table list becomes the exact visible set (spec 13). */
   applyLayoutTables: (names: string[]) => void;
+  /** Spec 35: set once when the first load capped the model selection. */
+  initialCapNotice: InitialCapNotice | null;
+  /** Dismisses the initial-cap popup (auto-timer or manual close). */
+  dismissInitialCapNotice: () => void;
 }
 
 export function useDiagramFilter(): DiagramFilterState {
@@ -44,10 +56,14 @@ export function useDiagramFilter(): DiagramFilterState {
   const [fileSearch, setFileSearch] = useState('');
   const [modelSearch, setModelSearch] = useState('');
   const [filterTick, setFilterTick] = useState(0);
+  const [initialCapNotice, setInitialCapNotice] = useState<InitialCapNotice | null>(null);
   // Universes from the previous diagram:update, used to tell brand-new
   // files/models (default checked) apart from ones the user unchecked.
   const previousFileUrisRef = useRef<string[]>([]);
   const previousModelNamesRef = useRef<string[]>([]);
+  // Spec 35: the initial model-selection cap applies only to the panel's
+  // very first diagram:update — this flips true after that first call.
+  const hasLoadedOnceRef = useRef(false);
   // Spec 14: the freshest file metadata, readable synchronously by the
   // `filter:scope` handler (which arrives as its own message event), and a
   // latch making `layout:apply` win over any later scope message.
@@ -86,7 +102,16 @@ export function useDiagramFilter(): DiagramFilterState {
 
     const modelNames = files.flatMap((file) => file.models);
     const previousNames = previousModelNamesRef.current;
-    setSelectedModels((current) => reconcileSelection(previousNames, modelNames, current));
+    // Spec 35: only the panel's very first load caps the model selection;
+    // every later call reconciles normally, uncapped.
+    const isInitialLoad = !hasLoadedOnceRef.current;
+    hasLoadedOnceRef.current = true;
+    if (isInitialLoad && modelNames.length > INITIAL_MODEL_SELECTION_LIMIT) {
+      setSelectedModels(capInitialSelection(modelNames));
+      setInitialCapNotice({ shown: INITIAL_MODEL_SELECTION_LIMIT, total: modelNames.length });
+    } else {
+      setSelectedModels((current) => reconcileSelection(previousNames, modelNames, current));
+    }
     previousModelNamesRef.current = modelNames;
   }, []);
 
@@ -159,6 +184,10 @@ export function useDiagramFilter(): DiagramFilterState {
     setFilterTick((tick) => tick + 1);
   }, [availableModelNames]);
 
+  const dismissInitialCapNotice = useCallback((): void => {
+    setInitialCapNotice(null);
+  }, []);
+
   return {
     modelFiles,
     selectedFiles,
@@ -179,5 +208,7 @@ export function useDiagramFilter(): DiagramFilterState {
     applyModelFiles,
     applyScope,
     applyLayoutTables,
+    initialCapNotice,
+    dismissInitialCapNotice,
   };
 }

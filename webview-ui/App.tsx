@@ -26,6 +26,7 @@ import {
 } from './diagram-interaction-context';
 import { FilterSidebar } from './FilterSidebar';
 import { SettingsPanel } from './SettingsPanel';
+import { Toast } from './Toast';
 import { postToHost } from './host';
 import { useColumnDisplay } from './hooks/useColumnDisplay';
 import { useDiagramFilter } from './hooks/useDiagramFilter';
@@ -48,6 +49,7 @@ export function App(): JSX.Element {
   const [graph, setGraph] = useState<DiagramGraph | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [pendingErrors, setPendingErrors] = useState<string[]>([]);
+  const [pendingErrorsExpanded, setPendingErrorsExpanded] = useState(false);
   const [layoutTick, setLayoutTick] = useState(0);
   // Spec 11: sidebar visibility and widths are plain webview state — they
   // survive panel hide/reveal (retainContextWhenHidden) and reset on reopen.
@@ -554,9 +556,23 @@ export function App(): JSX.Element {
           )}
           {pendingErrors.length > 0 && (
             <div className="banner banner--info">
-              <strong>Waiting for valid YAML:</strong>
+              <div className="banner__header">
+                <strong>
+                  Waiting for valid YAML{pendingErrors.length > 1 ? ` (${pendingErrors.length})` : ''}:
+                </strong>
+                {pendingErrors.length > 1 && (
+                  <button
+                    type="button"
+                    className="panel-button banner__toggle"
+                    onClick={() => setPendingErrorsExpanded((expanded) => !expanded)}
+                    aria-expanded={pendingErrorsExpanded}
+                  >
+                    {pendingErrorsExpanded ? 'Collapse' : 'Show all'}
+                  </button>
+                )}
+              </div>
               <ul className="banner__list">
-                {pendingErrors.map((entry) => (
+                {(pendingErrorsExpanded ? pendingErrors : pendingErrors.slice(0, 1)).map((entry) => (
                   <li key={entry}>{entry}</li>
                 ))}
               </ul>
@@ -681,6 +697,12 @@ export function App(): JSX.Element {
           storedPrefs={fieldsMatrix.storedPrefs[fieldsMatrix.target.scope]}
           columnFilters={fieldsMatrix.columnFilters}
           onColumnFilterChange={fieldsMatrix.setColumnFilter}
+        />
+      )}
+      {filter.initialCapNotice !== null && (
+        <Toast
+          message={`Showing ${filter.initialCapNotice.shown} of ${filter.initialCapNotice.total} models — use the Filter section in the sidebar to change which models are loaded.`}
+          onDismiss={filter.dismissInitialCapNotice}
         />
       )}
     </main>

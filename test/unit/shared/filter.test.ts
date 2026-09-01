@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { DiagramGraph } from '../../../src/diagram/graph';
 import {
+  capInitialSelection,
   computeVisibleModels,
   filterGraph,
   matchesSearch,
@@ -128,6 +129,29 @@ describe('filterGraph', () => {
     const snapshot = JSON.stringify(graph);
     filterGraph(graph, new Set(['orders']));
     expect(JSON.stringify(graph)).toBe(snapshot);
+  });
+});
+
+describe('capInitialSelection', () => {
+  it('returns everything at or under the limit', () => {
+    const result = capInitialSelection(['a', 'b'], 20);
+    expect(result).toEqual(new Set(['a', 'b']));
+  });
+
+  it('keeps only the first N in order', () => {
+    const names = Array.from({ length: 47 }, (_, i) => `m${i}`);
+    const result = capInitialSelection(names, 20);
+    expect(result).toEqual(new Set(names.slice(0, 20)));
+    expect(result.has('m19')).toBe(true);
+    expect(result.has('m20')).toBe(false);
+  });
+
+  it('uses the default limit of 20 when omitted', () => {
+    const names = Array.from({ length: 25 }, (_, i) => `m${i}`);
+    const result = capInitialSelection(names);
+    expect(result.size).toBe(20);
+    expect(result.has('m19')).toBe(true);
+    expect(result.has('m20')).toBe(false);
   });
 });
 

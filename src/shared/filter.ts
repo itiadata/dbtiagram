@@ -10,6 +10,24 @@
 import type { DiagramGraph } from '../diagram/graph';
 import type { DiagramModelFile } from './protocol';
 
+/**
+ * Default cap on how many models start checked on a diagram's first load
+ * (spec 35). Workspaces at or under this total are unaffected.
+ */
+export const INITIAL_MODEL_SELECTION_LIMIT = 20;
+
+/**
+ * The initial checked-model set for a freshly opened diagram (spec 35): the
+ * first `limit` names from `modelNames` (already in file/declaration order),
+ * or all of them when the total is at or under `limit`.
+ */
+export function capInitialSelection(
+  modelNames: readonly string[],
+  limit: number = INITIAL_MODEL_SELECTION_LIMIT,
+): Set<string> {
+  return new Set(modelNames.slice(0, limit));
+}
+
 /** Case-insensitive substring match; empty/whitespace queries match all. */
 export function matchesSearch(text: string, query: string): boolean {
   const q = query.trim().toLowerCase();

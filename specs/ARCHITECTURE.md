@@ -70,7 +70,7 @@ including sticky notes (spec 16) and per-table/diagram-wide column-display modes
 | Path | Layer | Responsibility | Key exports |
 |------|-------|----------------|-------------|
 | `src/shared/protocol.ts` | shared | The **only** message contract between extension host and webview. | `MessageToWebview`, `MessageToExtension`, `DiagramModelFile`, `DiagramPendingError` |
-| `src/shared/filter.ts` | shared | File/model filtering and selection reconciliation for the filter sidebar. | `filterGraph`, `computeVisibleModels`, `reconcileSelection`, `scopeSelectionToFile`, `matchesSearch` |
+| `src/shared/filter.ts` | shared | File/model filtering and selection reconciliation for the filter sidebar, plus the initial model-selection cap for large workspaces (spec 35). | `filterGraph`, `computeVisibleModels`, `reconcileSelection`, `scopeSelectionToFile`, `matchesSearch`, `capInitialSelection`, `INITIAL_MODEL_SELECTION_LIMIT` |
 | `src/shared/glob.ts` | shared | Minimal glob matching used for model file discovery patterns. | `matchesGlob`, `globToRegExp`, `normalizePathForGlob` |
 | `src/shared/labels.ts` | shared | Disambiguate display labels for files that share a base name. | `disambiguateFileLabels`, `FileLabelMap` |
 | `src/shared/openBehavior.ts` | shared | The "Open new diagrams" setting's type, default and UI option text (spec 23). | `OpenBehavior`, `DEFAULT_OPEN_BEHAVIOR`, `OpenBehaviorOption`, `OPEN_BEHAVIOR_OPTIONS` |
@@ -118,6 +118,7 @@ via `ExtensionContext.workspaceState` (spec 27). | `readMatrixColumnPrefs`, `wri
 | `webview-ui/FkEdge.tsx` | webview | Custom FK edge renderer with hover-friendly interaction width. | `FkEdge`, `roundedPath` |
 | `webview-ui/ContextMenu.tsx` | webview | Reusable portal-rendered context menu with disabled/checkable items and submenu flyouts (spec 15, spec 24). | `ContextMenu`, `ContextMenuItem`, `ContextMenuProps` |
 | `webview-ui/SettingsPanel.tsx` | webview | "Open new diagrams" settings overlay: option list with descriptions, radio selection, dismiss conventions matching `ContextMenu` (spec 23). | `SettingsPanel`, `SettingsPanelProps` |
+| `webview-ui/Toast.tsx` | webview | Generic auto-dismissing popup with a manual close button; used for the initial model-selection-cap notice (spec 35). | `Toast`, `ToastProps` |
 | `webview-ui/context-menu-position.ts` | webview (pure) | Viewport flip/clamp geometry for the context menu and its submenu flyouts (spec 15, spec 24). | `placeMenu`, `placeSubmenu`, `MenuBox`, `MenuPoint`, `MenuPlacement`, `SubmenuAnchor` |
 | `webview-ui/details-visibility.ts` | webview (pure) | Details sidebar visibility policy: opens/closes with the selection, manual collapse sticks until it next changes (spec 19); `{visible,key}` transition that keeps the policy safe inside a React state updater (spec 21). | `selectionKey`, `nextDetailsVisible`, `SelectionKey`, `DetailsVisibility`, `initialDetailsVisibility`, `advanceDetailsVisibility` |
 | `webview-ui/initial-fit.ts` | webview (pure) | Viewport-fit policies: the one-off post-measurement corrective fit (spec 21) and the deferred pending fit (spec 32). | `shouldRunInitialFit`, `shouldRunPendingFit` |
@@ -144,7 +145,7 @@ via `ExtensionContext.workspaceState` (spec 27). | `readMatrixColumnPrefs`, `wri
 | `webview-ui/hooks/useContextMenu.ts` | webview | Open/close state (point + items) for the shared context menu (spec 15). | `useContextMenu`, `ContextMenuState` |
 | `webview-ui/hooks/useRevealModel.ts` | webview | "Reveal in diagram" target state and callback (spec 15). | `useRevealModel`, `RevealTarget`, `RevealModelState` |
 | `webview-ui/hooks/useNotes.ts` | webview | Sticky note state: persisted notes, runtime collapse map, node projection, mutations (spec 16). | `useNotes`, `NotesState` |
-| `webview-ui/hooks/useDiagramFilter.ts` | webview | Filter sidebar state on top of `src/shared/filter.ts`. | `useDiagramFilter`, `DiagramFilterState` |
+| `webview-ui/hooks/useDiagramFilter.ts` | webview | Filter sidebar state on top of `src/shared/filter.ts`, including the one-time initial model-selection cap and its popup notice for large workspaces (spec 35). | `useDiagramFilter`, `DiagramFilterState`, `InitialCapNotice` |
 | `webview-ui/hooks/useDraftForeignKeys.ts` | webview | Track in-progress FK edits that are not yet persistable. | `useDraftForeignKeys`, `DraftForeignKeysState` |
 | `webview-ui/hooks/useEdgeHighlighting.ts` | webview | Hover/selection highlighting of FK edges and handle dots. | `useEdgeHighlighting`, `EdgeHighlightingState` |
 | `webview-ui/hooks/useColumnDisplay.ts` | webview | React state wrapper around `column-display-state.ts`: the diagram default, per-table overrides, effective-mode lookup, and seeding from an opened layout (spec 24). | `useColumnDisplay`, `ColumnDisplayHookState` |
