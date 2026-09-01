@@ -21,6 +21,12 @@ export interface MergePolicy {
   order: KeyOrder;
   /** Policy for a child value, by key (maps) or by index (sequences). */
   child(key: string | number): MergePolicy;
+  /**
+   * When this node is *created* from a plain object whose values are all
+   * scalars, emit it as a flow mapping (`{a: b}`). Ignored for nodes that
+   * already exist on disk, whose style is always preserved (spec 27 addendum).
+   */
+  flowOnCreate?: boolean;
 }
 
 /** The value shapes `parseModelYml` recognizes for a managed key. */
@@ -49,7 +55,7 @@ function reconcileMap(
     const pair = findPair(node, key);
     if (pair === undefined) {
       const index = insertionIndex(mapKeys(node), key, policy.order);
-      node.items.splice(index, 0, new Pair(key, value));
+      node.items.splice(index, 0, new Pair(key, createValue(value, policy.child(key))));
       continue;
     }
 
@@ -78,6 +84,46 @@ function reconcileMap(
     // Absence there means "the editor cannot read it", not "delete it".
     return !matchesShape(isPair(item) ? item.value : undefined, shape);
   });
+}
+
+/**
+ * Builds the node to insert for a key that does not yet exist on disk.
+ *
+ * With `flowOnCreate`, a non-empty plain object of scalars becomes a flow
+ * mapping (`{a: b}`) — the convention users write `config.meta` in. Anything
+ * else keeps today's behavior: the plain value is handed to the serializer,
+ * which renders it as a block mapping. A block mapping nested inside a flow
+ * mapping would be invalid YAML, so a flow node is only ever built when every
+ * value is a scalar.
+ *
+ * Recursion matters when an ancestor is created in the same write (e.g. a
+ * column that has no `config` at all yet gains `config.meta`): the nested
+ * `meta` must still pick up its own `flowOnCreate`.
+ */
+function createValue(value: unknown, policy: MergePolicy): unknown {
+  if (!isPlainObject(value)) return value;
+
+  const entries = Object.entries(value).filter(([, v]) => v !== undefined);
+
+  if (policy.flowOnCreate === true && entries.length > 0 && entries.every(([, v]) => isScalarValue(v))) {
+    const flow = new YAMLMap();
+    flow.flow = true;
+    for (const [key, entry] of entries) flow.items.push(new Pair(key, entry));
+    return flow;
+  }
+
+  const children = entries.map(
+    ([key, entry]) => [key, createValue(entry, policy.child(key))] as const,
+  );
+  // Nothing below needed special treatment — hand back the plain object so the
+  // serializer behaves exactly as it did before this option existed.
+  if (children.every(([key, node], i) => node === entries[i][1] && key === entries[i][0])) {
+    return value;
+  }
+
+  const block = new YAMLMap();
+  for (const [key, node] of children) block.items.push(new Pair(key, node));
+  return block;
 }
 
 /** Whether a value node has the shape the parser recognizes for a managed key. */

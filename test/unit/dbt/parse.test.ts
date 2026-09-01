@@ -227,8 +227,43 @@ models:
   });
 });
 
-describe('column meta (spec 27 bug fix)', () => {
-  it('parses column-level meta from the flat meta key', () => {
+describe('column meta (spec 27 addendum)', () => {
+  it('reads column meta from config.meta and keeps sibling config keys', () => {
+    const file = parseModelYml(`
+models:
+  - name: customers
+    columns:
+      - name: customer_id
+        config:
+          tags: [pii]
+          meta:
+            confidentiality: internal
+            sensitivity: not_sensitive
+`);
+    const column = file.models[0].columns?.[0];
+    expect(column?.meta).toEqual({
+      confidentiality: 'internal',
+      sensitivity: 'not_sensitive',
+    });
+    expect(column?.config).toEqual({ tags: ['pii'] });
+  });
+
+  it('omits config entirely when meta was its only key', () => {
+    const file = parseModelYml(`
+models:
+  - name: customers
+    columns:
+      - name: customer_id
+        config:
+          meta:
+            GDPR: "false"
+`);
+    const column = file.models[0].columns?.[0];
+    expect(column?.meta).toEqual({ GDPR: 'false' });
+    expect(column?.config).toBeUndefined();
+  });
+
+  it('ignores a flat column-level meta key', () => {
     const file = parseModelYml(`
 models:
   - name: customers
@@ -238,30 +273,12 @@ models:
           confidentiality: internal
           GDPR: "false"
 `);
-    expect(file.models[0].columns?.[0].meta).toEqual({
-      confidentiality: 'internal',
-      GDPR: 'false',
-    });
+    const column = file.models[0].columns?.[0];
+    expect(column?.meta).toBeUndefined();
+    expect(column?.config).toBeUndefined();
   });
 
-  it('falls back to config.meta when meta is nested under column config', () => {
-    const file = parseModelYml(`
-models:
-  - name: customers
-    columns:
-      - name: customer_id
-        config:
-          meta:
-            confidentiality: internal
-            sensitivity: not_sensitive
-`);
-    expect(file.models[0].columns?.[0].meta).toEqual({
-      confidentiality: 'internal',
-      sensitivity: 'not_sensitive',
-    });
-  });
-
-  it('prefers the flat meta key over config.meta when both are present', () => {
+  it('prefers config.meta over a flat column meta', () => {
     const file = parseModelYml(`
 models:
   - name: customers
@@ -273,17 +290,19 @@ models:
           meta:
             a: "2"
 `);
-    expect(file.models[0].columns?.[0].meta).toEqual({ a: '1' });
+    expect(file.models[0].columns?.[0].meta).toEqual({ a: '2' });
   });
 
-  it('round trips column meta through the flat meta key', () => {
+  it('round trips column meta through config.meta', () => {
     const file = parseModelYml(`
 models:
   - name: customers
     columns:
       - name: email
-        meta:
-          GDPR: "false"
+        config:
+          tags: [pii]
+          meta:
+            GDPR: "false"
 `);
     const reparsed = parseModelYml(serializeModelYml(file));
     expect(reparsed).toEqual(file);

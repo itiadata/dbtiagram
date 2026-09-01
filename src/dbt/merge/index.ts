@@ -44,12 +44,17 @@ const MODEL_DELETABLE: ReadonlyMap<string, ManagedShape> = new Map<string, Manag
   ['meta', 'mapping'],
 ]);
 
+/**
+ * `meta` is deliberately absent: spec 27 guarantees a column meta key is never
+ * deleted (clearing a cell blanks it to `""`), and a flat top-level `meta:` is
+ * ignored by the parser and must be left exactly where the user put it
+ * (spec 27 addendum). `config` is absent for the same reason.
+ */
 const COLUMN_DELETABLE: ReadonlyMap<string, ManagedShape> = new Map<string, ManagedShape>([
   ['data_type', 'string'],
   ['description', 'string'],
   ['tests', 'sequence'],
   ['data_tests', 'sequence'],
-  ['meta', 'mapping'],
 ]);
 
 /**
@@ -62,10 +67,24 @@ const FREE_POLICY: MergePolicy = {
   child: () => FREE_POLICY,
 };
 
+/** As `FREE_POLICY`, but a mapping created here is emitted in flow style. */
+const FLOW_FREE_POLICY: MergePolicy = { ...FREE_POLICY, flowOnCreate: true };
+
+/**
+ * A column's `config`. `deletable: 'all'` is safe only because
+ * `ModelColumn.config` round-trips the full on-disk mapping minus `meta`
+ * (spec 27 addendum).
+ */
+const COLUMN_CONFIG_POLICY: MergePolicy = {
+  deletable: 'all',
+  order: FREE_KEY_ORDER,
+  child: (key) => (key === 'meta' ? FLOW_FREE_POLICY : FREE_POLICY),
+};
+
 const COLUMN_POLICY: MergePolicy = {
   deletable: COLUMN_DELETABLE,
   order: COLUMN_KEY_ORDER,
-  child: () => FREE_POLICY,
+  child: (key) => (key === 'config' ? COLUMN_CONFIG_POLICY : FREE_POLICY),
 };
 
 const COLUMNS_SEQ_POLICY: MergePolicy = {
@@ -121,8 +140,13 @@ export function mergeModelYml(originalText: string, file: ModelYmlFile): string 
 
   // `yaml` normalizes flow-collection padding on every node it re-emits, even
   // untouched ones. Matching the document's own convention keeps regions the
-  // merge did not touch byte-identical.
-  const output = doc.toString({ flowCollectionPadding: usesFlowPadding(originalText) });
+  // merge did not touch byte-identical. `lineWidth: 0` disables scalar
+  // wrapping for the same reason: the default (80) re-folds long descriptions
+  // the reconciler never touched (spec 29 addendum).
+  const output = doc.toString({
+    flowCollectionPadding: usesFlowPadding(originalText),
+    lineWidth: 0,
+  });
   return originalText.includes('\r\n') ? output.replace(/\r?\n/g, '\r\n') : output;
 }
 

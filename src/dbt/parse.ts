@@ -142,14 +142,19 @@ function normalizeColumn(raw: Record<string, unknown>, source: string) {
   if (typeof name !== 'string' || name.trim().length === 0) {
     throw new ModelYmlParseError(source, 'Every column must have a non-empty string "name"');
   }
-  // Column meta is read from the flat `meta:` key (the form this app writes
-  // back, spec 27), falling back to `config.meta` for files that nest it
-  // there instead (a form dbt also accepts).
-  const meta = isRecord(raw.meta)
-    ? raw.meta
-    : isRecord(raw.config) && isRecord(raw.config.meta)
-      ? raw.config.meta
-      : undefined;
+  // Column meta lives in `config.meta` and nowhere else (spec 27 addendum).
+  // A flat top-level `meta:` on a column is deliberately ignored: it is not
+  // read, not migrated and not deleted. The rest of `config` is round-tripped
+  // so the surgical merge cannot wipe sibling keys such as `tags`.
+  const rawConfig = isRecord(raw.config) ? raw.config : undefined;
+  const meta = rawConfig !== undefined && isRecord(rawConfig.meta) ? rawConfig.meta : undefined;
+
+  let config = rawConfig;
+  if (rawConfig !== undefined && meta !== undefined) {
+    const { meta: _meta, ...rest } = rawConfig;
+    config = Object.keys(rest).length > 0 ? rest : undefined;
+  }
+
   return {
     name,
     ...(typeof raw.data_type === 'string' ? { dataType: raw.data_type } : {}),
@@ -157,6 +162,7 @@ function normalizeColumn(raw: Record<string, unknown>, source: string) {
     ...(Array.isArray(raw.tests) ? { tests: raw.tests.filter((t): t is string => typeof t === 'string') } : {}),
     ...(Array.isArray(raw.data_tests) ? { dataTests: normalizeDataTests(raw.data_tests) } : {}),
     ...(meta !== undefined ? { meta } : {}),
+    ...(config !== undefined ? { config } : {}),
   };
 }
 

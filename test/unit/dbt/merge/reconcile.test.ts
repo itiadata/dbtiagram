@@ -247,3 +247,158 @@ models:
     expect(keys).toEqual(['name', 'data_type', 'description', 'custom_tag']);
   });
 });
+
+describe('mergeModelYml column meta (spec 27 addendum)', () => {
+  const META_FILE = `version: 2
+models:
+  - name: orders
+    columns:
+      - name: ID_ORG
+        data_type: varchar(3)
+        config:
+          meta: {confidentiality: "internal", GDPR: "false"}
+      - name: order_id
+        data_type: varchar
+        config:
+          meta: {confidentiality: "internal", GDPR: "false"}
+`;
+
+  it('a data-type edit does not duplicate config.meta onto any column', () => {
+    const file = edited(META_FILE, (f) => {
+      f.models[0].columns![0].dataType = 'varchar(33)';
+    });
+    const out = mergeModelYml(META_FILE, file);
+
+    expect(out).toContain('data_type: varchar(33)');
+    // The only change is the one data_type scalar.
+    expect(out).toBe(META_FILE.replace('varchar(3)', 'varchar(33)'));
+  });
+
+  it('writes a meta edit into config.meta, keeping sibling config keys', () => {
+    const text = `version: 2
+models:
+  - name: orders
+    columns:
+      - name: id
+        config:
+          tags: [pii]
+          meta: {GDPR: "false"}
+`;
+    const file = edited(text, (f) => {
+      f.models[0].columns![0].meta = { GDPR: 'true' };
+    });
+    const out = mergeModelYml(text, file);
+
+    expect(out).toContain('GDPR: "true"');
+    expect(out).toContain('tags: [pii]');
+    expect(columnKeys(out)).toEqual(['name', 'config']);
+  });
+
+  it('leaves a flat column-level meta untouched', () => {
+    const text = `version: 2
+models:
+  - name: orders
+    columns:
+      - name: id
+        meta:
+          GDPR: "false"
+        config:
+          meta: {GDPR: "false"}
+`;
+    const file = edited(text, (f) => {
+      f.models[0].columns![0].meta = { GDPR: 'true' };
+    });
+    const out = mergeModelYml(text, file);
+
+    expect(out).toContain('meta: {GDPR: "true"}');
+    // The ignored flat block keeps its original value and its block style.
+    expect(out).toContain('meta:\n          GDPR: "false"');
+  });
+
+  it('creates a new config.meta mapping in flow style', () => {
+    const text = `version: 2
+models:
+  - name: orders
+    columns:
+      - name: id
+        data_type: varchar
+`;
+    const file = edited(text, (f) => {
+      f.models[0].columns![0].meta = { GDPR: 'true' };
+    });
+    const out = mergeModelYml(text, file);
+
+    // Flow style, on one line. The padding inside the braces follows the
+    // document's own convention (spec 29's `usesFlowPadding`); a file with no
+    // flow collections at all defaults to padded.
+    expect(out).toContain('meta: { GDPR: "true" }');
+  });
+
+  it('creates a new config.meta in the compact flow style the file already uses', () => {
+    const file = edited(META_FILE, (f) => {
+      f.models[0].columns![1].meta = { GDPR: 'true' };
+      delete f.models[0].columns![1].config;
+    });
+    const out = mergeModelYml(META_FILE, file);
+
+    expect(out).toContain('meta: {GDPR: "true"}');
+  });
+
+  it('keeps an existing block-style config.meta in block style', () => {
+    const text = `version: 2
+models:
+  - name: orders
+    columns:
+      - name: id
+        config:
+          meta:
+            GDPR: "false"
+`;
+    const file = edited(text, (f) => {
+      f.models[0].columns![0].meta = { GDPR: 'true' };
+    });
+    const out = mergeModelYml(text, file);
+
+    expect(out).toContain('meta:\n            GDPR: "true"');
+    expect(out).not.toContain('{');
+  });
+});
+
+describe('mergeModelYml scalar wrapping (spec 29 addendum)', () => {
+  const LONG = 'It identifies the customer to whom the data belongs, ensuring the separation and security of information between different customers.';
+
+  it('does not re-wrap an untouched long description', () => {
+    const text = `version: 2
+models:
+  - name: orders
+    columns:
+      - name: id
+        data_type: varchar
+      - name: other
+        description: "${LONG}"
+`;
+    const file = edited(text, (f) => {
+      f.models[0].columns![0].dataType = 'varchar(33)';
+    });
+    const out = mergeModelYml(text, file);
+
+    expect(out).toContain(`description: "${LONG}"`);
+    expect(out).toBe(text.replace('varchar\n', 'varchar(33)\n'));
+  });
+
+  it('writes a new long description on a single line', () => {
+    const text = `version: 2
+models:
+  - name: orders
+    columns:
+      - name: id
+        description: short
+`;
+    const file = edited(text, (f) => {
+      f.models[0].columns![0].description = LONG;
+    });
+    const out = mergeModelYml(text, file);
+
+    expect(out).toContain(`description: ${LONG}`);
+  });
+});

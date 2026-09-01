@@ -13,7 +13,18 @@ export interface ModelColumn {
   tests?: string[];
   /** `data_tests` on disk (spec 08): typed so the PK editor can own `not_null`. */
   dataTests?: DataTestEntry[];
+  /**
+   * The column's meta mapping, read from and written to `config.meta` only
+   * (spec 27 addendum). A flat top-level `meta:` on a column is ignored.
+   */
   meta?: Record<string, unknown>;
+  /**
+   * The column's on-disk `config` mapping **with `meta` removed**; `meta` is
+   * spliced back in by `toDbtColumn`. Round-tripping the remainder here is
+   * what stops the reconciler's `deletable: 'all'` policy from wiping sibling
+   * `config` keys such as `tags` (spec 27 addendum).
+   */
+  config?: Record<string, unknown>;
 }
 
 export interface ModelConfig {

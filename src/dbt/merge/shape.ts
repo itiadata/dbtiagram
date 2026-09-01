@@ -33,14 +33,24 @@ export function toDbtModel(model: ModelDefinition): Record<string, unknown> {
   };
 }
 
+/**
+ * Column meta is written back inside `config` (spec 27 addendum) — never as a
+ * flat top-level `meta:` key, which would duplicate the block onto every
+ * column on any unrelated edit. `column.config` carries the on-disk config
+ * minus `meta`, so sibling keys survive the merge.
+ */
 export function toDbtColumn(column: ModelColumn): Record<string, unknown> {
+  const config: Record<string, unknown> = {
+    ...(column.config ?? {}),
+    ...(column.meta !== undefined ? { meta: column.meta } : {}),
+  };
   return {
     name: column.name,
     ...(column.dataType !== undefined ? { data_type: column.dataType } : {}),
     ...(column.description !== undefined ? { description: column.description } : {}),
     ...(column.tests !== undefined ? { tests: column.tests } : {}),
     ...(column.dataTests !== undefined ? { data_tests: column.dataTests } : {}),
-    ...(column.meta !== undefined ? { meta: column.meta } : {}),
+    ...(Object.keys(config).length > 0 ? { config } : {}),
   };
 }
 
