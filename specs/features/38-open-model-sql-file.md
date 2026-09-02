@@ -40,7 +40,9 @@ greyed one with a tooltip reads as "this model has no SQL yet".
 - Discovering `<model>.sql` files in the workspace, derived from the existing
   `dbtiagram.modelFileGlob` setting.
 - Opening the file, or focusing its tab where it already is, without moving the
-  user's cursor in an already-open file.
+  user's cursor in an already-open file. The file always opens as a plain tab
+  in the main VS Code window — never split beside the diagram, and never in
+  the diagram's own window when it was moved to a separate window (spec 23).
 - Rendering the item disabled with a tooltip when no `.sql` file was found, and
   re-checking the workspace at click time so a file created since the last scan
   is still found.
@@ -62,8 +64,8 @@ greyed one with a tooltip reads as "this model has no SQL yet".
 Given the workspace contains models/marts/orders.sql
 And the diagram shows the "orders" table
 When the user right-clicks the "orders" header and chooses "Open SQL file"
-Then models/marts/orders.sql opens in a normal editor tab, without splitting
-the view
+Then models/marts/orders.sql opens in a normal editor tab in the main VS Code
+window, without splitting the view
 And it is not opened as a preview tab
 ```
 
@@ -94,6 +96,18 @@ When the user chooses "Open SQL file" for "orders"
 Then that existing tab is focused
 And no second tab for the file is created
 And the caret is still on line 40
+```
+
+### The diagram is in a separate window
+
+```
+Given the "Open new diagrams" setting placed this diagram in its own,
+  separate VS Code window (spec 23)
+And that separate window currently has focus
+When the user right-clicks the "orders" header and chooses "Open SQL file"
+Then models/marts/orders.sql opens as a new tab in the MAIN VS Code window
+And the diagram's separate window is left showing only the diagram
+And the view is not split
 ```
 
 ### No SQL file for the model
@@ -225,10 +239,11 @@ export function openModelSql(host: OpenSqlHost, model: string): Promise<void>;
 export function findSqlFiles(glob: string): Promise<Map<string, string>>;
 
 /**
- * Opens `uri` as a normal tab in the active editor group (no split), reusing
- * an existing tab where the file is already open. Unlike `revealInEditor`, it
- * never sets a selection, so the caret in an already-open file is left
- * exactly where the user left it.
+ * Opens `uri` as a normal tab in the main VS Code window (never a split, and
+ * never the diagram's own auxiliary window when the diagram was moved to a
+ * separate window), reusing an existing tab where the file is already open.
+ * Unlike `revealInEditor`, it never sets a selection, so the caret in an
+ * already-open file is left exactly where the user left it.
  */
 export function openSqlFile(uri: vscode.Uri): Promise<void>;
 ```
@@ -291,12 +306,15 @@ interface FilterSidebarProps {
   `No .sql file found for "<model>"` (double quotes around the model name) in
   both the disabled tooltip and the error banner, so the two read identically.
 - **Opening.** `openSqlFile` mostly mirrors `revealInEditor`'s tab-reuse rules
-  but opens into the active editor group rather than splitting beside the
-  diagram —
-  `viewColumn: findOpenViewColumn(uri) ?? vscode.ViewColumn.Active`,
+  but always targets the main window's editor area rather than splitting
+  beside the diagram or following the diagram panel into a separate window —
+  `viewColumn: findOpenViewColumn(uri) ?? vscode.ViewColumn.One`,
   `preserveFocus: false`, `preview: existingColumn === undefined` — but sets no
   selection and calls no `revealRange`, so an already-open file keeps its caret
-  (scenario 4). `findOpenViewColumn` is exported from `project.ts` unchanged in
+  (scenario 4). `ViewColumn.One` (rather than `Active`) is what keeps the file
+  in the main window when the diagram itself was moved to a separate window by
+  the "Separate window" open behavior (spec 23) and currently has focus there.
+  `findOpenViewColumn` is exported from `project.ts` unchanged in
   body; only its `export` keyword is added.
 - **Webview availability set.** `App.tsx` holds
   `const [sqlModels, setSqlModels] = useState<Set<string>>(new Set())`, filled
@@ -374,8 +392,9 @@ file falls back to the rescan and reports`.
 
 - [ ] `Open SQL file` appears on the table card's context menu from both the
       header and a column row, and on the sidebar model row's menu.
-- [ ] Choosing it opens the model's `.sql` file as a normal tab, without
-      splitting the view.
+- [ ] Choosing it opens the model's `.sql` file as a normal tab in the main
+      VS Code window, without splitting the view, even when the diagram
+      itself is currently showing in a separate window.
 - [ ] An already-open `.sql` file is focused rather than reopened, and its
       caret position is preserved.
 - [ ] With no `.sql` file, the item is shown disabled with the tooltip

@@ -96,7 +96,7 @@ show/hide, reorder, and merging with stored preferences. Used by both the webvie
 | `src/vscode/openBehaviorWindows.ts` | vscode-facing | Resolves where a new diagram panel should be created for the current `OpenBehavior`, and tracks this extension's separate-window tab groups for "Separate window (reuse)" (spec 23). | `resolvePlacement`, `untrackPanel`, `PanelPlacement` |
 | `src/vscode/matrixColumnPrefs.ts` | vscode-facing | Reads/writes matrix grid column preferences per `MatrixScope` 
 via `ExtensionContext.workspaceState` (spec 27). | `readMatrixColumnPrefs`, `writeMatrixColumnPrefs` |
-| `src/vscode/sqlFiles.ts` | vscode-facing | Discovers `.sql` files by glob and opens/focuses one as a normal tab (no split), reusing `findOpenViewColumn` from `project.ts` but setting no selection (spec 38). | `findSqlFiles`, `openSqlFile` |
+| `src/vscode/sqlFiles.ts` | vscode-facing | Discovers `.sql` files by glob and opens/focuses one as a normal tab in the main window — never split, never the diagram's own separate window (spec 23) — reusing `findOpenViewColumn` from `project.ts` but setting no selection (spec 38). | `findSqlFiles`, `openSqlFile` |
 
 ## `src/webview/` — extension-host side of the panel
 
