@@ -1,7 +1,7 @@
 ---
 id: 38
 title: Open a model's .sql file from the diagram and the sidebar
-status: implemented
+status: done
 priority: high
 created: 2026-09-01
 owner: unassigned
@@ -390,17 +390,17 @@ file falls back to the rescan and reports`.
 
 ## Acceptance Criteria
 
-- [ ] `Open SQL file` appears on the table card's context menu from both the
+- [x] `Open SQL file` appears on the table card's context menu from both the
       header and a column row, and on the sidebar model row's menu.
-- [ ] Choosing it opens the model's `.sql` file as a normal tab in the main
+- [x] Choosing it opens the model's `.sql` file as a normal tab in the main
       VS Code window, without splitting the view, even when the diagram
       itself is currently showing in a separate window.
-- [ ] An already-open `.sql` file is focused rather than reopened, and its
+- [x] An already-open `.sql` file is focused rather than reopened, and its
       caret position is preserved.
-- [ ] With no `.sql` file, the item is shown disabled with the tooltip
+- [x] With no `.sql` file, the item is shown disabled with the tooltip
       `No .sql file found for "<model>"`.
-- [ ] A `.sql` file created after the diagram opened is found on the next click,
+- [x] A `.sql` file created after the diagram opened is found on the next click,
       and the item stops being greyed out afterwards.
-- [ ] A `.sql` file deleted after the last scan produces the error banner
+- [x] A `.sql` file deleted after the last scan produces the error banner
       `No .sql file found for "<model>"` and opens no editor.
-- [ ] `npm run verify` is green.
+- [x] `npm run verify` is green.
