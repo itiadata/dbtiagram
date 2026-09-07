@@ -1,7 +1,7 @@
 ---
 id: 39
 title: Update the private extension from GitHub Releases
-status: approved
+status: implemented
 priority: high
 created: 2026-09-07
 owner: unassigned

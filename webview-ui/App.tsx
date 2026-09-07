@@ -43,6 +43,7 @@ import { useNotes } from './hooks/useNotes';
 import { useSelection } from './hooks/useSelection';
 import { useSettings } from './hooks/useSettings';
 import { SidebarRail, SidebarResizer } from './SidebarChrome';
+import { ProductTitle } from './ProductTitle';
 import { SIDEBAR_DEFAULT_WIDTH } from './sidebar-constants';
 import { Settings, SavePlus, Save, SaveCheck, StickyNotePlus, Grid3x3, ChartNoAxesGantt, BetweenHorizontalStart, Trash2, Waypoints, FileCode2 } from './icons';
 
@@ -61,6 +62,7 @@ export function App(): JSX.Element {
   const [detailsWidth, setDetailsWidth] = useState(SIDEBAR_DEFAULT_WIDTH);
   // Spec 38: models with a discovered .sql file; drives "Open SQL file" state.
   const [sqlModels, setSqlModels] = useState<Set<string>>(new Set());
+  const [appVersion, setAppVersion] = useState<string | null>(null);
 
   const selection = useSelection();
   const filter = useDiagramFilter();
@@ -127,6 +129,7 @@ export function App(): JSX.Element {
     onSettingsCurrent: (openBehavior) => settings.applyCurrent(openBehavior),
     onMatrixColumnPrefs: (scope, columns) => fieldsMatrix.applyColumnPrefs(scope, columns),
     onSqlFiles: (models) => setSqlModels(new Set(models)),
+    onAppVersion: setAppVersion,
   });
   const visibleGraph = useMemo(
     () => (graph === null ? null : filterGraph(graph, filter.visibleModels)),
@@ -550,7 +553,7 @@ export function App(): JSX.Element {
 
         <div className="app__main">
           <header className="app__header">
-            <h1>dbt Diagram</h1>
+            <ProductTitle version={appVersion} />
             {activeLayout !== null && <span className="app__layout">{activeLayout.name}</span>}
             <span className="app__status">{statusText}</span>
             <button

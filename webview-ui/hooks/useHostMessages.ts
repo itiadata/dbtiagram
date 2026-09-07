@@ -25,6 +25,7 @@ export interface HostMessageHandlers {
   onMatrixColumnPrefs: (scope: MatrixScope, columns: StoredMatrixColumnPref[]) => void;
   /** Model names that have a `.sql` file in the workspace (spec 38). */
   onSqlFiles: (models: string[]) => void;
+  onAppVersion: (version: string) => void;
 }
 
 export function useHostMessages(handlers: HostMessageHandlers): void {
@@ -59,6 +60,9 @@ export function useHostMessages(handlers: HostMessageHandlers): void {
           break;
         case 'model:sqlFiles':
           current.onSqlFiles(message.models);
+          break;
+        case 'app:version':
+          current.onAppVersion(message.version);
           break;
       }
     };

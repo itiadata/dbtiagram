@@ -61,7 +61,9 @@ export type MessageToWebview =
    * The model names that currently have a `.sql` file in the workspace (spec
    * 38). The webview only needs existence, so the paths stay on the host.
    */
-  | { type: 'model:sqlFiles'; models: string[] };
+  | { type: 'model:sqlFiles'; models: string[] }
+  /** Version of the currently running extension, shown in the diagram header. */
+  | { type: 'app:version'; version: string };
 
 /** Messages sent from the webview to the extension host. */
 export type MessageToExtension =

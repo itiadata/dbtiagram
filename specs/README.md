@@ -56,7 +56,7 @@ up-to-date spec in `specs/features/`.
 | 36  | Remove a table from the diagram | Done |
 | 37  | Add related tables to the diagram | Done |
 | 38  | Open a model's .sql file from the diagram and the sidebar | Done |
-| 39  | Update the private extension from GitHub Releases | Approved |
+| 39  | Update the private extension from GitHub Releases | Implemented |
 
 Status values: `draft` → `approved` → `implemented` → `done`.
 

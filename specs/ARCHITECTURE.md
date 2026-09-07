@@ -83,6 +83,7 @@ show/hide, reorder, and merging with stored preferences. Used by both the webvie
 `MatrixScope`, `MatrixColumnId`, `MatrixColumnDef`, `StoredMatrixColumnPref`, `defaultMatrixColumns`, 
 `toggleColumnVisible`, `reorderColumn`, `applyStoredPrefs`, `toStoredPrefs`, `mergeStoredPrefs` |
 | `src/shared/sqlFiles.ts` | shared | Pure derivation of the `.sql` discovery glob from the model glob, the model name of a `.sql` path, and the name -> path index (spec 38). | `DEFAULT_SQL_GLOB`, `sqlGlobForModelGlob`, `modelNameFromSqlPath`, `indexSqlPaths` |
+| `src/shared/update.ts` | shared | Pure validation of the designated private GitHub Release, stable version comparison, user-facing messages, and update workflow against a host port (spec 39). | `UPDATE_REPOSITORY`, `LatestRelease`, `UpdateHost`, `decodeLatestRelease`, `isNewerVersion`, `updateAvailableMessage`, `updateInstalledMessage`, `runUpdateCheck` |
 
 ## `src/vscode/` — VS Code API wrappers
 
@@ -97,12 +98,14 @@ show/hide, reorder, and merging with stored preferences. Used by both the webvie
 | `src/vscode/matrixColumnPrefs.ts` | vscode-facing | Reads/writes matrix grid column preferences per `MatrixScope` 
 via `ExtensionContext.workspaceState` (spec 27). | `readMatrixColumnPrefs`, `writeMatrixColumnPrefs` |
 | `src/vscode/sqlFiles.ts` | vscode-facing | Discovers `.sql` files by glob and opens/focuses one as a normal tab in the main window — never split, never the diagram's own separate window (spec 23) — reusing `findOpenViewColumn` from `project.ts` but setting no selection (spec 38). | `findSqlFiles`, `openSqlFile` |
+| `src/vscode/updateCli.ts` | vscode-facing | Executes the authenticated GitHub CLI release query/download and a silent VS Code CLI VSIX installation for private updates (spec 39). | `fetchLatestRelease`, `downloadRelease`, `installVsix` |
+| `src/vscode/updateCheck.ts` | vscode-facing | Adapts extension metadata, storage, prompts, reload, and update CLI calls to the pure update workflow; skips external checks in test hosts (spec 39). | `installedExtensionVersion`, `checkForUpdates` |
 
 ## `src/webview/` — extension-host side of the panel
 
 | Path | Layer | Responsibility | Key exports |
 |------|-------|----------------|-------------|
-| `src/webview/panel.ts` | vscode-facing | The diagram panel: lifecycle, message pump, model store wiring, write-back, in-memory pending-layout cache and close-time save prompt (spec 22); also holds the model → `.sql` path map and republishes it on ready/refresh/rescan (spec 38). | `DiagramPanel` |
+| `src/webview/panel.ts` | vscode-facing | The diagram panel: lifecycle, message pump, model store wiring, write-back, in-memory pending-layout cache and close-time save prompt (spec 22); also holds the model → `.sql` path map and republishes it on ready/refresh/rescan (spec 38), and sends the running extension version on webview ready (spec 39). | `DiagramPanel` |
 | `src/webview/html.ts` | vscode-facing | Build the webview HTML shell (CSP, nonce, asset URIs). | `buildWebviewHtml` |
 | `src/webview/panelKey.ts` | pure | One panel per source file: key and title derivation. | `diagramPanelKey`, `diagramPanelTitle`, `DiagramSource`, `defaultCaseInsensitive` |
 | `src/webview/openSource.ts` | pure | Orchestrates "Reveal in model.yml" against a host port: resolve, read, locate (model or a specific column, falling back to the model), reveal or report (spec 15, extended by spec 25). | `openModelSource`, `OpenSourceHost` |
@@ -116,6 +119,7 @@ via `ExtensionContext.workspaceState` (spec 27). | `readMatrixColumnPrefs`, `wri
 |------|-------|----------------|-------------|
 | `webview-ui/index.tsx` | webview | Mount point: renders `App` into the webview document. | — |
 | `webview-ui/App.tsx` | webview | Top-level composition: state hooks, sidebars, canvas; routes column clicks through the mouse-drawn FK gesture (spec 26). | `App` |
+| `webview-ui/ProductTitle.tsx` | webview | The stacked dbt Diagram header and running extension version (spec 39). | `ProductTitle`, `ProductTitleProps` |
 | `webview-ui/DiagramCanvas.tsx` | webview | React Flow canvas: nodes, edges, pan/zoom, node drag; top-right toolbar groups Auto-layout with the diagram-wide column-display selector (spec 24); top-left toolbar hosts Add note/Add foreign key, plus the FK-draw mouse-follow preview line and crosshair cursor (spec 26). | `DiagramCanvas`, `DiagramCanvasProps` |
 | `webview-ui/TableNode.tsx` | webview | Custom React Flow node rendering a table with its column rows and handles, including the header-positioned `HEADER_ANCHOR` handle for a hidden FK column (spec 24). | `TableNode` |
 | `webview-ui/NoteNode.tsx` | webview | Custom React Flow node rendering a sticky note: resizable rectangle, textarea, or collapsed icon (spec 16). | `NoteNode`, `NoteNodeData` |
@@ -143,7 +147,7 @@ via `ExtensionContext.workspaceState` (spec 27). | `readMatrixColumnPrefs`, `wri
 | `webview-ui/vscode-api.ts` | webview | Acquire and memoize the webview VS Code API handle. | `VsCodeApi` |
 | `webview-ui/vscode.d.ts` | webview | Ambient declaration for `acquireVsCodeApi`. | — |
 | `webview-ui/styles.css` | webview | Webview styling, themed from VS Code CSS variables. | — |
-| `webview-ui/hooks/useHostMessages.ts` | webview | Subscribe to host → webview messages and dispatch to handlers. | `useHostMessages`, `HostMessageHandlers`, `DiagramUpdateMessage`, `LayoutApplyMessage`, `LayoutActiveMessage` |
+| `webview-ui/hooks/useHostMessages.ts` | webview | Subscribe to host → webview messages and dispatch to handlers, including the running app version (spec 39). | `useHostMessages`, `HostMessageHandlers`, `DiagramUpdateMessage`, `LayoutApplyMessage`, `LayoutActiveMessage` |
 | `webview-ui/hooks/useSettings.ts` | webview | Settings overlay state: current `OpenBehavior`, open/close, and posting `settings:setOpenBehavior` (spec 23). | `useSettings`, `SettingsState` |
 | `webview-ui/hooks/useSelection.ts` | webview | Current model/column selection state, including clearing the selection when its table is explicitly removed from the diagram (spec 36). | `useSelection`, `Selection`, `SelectionState` |
 | `webview-ui/hooks/useContextMenu.ts` | webview | Open/close state (point + items) for the shared context menu (spec 15). | `useContextMenu`, `ContextMenuState` |

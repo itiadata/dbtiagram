@@ -73,6 +73,7 @@ export class DiagramPanel {
   private source: DiagramSource;
   private key: string;
   private readonly workspaceState: vscode.Memento;
+  private readonly installedVersion: string;
   /**
    * The panel's last known column, mirrored because `panel.viewColumn` throws
    * "Webview is disposed" from `onDidDispose` onwards - which is exactly when
@@ -88,12 +89,14 @@ export class DiagramPanel {
     source: DiagramSource,
     key: string,
     workspaceState: vscode.Memento,
+    installedVersion: string,
   ) {
     this.panel = panel;
     this.store = store;
     this.source = source;
     this.key = key;
     this.workspaceState = workspaceState;
+    this.installedVersion = installedVersion;
     this.publish();
     this.publishScope();
 
@@ -152,6 +155,7 @@ export class DiagramPanel {
     extensionUri: vscode.Uri,
     source: DiagramSource,
     workspaceState: vscode.Memento,
+    installedVersion: string,
   ): Promise<void> {
     const key = diagramPanelKey(source);
 
@@ -185,7 +189,7 @@ export class DiagramPanel {
       result.failures.map((failure) => ({ uri: failure.uri.fsPath, error: failure.message })),
     );
 
-    const current = new DiagramPanel(panel, store, source, key, workspaceState);
+    const current = new DiagramPanel(panel, store, source, key, workspaceState, installedVersion);
     DiagramPanel.panels.set(key, current);
     panel.webview.html = buildWebviewHtml(panel.webview, extensionUri);
 
@@ -371,6 +375,7 @@ export class DiagramPanel {
         await sendActiveLayout(this.layoutHost);
         publishActiveLayout(this.layoutHost);
         this.postMessage({ type: 'settings:current', openBehavior: DiagramPanel.openBehavior() });
+        this.postMessage({ type: 'app:version', version: this.installedVersion });
         this.publishMatrixColumnPrefs('model');
         this.publishMatrixColumnPrefs('global');
         this.sqlPaths = await findSqlFiles(sqlGlobForModelGlob(this.modelGlob));

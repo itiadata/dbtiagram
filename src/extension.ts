@@ -6,11 +6,14 @@ import * as vscode from 'vscode';
 import { DiagramPanel } from './webview/panel';
 import type { DiagramSource } from './webview/panelKey';
 import { registerEditorTitleButton } from './vscode/editorButtonContext';
+import { checkForUpdates, installedExtensionVersion } from './vscode/updateCheck';
 
 /** Distinguishes palette invocations that have no file to be identified by. */
 let adhocCounter = 0;
 
 export function activate(context: vscode.ExtensionContext): void {
+  const version = installedExtensionVersion(context);
+  void checkForUpdates(context);
   context.subscriptions.push(
     // Opens a diagram scoped to the active model.yml, one tab per file
     // (spec 14). Without a file-backed editor every invocation opens a new tab.
@@ -20,7 +23,7 @@ export function activate(context: vscode.ExtensionContext): void {
         uri !== undefined && uri.scheme === 'file'
           ? { kind: 'model', fsPath: uri.fsPath }
           : { kind: 'adhoc', id: String((adhocCounter += 1)) };
-      return DiagramPanel.createOrShow(context.extensionUri, source, context.workspaceState);
+      return DiagramPanel.createOrShow(context.extensionUri, source, context.workspaceState, version);
     }),
     // Opens the diagram with a saved layout applied (spec 13). The editor/title
     // menu passes the active resource; fall back to the active editor.
@@ -30,7 +33,7 @@ export function activate(context: vscode.ExtensionContext): void {
         uri !== undefined && uri.scheme === 'file'
           ? { kind: 'layout', fsPath: uri.fsPath }
           : { kind: 'adhoc', id: String((adhocCounter += 1)) };
-      return DiagramPanel.createOrShow(context.extensionUri, source, context.workspaceState);
+      return DiagramPanel.createOrShow(context.extensionUri, source, context.workspaceState, version);
     }),
   );
 
