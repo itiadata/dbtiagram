@@ -115,9 +115,21 @@ describe('runUpdateCheck', () => {
     expect(value.warn).not.toHaveBeenCalled();
   });
 
+  it.each(['0.0.3', '0.0.0'])('returns upToDate for successful latest %s', async (tagName) => {
+    const value = host({
+      installedVersion: '0.0.3',
+      fetchLatestRelease: vi.fn(() => Promise.resolve({
+        ...latest,
+        tagName,
+        assets: [{ name: `dbtiagram-${tagName}.vsix` }],
+      })),
+    });
+    await expect(runUpdateCheck(value)).resolves.toBe('upToDate');
+  });
+
   it('warns when checking fails', async () => {
     const value = host({ fetchLatestRelease: vi.fn(() => Promise.reject(new Error('gh not found'))) });
-    await runUpdateCheck(value);
+    await expect(runUpdateCheck(value)).resolves.toBe('checkFailed');
     expect(value.warn).toHaveBeenCalledWith('dbt Diagram could not check for updates: gh not found');
   });
 

@@ -13,7 +13,9 @@ let adhocCounter = 0;
 
 export function activate(context: vscode.ExtensionContext): void {
   const version = installedExtensionVersion(context);
-  void checkForUpdates(context);
+  void checkForUpdates(context).then((outcome) => {
+    DiagramPanel.setUpdateStatus(outcome === 'upToDate');
+  });
   context.subscriptions.push(
     // Opens a diagram scoped to the active model.yml, one tab per file
     // (spec 14). Without a file-backed editor every invocation opens a new tab.

@@ -19,6 +19,8 @@ export interface UpdateHost {
   warn(message: string): void;
 }
 
+export type UpdateCheckOutcome = 'upToDate' | 'updateAvailable' | 'checkFailed';
+
 const VERSION = /^(?:v)?(\d+)\.(\d+)\.(\d+)$/;
 
 export function decodeLatestRelease(value: unknown): LatestRelease {
@@ -57,17 +59,19 @@ export function updateInstalledMessage(version: string): string {
   return `dbt Diagram v${version} was installed. Reload VS Code to use it.`;
 }
 
-export async function runUpdateCheck(host: UpdateHost): Promise<void> {
+export async function runUpdateCheck(host: UpdateHost): Promise<UpdateCheckOutcome> {
   let release: LatestRelease;
   try {
     release = decodeLatestRelease(await host.fetchLatestRelease());
-    if (!isNewerVersion(release.version, host.installedVersion)) return;
+    if (!isNewerVersion(release.version, host.installedVersion)) return 'upToDate';
   } catch (error) {
     host.warn(`dbt Diagram could not check for updates: ${errorMessage(error)}`);
-    return;
+    return 'checkFailed';
   }
 
-  if ((await host.promptUpdate(updateAvailableMessage(release.version, host.installedVersion))) !== 'Update') return;
+  if ((await host.promptUpdate(updateAvailableMessage(release.version, host.installedVersion))) !== 'Update') {
+    return 'updateAvailable';
+  }
 
   let vsixPath: string | undefined;
   try {
@@ -76,12 +80,13 @@ export async function runUpdateCheck(host: UpdateHost): Promise<void> {
   } catch (error) {
     const pathNote = vsixPath === undefined ? '' : ` Downloaded VSIX: ${vsixPath}`;
     host.warn(`dbt Diagram could not install v${release.version}: ${errorMessage(error)}${pathNote}`);
-    return;
+    return 'updateAvailable';
   }
 
   if ((await host.promptReload(updateInstalledMessage(release.version))) === 'Reload Now') {
     await host.reload();
   }
+  return 'updateAvailable';
 }
 
 function versionParts(value: string): number[] | null {

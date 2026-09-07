@@ -63,7 +63,9 @@ export type MessageToWebview =
    */
   | { type: 'model:sqlFiles'; models: string[] }
   /** Version of the currently running extension, shown in the diagram header. */
-  | { type: 'app:version'; version: string };
+  | { type: 'app:version'; version: string }
+  /** Whether the most recent release check successfully found no newer version. */
+  | { type: 'app:updateStatus'; upToDate: boolean };
 
 /** Messages sent from the webview to the extension host. */
 export type MessageToExtension =

@@ -58,6 +58,7 @@ export class DiagramPanel {
    * already has a tab reveals it; anything else opens a new tab.
    */
   private static readonly panels = new Map<string, DiagramPanel>();
+  private static upToDate = false;
 
   private readonly panel: vscode.WebviewPanel;
   private readonly disposables: vscode.Disposable[] = [];
@@ -203,6 +204,14 @@ export class DiagramPanel {
   /** Every open diagram tab. */
   public static all(): Iterable<DiagramPanel> {
     return DiagramPanel.panels.values();
+  }
+
+  /** Publishes the last successful release-check result to current and new panels. */
+  public static setUpdateStatus(upToDate: boolean): void {
+    DiagramPanel.upToDate = upToDate;
+    for (const panel of DiagramPanel.panels.values()) {
+      panel.postMessage({ type: 'app:updateStatus', upToDate });
+    }
   }
 
   private static modelFileGlob(): string {
@@ -376,6 +385,7 @@ export class DiagramPanel {
         publishActiveLayout(this.layoutHost);
         this.postMessage({ type: 'settings:current', openBehavior: DiagramPanel.openBehavior() });
         this.postMessage({ type: 'app:version', version: this.installedVersion });
+        this.postMessage({ type: 'app:updateStatus', upToDate: DiagramPanel.upToDate });
         this.publishMatrixColumnPrefs('model');
         this.publishMatrixColumnPrefs('global');
         this.sqlPaths = await findSqlFiles(sqlGlobForModelGlob(this.modelGlob));

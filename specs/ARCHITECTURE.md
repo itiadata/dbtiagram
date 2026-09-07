@@ -83,7 +83,7 @@ show/hide, reorder, and merging with stored preferences. Used by both the webvie
 `MatrixScope`, `MatrixColumnId`, `MatrixColumnDef`, `StoredMatrixColumnPref`, `defaultMatrixColumns`, 
 `toggleColumnVisible`, `reorderColumn`, `applyStoredPrefs`, `toStoredPrefs`, `mergeStoredPrefs` |
 | `src/shared/sqlFiles.ts` | shared | Pure derivation of the `.sql` discovery glob from the model glob, the model name of a `.sql` path, and the name -> path index (spec 38). | `DEFAULT_SQL_GLOB`, `sqlGlobForModelGlob`, `modelNameFromSqlPath`, `indexSqlPaths` |
-| `src/shared/update.ts` | shared | Pure validation of the designated private GitHub Release, stable version comparison, user-facing messages, and update workflow against a host port (spec 39). | `UPDATE_REPOSITORY`, `LatestRelease`, `UpdateHost`, `decodeLatestRelease`, `isNewerVersion`, `updateAvailableMessage`, `updateInstalledMessage`, `runUpdateCheck` |
+| `src/shared/update.ts` | shared | Pure validation of the designated private GitHub Release, stable version comparison, user-facing messages, and update workflow/result against a host port (spec 39). | `UPDATE_REPOSITORY`, `LatestRelease`, `UpdateHost`, `UpdateCheckOutcome`, `decodeLatestRelease`, `isNewerVersion`, `updateAvailableMessage`, `updateInstalledMessage`, `runUpdateCheck` |
 
 ## `src/vscode/` — VS Code API wrappers
 
@@ -99,13 +99,13 @@ show/hide, reorder, and merging with stored preferences. Used by both the webvie
 via `ExtensionContext.workspaceState` (spec 27). | `readMatrixColumnPrefs`, `writeMatrixColumnPrefs` |
 | `src/vscode/sqlFiles.ts` | vscode-facing | Discovers `.sql` files by glob and opens/focuses one as a normal tab in the main window — never split, never the diagram's own separate window (spec 23) — reusing `findOpenViewColumn` from `project.ts` but setting no selection (spec 38). | `findSqlFiles`, `openSqlFile` |
 | `src/vscode/updateCli.ts` | vscode-facing | Executes the authenticated GitHub CLI release query/download and a silent VS Code CLI VSIX installation for private updates (spec 39). | `fetchLatestRelease`, `downloadRelease`, `installVsix` |
-| `src/vscode/updateCheck.ts` | vscode-facing | Adapts extension metadata, storage, prompts, reload, and update CLI calls to the pure update workflow; skips external checks in test hosts (spec 39). | `installedExtensionVersion`, `checkForUpdates` |
+| `src/vscode/updateCheck.ts` | vscode-facing | Adapts extension metadata, storage, prompts, reload, and update CLI calls to the pure update workflow; skips external checks in test hosts (spec 39). | `installedExtensionVersion`, `checkForUpdates`, `UpdateCheckOutcome` |
 
 ## `src/webview/` — extension-host side of the panel
 
 | Path | Layer | Responsibility | Key exports |
 |------|-------|----------------|-------------|
-| `src/webview/panel.ts` | vscode-facing | The diagram panel: lifecycle, message pump, model store wiring, write-back, in-memory pending-layout cache and close-time save prompt (spec 22); also holds the model → `.sql` path map and republishes it on ready/refresh/rescan (spec 38), and sends the running extension version on webview ready (spec 39). | `DiagramPanel` |
+| `src/webview/panel.ts` | vscode-facing | The diagram panel: lifecycle, message pump, model store wiring, write-back, in-memory pending-layout cache and close-time save prompt (spec 22); also holds the model → `.sql` path map and republishes it on ready/refresh/rescan (spec 38), and sends the running extension version/update status on webview ready (spec 39). | `DiagramPanel`, `DiagramPanel.setUpdateStatus` |
 | `src/webview/html.ts` | vscode-facing | Build the webview HTML shell (CSP, nonce, asset URIs). | `buildWebviewHtml` |
 | `src/webview/panelKey.ts` | pure | One panel per source file: key and title derivation. | `diagramPanelKey`, `diagramPanelTitle`, `DiagramSource`, `defaultCaseInsensitive` |
 | `src/webview/openSource.ts` | pure | Orchestrates "Reveal in model.yml" against a host port: resolve, read, locate (model or a specific column, falling back to the model), reveal or report (spec 15, extended by spec 25). | `openModelSource`, `OpenSourceHost` |

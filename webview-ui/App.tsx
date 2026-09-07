@@ -63,6 +63,7 @@ export function App(): JSX.Element {
   // Spec 38: models with a discovered .sql file; drives "Open SQL file" state.
   const [sqlModels, setSqlModels] = useState<Set<string>>(new Set());
   const [appVersion, setAppVersion] = useState<string | null>(null);
+  const [upToDate, setUpToDate] = useState(false);
 
   const selection = useSelection();
   const filter = useDiagramFilter();
@@ -130,6 +131,7 @@ export function App(): JSX.Element {
     onMatrixColumnPrefs: (scope, columns) => fieldsMatrix.applyColumnPrefs(scope, columns),
     onSqlFiles: (models) => setSqlModels(new Set(models)),
     onAppVersion: setAppVersion,
+    onAppUpdateStatus: setUpToDate,
   });
   const visibleGraph = useMemo(
     () => (graph === null ? null : filterGraph(graph, filter.visibleModels)),
@@ -553,7 +555,7 @@ export function App(): JSX.Element {
 
         <div className="app__main">
           <header className="app__header">
-            <ProductTitle version={appVersion} />
+            <ProductTitle version={appVersion} upToDate={upToDate} />
             {activeLayout !== null && <span className="app__layout">{activeLayout.name}</span>}
             <span className="app__status">{statusText}</span>
             <button

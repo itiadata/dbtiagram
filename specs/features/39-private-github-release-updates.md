@@ -109,6 +109,7 @@ And GitHub's designated Latest release is v0.0.3 or v0.0.2
 When the startup update check completes
 Then no notification is shown
 And no VSIX is downloaded or installed
+And every open diagram header shows "Up to date" beside its installed version
 ```
 
 ### The designated release cannot be used
@@ -120,6 +121,17 @@ Given the startup update check cannot run gh, cannot access itiadata/dbtiagram,
 When the check completes
 Then the extension shows a warning beginning "dbt Diagram could not check for updates:"
 And no VSIX is installed
+
+### The latest-release check cannot be run
+
+```
+Given gh is not installed, is not authenticated for itiadata/dbtiagram, or
+  cannot reach GitHub
+When the startup update check completes
+Then VS Code shows a warning toast beginning
+  "dbt Diagram could not check for updates:"
+And no diagram header shows "Up to date"
+```
 ```
 
 ### Download or installation fails
@@ -159,9 +171,9 @@ And directly below that text it shows "v0.0.2"
 | `src/shared/update.ts` | create | Pure release decoding, stable semantic-version comparison, expected asset selection, messages, and update workflow against a host port. |
 | `src/vscode/updateCli.ts` | create | Execute `gh release view`, `gh release download`, and the platform-appropriate VS Code CLI installation command without opening a terminal. |
 | `src/vscode/updateCheck.ts` | create | Adapt extension metadata, global storage, VS Code prompts/reload, and the CLI wrapper to the pure update workflow; skip test extension hosts. |
-| `src/extension.ts` | modify | Start one non-blocking update check during activation and pass the installed version when opening panels. |
+| `src/extension.ts` | modify | Start one non-blocking update check during activation, publish a successful up-to-date result to open/future panels, and pass the installed version when opening panels. |
 | `src/shared/protocol.ts` | modify | Add the installed-version host-to-webview message. |
-| `src/webview/panel.ts` | modify | Retain the installed version supplied at panel creation and publish it when the webview announces readiness. |
+| `src/webview/panel.ts` | modify | Retain the installed version, retain the process-wide current update status, publish both when the webview announces readiness, and publish a status change to every open panel. |
 | `webview-ui/hooks/useHostMessages.ts` | modify | Dispatch the installed-version message. |
 | `webview-ui/ProductTitle.tsx` | create | Render the product heading and installed version as a stacked header label. |
 | `webview-ui/App.tsx` | modify | Hold the installed version received from the host and render `ProductTitle`. |
@@ -196,6 +208,8 @@ export interface UpdateHost {
   warn(message: string): void;
 }
 
+export type UpdateCheckOutcome = 'upToDate' | 'updateAvailable' | 'checkFailed';
+
 /**
  * Validates the unknown JSON value returned by `gh release view`, accepts only
  * an optional `v` plus MAJOR.MINOR.PATCH tag, and selects the exactly named
@@ -210,7 +224,7 @@ export function updateAvailableMessage(candidate: string, installed: string): st
 export function updateInstalledMessage(version: string): string;
 
 /** Check, prompt, download, install and optionally reload in that order. */
-export function runUpdateCheck(host: UpdateHost): Promise<void>;
+export function runUpdateCheck(host: UpdateHost): Promise<UpdateCheckOutcome>;
 ```
 
 ```ts
@@ -247,7 +261,7 @@ export function installedExtensionVersion(context: vscode.ExtensionContext): str
  * Returns immediately in ExtensionMode.Test; otherwise runs one update check
  * using globalStorageUri/releases/<tag> as the download directory.
  */
-export function checkForUpdates(context: vscode.ExtensionContext): Promise<void>;
+export function checkForUpdates(context: vscode.ExtensionContext): Promise<UpdateCheckOutcome>;
 ```
 
 ```ts
@@ -255,6 +269,7 @@ export function checkForUpdates(context: vscode.ExtensionContext): Promise<void>
 
 // added to MessageToWebview:
 | { type: 'app:version'; version: string }
+| { type: 'app:updateStatus'; upToDate: boolean }
 ```
 
 ```ts
@@ -267,6 +282,9 @@ public static async createOrShow(
   workspaceState: vscode.Memento,
   installedVersion: string,
 ): Promise<void>;
+
+/** Sends the status to all currently open panels and retains it for new panels. */
+public static setUpdateStatus(upToDate: boolean): void;
 ```
 
 ```ts
@@ -275,6 +293,7 @@ public static async createOrShow(
 export interface HostMessageHandlers {
   // existing members unchanged
   onAppVersion: (version: string) => void;
+  onAppUpdateStatus: (upToDate: boolean) => void;
 }
 ```
 
@@ -283,6 +302,7 @@ export interface HostMessageHandlers {
 
 export interface ProductTitleProps {
   version: string | null;
+  upToDate: boolean;
 }
 
 export function ProductTitle(props: ProductTitleProps): JSX.Element;
@@ -307,9 +327,13 @@ export function ProductTitle(props: ProductTitleProps): JSX.Element;
    one asset named `dbtiagram-X.Y.Z.vsix`, and rejects missing, duplicate, or
    differently named assets. Draft/prerelease flags are not independently
    inspected because GitHub's designated Latest result is authoritative.
-5. **Version ordering.** Major, minor, and patch are compared numerically in
+5. **Version ordering and result.** Major, minor, and patch are compared numerically in
    that order. Equality and an older latest release are quiet no-ops. Invalid
-   installed or release versions are errors; there is no lexical comparison.
+   installed or release versions are errors; there is no lexical comparison. A
+   successfully decoded release that is equal to or older than the installed
+   version returns `upToDate`; a newer decoded release returns `updateAvailable`
+   whether the user updates or postpones; a query/decode/version-comparison
+   failure returns `checkFailed` after warning.
 6. **Prompt text.** The first message is exactly
    `dbt Diagram v{candidate} is available (installed: v{installed}).`; only an
    exact `Update` response continues. The completion message is exactly
@@ -328,13 +352,22 @@ export function ProductTitle(props: ProductTitleProps): JSX.Element;
    chooses Update uses `dbt Diagram could not install v{version}: {reason}`; if
    download completed, append ` Downloaded VSIX: {absolutePath}`. A failure
    never invokes reload. Failure warnings have no action buttons.
-9. **Panel version.** On `webview:ready`, the panel posts `app:version` along
-   with its other initial state. The UI renders the version as `v{version}` in
-   subdued 11px text immediately below the heading. Until the message arrives,
-   it renders the heading without an empty placeholder. The version is the
+9. **Panel version and status.** On `webview:ready`, the panel posts
+   `app:version` and `app:updateStatus` with its other initial state. The UI
+   renders the version as `v{version}` in subdued 11px text immediately below
+   the heading. When, and only when, the release check returned `upToDate`, it
+   renders `Up to date` beside that version. Until the messages arrive, it
+   renders the heading without an empty placeholder. A failed, pending, or
+   update-available check never renders `Up to date`. The version is the
    currently running extension's version; installing an update does not change
    it until reload.
-10. **No adjacent behavior changes.** Existing diagram title/tab text, update
+10. **Failure toast.** `showWarningMessage` is the requested VS Code warning
+    toast. The existing `gh release view` command is the reachability and
+    authorization check: it fails when `gh` is absent, authentication is absent
+    or lacks repository access, GitHub cannot be reached, or its output is not
+    usable. The warning retains the command's concise reason after the literal
+    `dbt Diagram could not check for updates:` prefix.
+11. **No adjacent behavior changes.** Existing diagram title/tab text, update
     status text, settings, save controls, and model/layout behavior remain
     unchanged.
 
@@ -351,10 +384,11 @@ export function ProductTitle(props: ProductTitleProps): JSX.Element;
 | `test/unit/shared/update.test.ts` | `postpones the update` | newer release; update response `Later` and separately `undefined` | no download, install, reload prompt, reload, or warning |
 | `test/unit/shared/update.test.ts` | `postpones reload after installation` | newer accepted release; reload response `Later` and separately `undefined` | download and install occur; reload does not |
 | `test/unit/shared/update.test.ts` | `does nothing for the same or an older release` | installed `0.0.3`; latest `0.0.3` and separately `0.0.2` | no prompt, download, install, reload, or warning |
+| `test/unit/shared/update.test.ts` | `returns upToDate for a successful same or older release` | installed `0.0.3`; latest `0.0.0` and separately `0.0.3` | result is `'upToDate'` |
 | `test/unit/shared/update.test.ts` | `warns when checking fails` | fetch rejection `gh not found` | warning exactly `'dbt Diagram could not check for updates: gh not found'`; no prompt/install/reload |
 | `test/unit/shared/update.test.ts` | `warns when download fails` | accepted `0.0.3`; download rejection `network error` | warning exactly `'dbt Diagram could not install v0.0.3: network error'`; no install/reload |
 | `test/unit/shared/update.test.ts` | `reports the VSIX path when installation fails` | download returns `C:\\store\\dbtiagram-0.0.3.vsix`; install rejects `code not found` | warning exactly `'dbt Diagram could not install v0.0.3: code not found Downloaded VSIX: C:\\store\\dbtiagram-0.0.3.vsix'`; no reload |
-| `test/unit/webview/ProductTitle.test.tsx` | `renders the version directly below the product name` | render `{version:'0.0.2'}` to static markup | markup contains one `.app__product` with `<h1>dbt Diagram</h1>` followed by `<span class="app__version">v0.0.2</span>` |
+| `test/unit/webview/ProductTitle.test.tsx` | `renders the version and up-to-date text directly below the product name` | render `{version:'0.0.2',upToDate:true}` to static markup | markup contains one `.app__product` with `<h1>dbt Diagram</h1>` followed by `v0.0.2` and `Up to date` |
 | `test/unit/webview/ProductTitle.test.tsx` | `omits the version until supplied by the host` | render `{version:null}` | markup contains `<h1>dbt Diagram</h1>` and no `.app__version` |
 
 The `ExtensionMode.Test` scenario is covered by the existing integration suite:
@@ -399,4 +433,6 @@ the pure host-port tests above.
 - [ ] Test extension hosts never invoke external update commands or prompts.
 - [ ] Every diagram shows the running extension version directly below the
       `dbt Diagram` heading.
+- [ ] A successful no-update check shows `Up to date` beside every diagram's
+      installed version; check failures show a VS Code warning toast instead.
 - [ ] `npm run verify`, `npm test`, and `npm run typecheck` are green.

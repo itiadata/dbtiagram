@@ -1,7 +1,7 @@
 /** VS Code adapter for the pure private-release update workflow. */
 import * as path from 'node:path';
 import * as vscode from 'vscode';
-import { runUpdateCheck } from '../shared/update';
+import { runUpdateCheck, type UpdateCheckOutcome } from '../shared/update';
 import { downloadRelease, fetchLatestRelease, installVsix } from './updateCli';
 
 export function installedExtensionVersion(context: vscode.ExtensionContext): string {
@@ -12,10 +12,10 @@ export function installedExtensionVersion(context: vscode.ExtensionContext): str
   return packageJson.version;
 }
 
-export async function checkForUpdates(context: vscode.ExtensionContext): Promise<void> {
-  if (context.extensionMode === vscode.ExtensionMode.Test) return;
+export async function checkForUpdates(context: vscode.ExtensionContext): Promise<UpdateCheckOutcome> {
+  if (context.extensionMode === vscode.ExtensionMode.Test) return 'checkFailed';
   const installedVersion = installedExtensionVersion(context);
-  await runUpdateCheck({
+  return runUpdateCheck({
     installedVersion,
     fetchLatestRelease,
     promptUpdate: async (message) => vscode.window.showInformationMessage(message, 'Update', 'Later'),
