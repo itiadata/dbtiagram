@@ -2,7 +2,7 @@
   "name": "dbtiagram",
   "displayName": "dbt Diagram",
   "description": "Visual, webview-based editor for dbt model.yml files. Renders an ER-style diagram of your tables and writes edits back to YAML in real time.",
-  "version": "0.0.2",
+  "version": "0.0.3",
   "publisher": "your-publisher-name",
   "license": "UNLICENSED",
   "private": true,
