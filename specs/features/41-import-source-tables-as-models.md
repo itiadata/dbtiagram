@@ -1,7 +1,7 @@
 ---
 id: 41
 title: Import source tables as models
-status: implemented
+status: approved
 priority: high
 created: 2026-09-08
 owner: unassigned
@@ -17,7 +17,7 @@ or more tables from a source YAML file and import them into an existing model
 YAML file, so that I can begin refining model definitions without manually
 copying table metadata, columns, and diagram-only relationships. Imported models
 receive collision-safe `_from_source` names, retain table/column properties and
-virtual keys, appear immediately in the model diagram, and produce a completion
+keys as real dbt constraints, appear immediately in the model diagram, and produce a completion
 report that identifies relationships whose targets are not present as models.
 
 ## Background
@@ -44,7 +44,10 @@ promote selected source tables into model definitions and then edit those models
   YAML, including descriptions, data types, tests, config, metadata, and unknown
   keys. Source-block and root properties, including source name, database, and
   schema, are not copied.
-- Preserving virtual PKs and virtual FKs as virtual model keys.
+- Converting source virtual PKs and virtual FKs into real model constraints by
+  default. A real imported PK also receives the model-level
+  `dbt_utils.unique_combination_of_columns` test and column-level `not_null`
+  tests; developers may explicitly convert imported keys to virtual afterward.
 - Rewriting each imported virtual FK target from
   `source('<source>', '<table>')` to `ref('<imported-model-name>')`. If its exact
   target table is selected in the same operation, its allocated collision-safe
@@ -62,7 +65,8 @@ promote selected source tables into model definitions and then edit those models
 - Importing from more than one source YAML file in one operation.
 - Importing source-level/root-level properties, or generating `.sql` files.
 - Guessing, importing, or repairing an unselected FK target automatically.
-- Converting a source virtual key into a real dbt constraint or adding dbt tests.
+- Automatically retaining imported keys as virtual; virtual storage is an
+  explicit post-import developer choice.
 - Editing or deleting the source YAML during import.
 - Undoing an import as one atomic operation, or remembering previous picker
   selections.
@@ -124,13 +128,15 @@ When source table costs is imported
 Then its final model name is costs_from_source
 ```
 
-### Preserve a virtual primary key
+### Import a source primary key as real
 
 ```
 Given source table costs has virtual primary key [id]
 When costs is imported
-Then costs_from_source has config.meta.dbtiagram.virtual.primary_key.columns equal to [id]
-And no real primary-key constraint, not_null test, or unique-combination test is generated
+Then costs_from_source has a real primary-key constraint with columns [id]
+And column id has a not_null data test
+And the model has a dbt_utils.unique_combination_of_columns test for [id]
+And no virtual primary key remains
 ```
 
 ### Rewrite an FK between tables imported together
@@ -140,7 +146,7 @@ Given finops.costs has a virtual FK to source('finops', 'workspaces')
 And both finops.costs and finops.workspaces are selected
 And workspaces_from_source is occupied before import
 When both tables are imported
-Then the imported costs model's FK is virtual
+Then the imported costs model's FK is a real foreign-key constraint
 And its to value is ref('workspaces_from_source_1')
 And the report does not list that FK as broken
 ```
@@ -152,7 +158,7 @@ Given finops.costs has a virtual FK from workspace_id to source('finops', 'works
 And only finops.costs is selected
 And no model named workspaces_from_source exists after import
 When the import completes
-Then costs_from_source keeps the virtual FK with to: ref('workspaces_from_source')
+Then costs_from_source keeps the FK as a real constraint with to: ref('workspaces_from_source')
 And the model is still imported successfully
 And the report lists "costs_from_source.workspace_id -> ref('workspaces_from_source').id"
 ```
@@ -203,7 +209,7 @@ And no file is written
 | `src/dbt/parse.ts` | modify | Parse unknown model-column keys into the new typed storage. |
 | `src/dbt/sourceParse.ts` | modify | Parse unknown source-column keys needed by import. |
 | `src/dbt/merge/shape.ts` | modify | Emit preserved unknown column keys before modeled keys. |
-| `src/dbt/importSource.ts` | create | Pure naming, source-table-to-model conversion, FK rewriting, destination append, and broken-FK report derivation. |
+| `src/dbt/importSource.ts` | modify | Convert imported source virtual keys to real PK/FK constraints, including PK-owned unique-combination and not-null tests, while retaining naming, FK rewriting, append, and broken-FK reporting. |
 | `src/shared/protocol.ts` | modify | Add the import request and import-result report messages. |
 | `src/vscode/sourceImportPicker.ts` | create | Own the VS Code source-file, multi-table, and destination-file Quick Pick sequence plus unavailable-input warnings. |
 | `src/webview/sourceImport.ts` | create | Testable host orchestration: load candidates, prompt, transform, persist, and return the result. |
@@ -384,11 +390,15 @@ export interface DiagramFilterState {
    keys become model `extra`; column unknown keys become column `extra`. Modeled
    values win if an `extra` mapping contains the same key. Inputs are never
    mutated and copied nested arrays/maps do not alias the parsed source object.
-8. **Virtual keys.** The table's existing
-   `config.meta.dbtiagram.virtual.primary_key` is copied unchanged. Every valid
-   virtual FK remains in that virtual block; no `constraints`, `data_tests`, or
-   column `not_null` entry is generated by conversion. Other copied keys are not
-   interpreted or normalized.
+8. **Imported keys are real by default.** Read the source table's virtual key
+    block, remove that virtual block from the imported model, and convert its PK
+    and FKs to real `constraints`. A non-empty PK also creates/updates the
+    model-level `dbt_utils.unique_combination_of_columns` test and adds one
+    column-level `not_null` data test to every PK column, using the existing real
+    PK synchronization semantics. Each valid source FK becomes a real
+    `foreign_key` constraint after target rewriting. No imported PK/FK remains
+    virtual; the developer can explicitly toggle it to virtual after import.
+    Other copied keys are not interpreted or normalized.
 9. **FK rewrite map.** Before converting models, allocate all selected model
    names and map each selected qualified source ID to its final name. A valid
    source FK targeting an ID in that map uses that final name. Any other valid
@@ -433,8 +443,8 @@ export interface DiagramFilterState {
 | `test/unit/dbt/importSource.test.ts` | `increments an occupied imported name` | occupied `costs_from_source`, `costs_from_source_1` | imported name `costs_from_source_2` |
 | `test/unit/dbt/importSource.test.ts` | `copies table and column properties but drops source properties` | source with database/schema plus table description/config/identifier/tags and column meta/unknown key | imported model has every listed table/column value; no database/schema/source wrapper value |
 | `test/unit/dbt/importSource.test.ts` | `deep copies imported properties` | mutate nested imported config after conversion | original source nested value remains unchanged |
-| `test/unit/dbt/importSource.test.ts` | `preserves a virtual primary key without real artifacts` | virtual PK `[id]` | only virtual PK exists; constraints/data tests are absent |
-| `test/unit/dbt/importSource.test.ts` | `rewrites an FK to the selected target's allocated name` | costs/workspaces selected; `workspaces_from_source` occupied | `to` is `ref('workspaces_from_source_1')`; broken list `[]` |
+| `test/unit/dbt/importSource.test.ts` | `imports a source primary key as real with tests` | virtual PK `[id]` | real PK constraint, unique-combination test, and column `not_null` exist; virtual PK is absent |
+| `test/unit/dbt/importSource.test.ts` | `rewrites an FK to the selected target's allocated name` | costs/workspaces selected; `workspaces_from_source` occupied | real FK constraint `to` is `ref('workspaces_from_source_1')`; virtual FK absent; broken list `[]` |
 | `test/unit/dbt/importSource.test.ts` | `keeps and reports an unselected FK` | only costs selected; FK `workspace_id -> source('finops','workspaces').id`; target absent | `to` is `ref('workspaces_from_source')`; display `costs_from_source.workspace_id -> ref('workspaces_from_source').id` |
 | `test/unit/dbt/importSource.test.ts` | `does not report an existing unselected target` | same FK plus existing `workspaces_from_source` model | broken list `[]` |
 | `test/unit/dbt/importSource.test.ts` | `retains an invalid FK expression without reporting it` | virtual FK `to: custom_target` | unchanged `to`; broken list `[]` |
@@ -485,8 +495,9 @@ suites above.
       all workspace model names.
 - [ ] Table/column metadata and unknown keys survive while source/root properties
       are discarded.
-- [ ] Virtual PKs/FKs remain virtual and valid source targets become collision-
-      aware `ref(...)` targets.
+- [ ] Source virtual PKs/FKs become real constraints by default, imported PKs
+      include unique-combination and not-null tests, and valid source targets
+      become collision-aware `ref(...)` targets.
 - [ ] Unselected targets remain as refs and are reported only when absent after
       import.
 - [ ] The completion report gives the successful count, final names, and broken
