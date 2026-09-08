@@ -1,7 +1,7 @@
 ---
 id: 41
 title: Import source tables as models
-status: implemented
+status: approved
 priority: high
 created: 2026-09-08
 owner: unassigned
@@ -48,7 +48,7 @@ promote selected source tables into model definitions and then edit those models
   default. A real imported PK also receives the model-level
   `dbt_utils.unique_combination_of_columns` test and column-level `not_null`
   tests; developers may explicitly convert imported keys to virtual afterward.
-- Adding import provenance metadata: model `config.meta.source_table_name` stores
+- Adding import provenance metadata: model `config.meta.source_name` stores
   the original source table name; every imported column stores its original name
   as `config.meta.source_name` and, when present, its source data type as
   `config.meta.source_datatype`.
@@ -132,7 +132,7 @@ And every pre-existing model and unrelated YAML detail in staging.yml is retaine
 Given source table costs has column workspace_id with data type bigint
 And its column config.meta contains max_length, sample_values, filled_percentage, owner, and source_system
 When costs is imported
-Then the model config.meta.source_table_name is costs
+Then the model config.meta.source_name is costs
 And workspace_id config.meta.source_name is workspace_id
 And workspace_id config.meta.source_datatype is bigint
 And max_length, sample_values, filled_percentage, and owner are stored respectively as source_max_length, source_sample_values, source_filled_percentage, and source_owner
@@ -423,7 +423,7 @@ export interface DiagramFilterState {
     virtual; the developer can explicitly toggle it to virtual after import.
     Other copied keys are not interpreted or normalized.
 9. **Import metadata.** After deep-copying the source table, merge
-   `source_table_name: <original table name>` into model `config.meta`; this
+   `source_name: <original table name>` into model `config.meta`; this
    modeled import value wins over a source value with the same key. For each
    column, merge `source_name: <original column name>` and, only when `dataType`
    exists, `source_datatype: <original data type>` into column `config.meta`.
@@ -477,7 +477,7 @@ export interface DiagramFilterState {
 | `test/unit/dbt/importSource.test.ts` | `increments an occupied imported name` | occupied `costs_from_source`, `costs_from_source_1` | imported name `costs_from_source_2` |
 | `test/unit/dbt/importSource.test.ts` | `copies table and column properties but drops source properties` | source with database/schema plus table description/config/identifier/tags and column meta/unknown key | imported model has every listed table/column value; no database/schema/source wrapper value |
 | `test/unit/dbt/importSource.test.ts` | `deep copies imported properties` | mutate nested imported config after conversion | original source nested value remains unchanged |
-| `test/unit/dbt/importSource.test.ts` | `adds source provenance and prefixes all column metadata` | table `costs`; column `workspace_id bigint`; meta with `max_length`, `sample_values`, `filled_percentage`, `owner`, `source_system`, and conflicting destination keys | model meta contains `source_table_name: costs`; column meta contains provenance, all formerly unprefixed keys under `source_`, unchanged `source_system`, no original unprefixed keys, and generated values win collisions |
+| `test/unit/dbt/importSource.test.ts` | `adds source provenance and prefixes all column metadata` | table `costs`; column `workspace_id bigint`; meta with `max_length`, `sample_values`, `filled_percentage`, `owner`, `source_system`, and conflicting destination keys | model meta contains `source_name: costs`; column meta contains provenance, all formerly unprefixed keys under `source_`, unchanged `source_system`, no original unprefixed keys, and generated values win collisions |
 | `test/unit/dbt/importSource.test.ts` | `omits source datatype metadata when absent` | source column without `data_type` | column meta has `source_name` and no `source_datatype` |
 | `test/unit/dbt/importSource.test.ts` | `imports a source primary key as real with tests` | virtual PK `[id]` | real PK constraint, unique-combination test, and column `not_null` exist; virtual PK is absent |
 | `test/unit/dbt/importSource.test.ts` | `rewrites an FK to the selected target's allocated name` | costs/workspaces selected; `workspaces_from_source` occupied | real FK constraint `to` is `ref('workspaces_from_source_1')`; virtual FK absent; broken list `[]` |
