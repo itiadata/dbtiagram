@@ -135,7 +135,9 @@ Then its "Export prompt" context-menu action is disabled with title "This table 
 | `src/dbt/aiPromptRules.md` | create | Bundled, plainly editable initial AI task instructions and naming/type rules. |
 | `esbuild.config.mjs` | modify | Configure the Markdown text loader so the bundled AI rules can be imported as a string. |
 | `webview-ui/vscode.d.ts` | modify | Declare Markdown imports as strings for strict TypeScript. |
+| `vitest.config.ts` | create | Load bundled Markdown rules as text in unit tests. |
 | `src/dbt/aiPrompt.ts` | create | Pure eligibility, batching, JSON-safe evidence normalization, and deterministic prompt construction. |
+| `src/diagram/graph.ts` | modify | Expose non-blank imported source-table provenance on model-mode table nodes for menu availability. |
 | `src/shared/protocol.ts` | modify | Add the typed webview-to-host prompt-copy request. |
 | `src/vscode/clipboard.ts` | create | Isolate VS Code clipboard writes and success information notification. |
 | `src/webview/aiPromptExport.ts` | create | Pure host orchestration and validation against a narrow clipboard port. |
@@ -143,6 +145,7 @@ Then its "Export prompt" context-menu action is disabled with title "This table 
 | `webview-ui/AiPromptExport.tsx` | create | Render the batch-size/batch-number dialog and post valid copy requests. |
 | `webview-ui/App.tsx` | modify | Own prompt-dialog visibility, expose the model-mode table-menu action, and mount the dialog. |
 | `webview-ui/icons.ts` | modify | Re-export the clipboard icon used by the new table-menu action. |
+| `webview-ui/styles.css` | modify | Style the AI prompt batch dialog. |
 | `test/unit/dbt/aiPrompt.test.ts` | create | Unit-test eligibility, batch selection, JSONL evidence, rules, and response contract. |
 | `test/unit/webview/aiPromptExport.test.ts` | create | Unit-test host-side model lookup, validation, clipboard call, and no-copy failure paths. |
 | `specs/ARCHITECTURE.md` | modify | Add new modules/components and amend the changed panel/protocol responsibilities. |
