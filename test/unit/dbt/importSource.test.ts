@@ -34,7 +34,7 @@ describe('source table import', () => {
       description: 'Costs',
       config: { tags: ['finance'], meta: { source_table_name: 'costs' } },
       extra: { identifier: 'RAW_COSTS', tags: ['daily'] },
-      columns: [{ name: 'id', meta: { pii: false, source_name: 'id' }, extra: { quote: true } }],
+      columns: [{ name: 'id', meta: { source_pii: false, source_name: 'id' }, extra: { quote: true } }],
     });
     expect(result.destination.models[0].extra).not.toHaveProperty('database');
     expect(result.destination.models[0]).not.toHaveProperty('source');
@@ -48,7 +48,7 @@ describe('source table import', () => {
     expect((selected.table.config?.nested as { value: string }).value).toBe('original');
   });
 
-  it('adds source provenance and renames profiling metadata', () => {
+  it('adds source provenance and prefixes all column metadata', () => {
     const selected = sourceTable('costs', 'finops', {
       config: { meta: { source_table_name: 'wrong', owner: 'finance' } },
       columns: [{
@@ -59,21 +59,23 @@ describe('source table import', () => {
           sample_values: ['a', 'b'],
           filled_percentage: 98.5,
           owner: 'platform',
+          source_system: 'warehouse',
           source_name: 'wrong',
           source_datatype: 'wrong',
-          source_mx_length: 1,
+          source_max_length: 1,
         },
       }],
     });
     const model = importSourceTables({ models: [] }, [selected], []).destination.models[0];
     expect(model.config?.meta).toEqual({ source_table_name: 'costs', owner: 'finance' });
     expect(model.columns?.[0].meta).toEqual({
-      owner: 'platform',
       source_name: 'workspace_id',
       source_datatype: 'bigint',
-      source_mx_length: 20,
+      source_max_length: 20,
       source_sample_values: ['a', 'b'],
       source_filled_percentage: 98.5,
+      source_owner: 'platform',
+      source_system: 'warehouse',
     });
   });
 

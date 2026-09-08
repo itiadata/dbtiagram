@@ -116,19 +116,17 @@ function brokenForModel(model: ModelDefinition, available: ReadonlySet<string>):
 function cloneColumn(column: ModelColumn): ModelColumn {
   const cloned = cloneValue(column) as ModelColumn;
   const meta = cloned.meta ?? {};
-  const {
-    max_length: maxLength,
-    sample_values: sampleValues,
-    filled_percentage: filledPercentage,
-    ...rest
-  } = meta;
+  const prefixedMeta: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(meta)) {
+    if (key.startsWith('source_')) prefixedMeta[key] = value;
+  }
+  for (const [key, value] of Object.entries(meta)) {
+    if (!key.startsWith('source_')) prefixedMeta[`source_${key}`] = value;
+  }
   return {
     ...cloned,
     meta: {
-      ...rest,
-      ...(maxLength !== undefined ? { source_mx_length: maxLength } : {}),
-      ...(sampleValues !== undefined ? { source_sample_values: sampleValues } : {}),
-      ...(filledPercentage !== undefined ? { source_filled_percentage: filledPercentage } : {}),
+      ...prefixedMeta,
       source_name: column.name,
       ...(column.dataType !== undefined ? { source_datatype: column.dataType } : {}),
     },

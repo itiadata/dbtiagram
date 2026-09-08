@@ -126,7 +126,7 @@ And source name finops, database RAW, schema FINOPS, the sources key, and the ta
 And every pre-existing model and unrelated YAML detail in staging.yml is retained
 ```
 
-### Add source provenance and rename profiling metadata
+### Add source provenance and prefix column metadata
 
 ```
 Given source table costs has column workspace_id with data type bigint
