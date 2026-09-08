@@ -1,7 +1,7 @@
 ---
 id: 41
 title: Import source tables as models
-status: approved
+status: implemented
 priority: high
 created: 2026-09-08
 owner: unassigned

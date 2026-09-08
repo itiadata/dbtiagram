@@ -51,11 +51,14 @@ export function importSourceTables(
 
 function convertTable(source: QualifiedSourceTable, allocated: ReadonlyMap<string, string>): ModelDefinition {
   const table = source.table;
+  const tableConfig = cloneRecord(table.config) ?? {};
+  const tableMeta = isRecord(tableConfig.meta) ? tableConfig.meta : {};
+  tableConfig.meta = { ...tableMeta, source_table_name: table.name };
   let model: ModelDefinition = {
     ...(cloneRecord(table.extra) !== undefined ? { extra: cloneRecord(table.extra) } : {}),
     name: allocated.get(source.id) ?? `${table.name}_from_source`,
     ...(table.description !== undefined ? { description: table.description } : {}),
-    ...(cloneRecord(table.config) !== undefined ? { config: cloneRecord(table.config) } : {}),
+    config: tableConfig,
     ...(table.columns !== undefined ? { columns: table.columns.map(cloneColumn) } : {}),
   };
   const virtual = readVirtualConstraints(model);
@@ -111,7 +114,25 @@ function brokenForModel(model: ModelDefinition, available: ReadonlySet<string>):
 }
 
 function cloneColumn(column: ModelColumn): ModelColumn {
-  return cloneValue(column) as ModelColumn;
+  const cloned = cloneValue(column) as ModelColumn;
+  const meta = cloned.meta ?? {};
+  const {
+    max_length: maxLength,
+    sample_values: sampleValues,
+    filled_percentage: filledPercentage,
+    ...rest
+  } = meta;
+  return {
+    ...cloned,
+    meta: {
+      ...rest,
+      ...(maxLength !== undefined ? { source_mx_length: maxLength } : {}),
+      ...(sampleValues !== undefined ? { source_sample_values: sampleValues } : {}),
+      ...(filledPercentage !== undefined ? { source_filled_percentage: filledPercentage } : {}),
+      source_name: column.name,
+      ...(column.dataType !== undefined ? { source_datatype: column.dataType } : {}),
+    },
+  };
 }
 
 function cloneRecord(value: Record<string, unknown> | undefined): Record<string, unknown> | undefined {
@@ -124,4 +145,8 @@ function cloneValue(value: unknown): unknown {
     return Object.fromEntries(Object.entries(value).map(([key, nested]) => [key, cloneValue(nested)]));
   }
   return value;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
