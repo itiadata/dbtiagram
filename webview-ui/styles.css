@@ -69,6 +69,25 @@ body {
   line-height: 1;
 }
 
+.app__update-check {
+  margin-left: 8px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--vscode-textLink-foreground);
+  font: inherit;
+  cursor: pointer;
+}
+
+.app__update-check:hover:not(:disabled) {
+  color: var(--vscode-textLink-activeForeground);
+  text-decoration: underline;
+}
+
+.app__update-check--available {
+  color: var(--vscode-testing-iconPassed, #388a34);
+}
+
 .app__status {
   color: var(--muted);
   font-size: 12px;

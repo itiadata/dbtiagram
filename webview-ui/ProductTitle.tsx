@@ -1,6 +1,7 @@
 export interface ProductTitleProps {
   version: string | null;
-  upToDate: boolean;
+  updateStatus: 'unknown' | 'upToDate' | 'updateAvailable';
+  onCheckForUpdates: () => void;
 }
 
 export function ProductTitle(props: ProductTitleProps): JSX.Element {
@@ -10,7 +11,17 @@ export function ProductTitle(props: ProductTitleProps): JSX.Element {
       {props.version !== null && (
         <span className="app__version">
           <span>v{props.version}</span>
-          {props.upToDate && <span> (Up to date)</span>}
+          {props.updateStatus === 'upToDate' ? <span> (Up to date)</span> : (
+            <button
+              type="button"
+              className={props.updateStatus === 'updateAvailable'
+                ? 'app__update-check app__update-check--available'
+                : 'app__update-check'}
+              onClick={props.onCheckForUpdates}
+            >
+              {props.updateStatus === 'updateAvailable' ? 'Update available' : 'Check for updates'}
+            </button>
+          )}
         </span>
       )}
     </div>

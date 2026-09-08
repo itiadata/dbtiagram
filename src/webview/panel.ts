@@ -62,7 +62,8 @@ export class DiagramPanel {
    * already has a tab reveals it; anything else opens a new tab.
    */
   private static readonly panels = new Map<string, DiagramPanel>();
-  private static upToDate = false;
+  private static updateStatus: 'unknown' | 'upToDate' | 'updateAvailable' = 'unknown';
+  private static updateCheckHandler: (() => void) | undefined;
 
   private readonly panel: vscode.WebviewPanel;
   private readonly disposables: vscode.Disposable[] = [];
@@ -221,11 +222,16 @@ export class DiagramPanel {
   }
 
   /** Publishes the last successful release-check result to current and new panels. */
-  public static setUpdateStatus(upToDate: boolean): void {
-    DiagramPanel.upToDate = upToDate;
+  public static setUpdateStatus(status: 'unknown' | 'upToDate' | 'updateAvailable'): void {
+    DiagramPanel.updateStatus = status;
     for (const panel of DiagramPanel.panels.values()) {
-      panel.postMessage({ type: 'app:updateStatus', upToDate });
+      panel.postMessage({ type: 'app:updateStatus', status });
     }
+  }
+
+  /** Registers the activation-owned, concurrency-guarded manual check callback. */
+  public static setUpdateCheckHandler(handler: () => void): void {
+    DiagramPanel.updateCheckHandler = handler;
   }
 
   private static modelFileGlob(): string {
@@ -415,11 +421,14 @@ export class DiagramPanel {
         publishActiveLayout(this.layoutHost);
         this.postMessage({ type: 'settings:current', openBehavior: DiagramPanel.openBehavior() });
         this.postMessage({ type: 'app:version', version: this.installedVersion });
-        this.postMessage({ type: 'app:updateStatus', upToDate: DiagramPanel.upToDate });
+        this.postMessage({ type: 'app:updateStatus', status: DiagramPanel.updateStatus });
         this.publishMatrixColumnPrefs('model');
         this.publishMatrixColumnPrefs('global');
         this.sqlPaths = await findSqlFiles(sqlGlobForModelGlob(this.modelGlob));
         this.postMessage({ type: 'model:sqlFiles', models: [...this.sqlPaths.keys()] });
+        return;
+      case 'app:checkForUpdates':
+        DiagramPanel.updateCheckHandler?.();
         return;
       case 'diagram:edit': {
         try {

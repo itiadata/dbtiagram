@@ -67,13 +67,15 @@ export type MessageToWebview =
   | { type: 'model:sqlFiles'; models: string[] }
   /** Version of the currently running extension, shown in the diagram header. */
   | { type: 'app:version'; version: string }
-  /** Whether the most recent release check successfully found no newer version. */
-  | { type: 'app:updateStatus'; upToDate: boolean };
+  /** Latest displayable result of the process-wide automatic/manual update check. */
+  | { type: 'app:updateStatus'; status: 'unknown' | 'upToDate' | 'updateAvailable' };
 
 /** Messages sent from the webview to the extension host. */
 export type MessageToExtension =
   | { type: 'diagram:edit'; edit: ModelEdit }
   | { type: 'webview:ready' }
+  /** Explicitly run the same update workflow used during activation. */
+  | { type: 'app:checkForUpdates' }
   /** Explicit "Save diagram" action; prompts for a path when none is active. */
   | { type: 'layout:save'; layout: DiagramLayout }
   /**

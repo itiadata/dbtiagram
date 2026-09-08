@@ -26,7 +26,7 @@ export interface HostMessageHandlers {
   /** Model names that have a `.sql` file in the workspace (spec 38). */
   onSqlFiles: (models: string[]) => void;
   onAppVersion: (version: string) => void;
-  onAppUpdateStatus: (upToDate: boolean) => void;
+  onAppUpdateStatus: (status: 'unknown' | 'upToDate' | 'updateAvailable') => void;
 }
 
 export function useHostMessages(handlers: HostMessageHandlers): void {
@@ -66,7 +66,7 @@ export function useHostMessages(handlers: HostMessageHandlers): void {
           current.onAppVersion(message.version);
           break;
         case 'app:updateStatus':
-          current.onAppUpdateStatus(message.upToDate);
+          current.onAppUpdateStatus(message.status);
           break;
       }
     };

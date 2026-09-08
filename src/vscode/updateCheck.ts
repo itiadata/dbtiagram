@@ -18,7 +18,12 @@ export async function checkForUpdates(context: vscode.ExtensionContext): Promise
   return runUpdateCheck({
     installedVersion,
     fetchLatestRelease,
-    promptUpdate: async (message) => vscode.window.showInformationMessage(message, 'Update', 'Later'),
+    promptUpdate: async (message) => vscode.window.showInformationMessage(
+      message,
+      { modal: true },
+      'Update',
+      'Later',
+    ),
     download: (release) => downloadRelease(
       release,
       path.join(context.globalStorageUri.fsPath, 'releases', release.tagName),
