@@ -52,10 +52,11 @@ promote selected source tables into model definitions and then edit those models
   the original source table name; every imported column stores its original name
   as `config.meta.source_name` and, when present, its source data type as
   `config.meta.source_datatype`.
-- Renaming source column metadata keys during import: `max_length` becomes
-  `source_mx_length`, `sample_values` becomes `source_sample_values`, and
-  `filled_percentage` becomes `source_filled_percentage`. The original three
-  keys are not retained on the imported column; all other metadata is preserved.
+- Prefixing every source column metadata key with `source_` during import.
+  Existing keys that already begin with `source_` remain unchanged rather than
+  receiving a second prefix. For example, `max_length` becomes
+  `source_max_length`, `owner` becomes `source_owner`, and `source_system`
+  remains `source_system`. Original unprefixed keys are not retained.
 - Rewriting each imported virtual FK target from
   `source('<source>', '<table>')` to `ref('<imported-model-name>')`. If its exact
   target table is selected in the same operation, its allocated collision-safe
@@ -129,14 +130,14 @@ And every pre-existing model and unrelated YAML detail in staging.yml is retaine
 
 ```
 Given source table costs has column workspace_id with data type bigint
-And its column config.meta contains max_length, sample_values, filled_percentage, and owner
+And its column config.meta contains max_length, sample_values, filled_percentage, owner, and source_system
 When costs is imported
 Then the model config.meta.source_table_name is costs
 And workspace_id config.meta.source_name is workspace_id
 And workspace_id config.meta.source_datatype is bigint
-And max_length, sample_values, and filled_percentage are stored respectively as source_mx_length, source_sample_values, and source_filled_percentage
-And the original three metadata keys are absent
-And owner is retained unchanged
+And max_length, sample_values, filled_percentage, and owner are stored respectively as source_max_length, source_sample_values, source_filled_percentage, and source_owner
+And source_system remains source_system without a second prefix
+And every original unprefixed metadata key is absent
 ```
 
 ### Allocate collision-safe model names
@@ -426,9 +427,10 @@ export interface DiagramFilterState {
    modeled import value wins over a source value with the same key. For each
    column, merge `source_name: <original column name>` and, only when `dataType`
    exists, `source_datatype: <original data type>` into column `config.meta`.
-   Rename existing column-meta keys `max_length`, `sample_values`, and
-   `filled_percentage` to `source_mx_length`, `source_sample_values`, and
-   `source_filled_percentage`. The renamed values and provenance values win on
+   Prefix every existing column-meta key that does not already begin with
+   `source_`; keys already beginning with `source_` remain unchanged. Thus
+   `max_length` becomes `source_max_length`, while `source_system` remains
+   `source_system`. Prefix-derived values and provenance values win on
    destination-key collisions. Do not emit `source_datatype` for a column with
    no source data type. All metadata objects are deep-copied.
 10. **FK rewrite map.** Before converting models, allocate all selected model
@@ -475,7 +477,7 @@ export interface DiagramFilterState {
 | `test/unit/dbt/importSource.test.ts` | `increments an occupied imported name` | occupied `costs_from_source`, `costs_from_source_1` | imported name `costs_from_source_2` |
 | `test/unit/dbt/importSource.test.ts` | `copies table and column properties but drops source properties` | source with database/schema plus table description/config/identifier/tags and column meta/unknown key | imported model has every listed table/column value; no database/schema/source wrapper value |
 | `test/unit/dbt/importSource.test.ts` | `deep copies imported properties` | mutate nested imported config after conversion | original source nested value remains unchanged |
-| `test/unit/dbt/importSource.test.ts` | `adds source provenance and renames profiling metadata` | table `costs`; column `workspace_id bigint`; meta with `max_length`, `sample_values`, `filled_percentage`, `owner`, and conflicting destination keys | model meta contains `source_table_name: costs`; column meta contains `source_name`, `source_datatype`, renamed values and unchanged `owner`; original keys are absent; generated values win collisions |
+| `test/unit/dbt/importSource.test.ts` | `adds source provenance and prefixes all column metadata` | table `costs`; column `workspace_id bigint`; meta with `max_length`, `sample_values`, `filled_percentage`, `owner`, `source_system`, and conflicting destination keys | model meta contains `source_table_name: costs`; column meta contains provenance, all formerly unprefixed keys under `source_`, unchanged `source_system`, no original unprefixed keys, and generated values win collisions |
 | `test/unit/dbt/importSource.test.ts` | `omits source datatype metadata when absent` | source column without `data_type` | column meta has `source_name` and no `source_datatype` |
 | `test/unit/dbt/importSource.test.ts` | `imports a source primary key as real with tests` | virtual PK `[id]` | real PK constraint, unique-combination test, and column `not_null` exist; virtual PK is absent |
 | `test/unit/dbt/importSource.test.ts` | `rewrites an FK to the selected target's allocated name` | costs/workspaces selected; `workspaces_from_source` occupied | real FK constraint `to` is `ref('workspaces_from_source_1')`; virtual FK absent; broken list `[]` |
@@ -529,8 +531,8 @@ suites above.
       all workspace model names.
 - [ ] Table/column metadata and unknown keys survive while source/root properties
       are discarded.
-- [ ] Imported models and columns record source names/data types, and the three
-      profiling metadata keys are renamed to their `source_` forms.
+- [ ] Imported models and columns record source names/data types, and every
+      column metadata key is `source_`-prefixed exactly once.
 - [ ] Source virtual PKs/FKs become real constraints by default, imported PKs
       include unique-combination and not-null tests, and valid source targets
       become collision-aware `ref(...)` targets.
