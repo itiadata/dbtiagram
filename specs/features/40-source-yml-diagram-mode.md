@@ -1,7 +1,7 @@
 ---
 id: 40
 title: Add a source.yml diagram mode
-status: implemented
+status: done
 priority: high
 created: 2026-09-08
 owner: unassigned
