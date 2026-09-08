@@ -21,4 +21,5 @@ export {
   Waypoints,
   FileCode2,
   Import,
+  Clipboard,
 } from 'lucide-react';

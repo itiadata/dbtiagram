@@ -53,6 +53,9 @@ import { applySourceFileDeleted, applySourceFileRenamed, applySourceTextChange, 
 import type { SourceDefinition } from '../dbt/sourceTypes';
 import { pickSourceImport } from '../vscode/sourceImportPicker';
 import { runSourceImport, type SourceImportHost } from './sourceImport';
+import { aiPromptBatch } from '../dbt/aiPrompt';
+import { copyAiRenameTypePrompt, type AiPromptExportHost } from './aiPromptExport';
+import { showAiPromptCopied, vscodeAiPromptClipboard } from '../vscode/clipboard';
 
 /** Ignore text-change echoes of our own disk writes within this window. */
 const SELF_WRITE_IGNORE_MS = 250;
@@ -444,6 +447,18 @@ export class DiagramPanel {
           this.postMessage({ type: 'diagram:error', message: error instanceof Error ? error.message : String(error) });
         }
         return;
+      case 'aiPrompt:copy':
+        if (this.mode !== 'model') return;
+        try {
+          const model = this.aiPromptExportHost.findModel(message.model);
+          if (model === undefined) throw new Error(`Model "${message.model}" is no longer available.`);
+          const batch = aiPromptBatch(model, message);
+          await copyAiRenameTypePrompt(this.aiPromptExportHost, message);
+          await showAiPromptCopied(batch.model, batch.number, batch.total);
+        } catch (error) {
+          this.postMessage({ type: 'diagram:error', message: error instanceof Error ? error.message : String(error) });
+        }
+        return;
       case 'diagram:edit': {
         try {
           await this.applyEditAndPersist(message.edit);
@@ -537,6 +552,14 @@ export class DiagramPanel {
         this.selfWrites.set(uri, Date.now());
         this.store = upsertRecord(this.store, uri, file);
       },
+    };
+  }
+
+  /** Adapter for the pure AI prompt-copy orchestration (spec 42). */
+  private get aiPromptExportHost(): AiPromptExportHost {
+    return {
+      findModel: (name) => this.store.records.flatMap((record) => record.file.models).find((model) => model.name === name),
+      clipboard: vscodeAiPromptClipboard,
     };
   }
 

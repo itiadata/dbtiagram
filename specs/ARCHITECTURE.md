@@ -42,6 +42,7 @@ lines** under `test/unit/` (see `specs/features/17-modular-source-layout.md`).
 | `src/dbt/sourceStore.ts` | pure | Source-file last-good store and redistribution. | `createSourceStore`, `applySourceTextChange`, `distributeEditedSources` |
 | `src/dbt/sourceEdit.ts` | pure | Forced-virtual source table edits. | `applySourceEdit` |
 | `src/dbt/importSource.ts` | pure | Collision-safe source-table conversion, source provenance and universal column metadata prefixing, virtual-key promotion to real constraints/tests, FK rewriting, destination append, and broken-FK reporting (spec 41). | `nextImportedModelName`, `importSourceTables`, `SourceImportResult`, `BrokenImportedForeignKey` |
+| `src/dbt/aiPrompt.ts` | pure | Selects provenance-backed columns, validates batch requests, normalizes evidence, and builds deterministic AI rename/type JSONL prompts (spec 42). | `eligibleAiPromptColumns`, `aiPromptBatch`, `buildAiRenameTypePrompt`, `AiPromptRequest`, `AiPromptBatch` |
 | `src/dbt/modelStore.ts` | pure | In-memory set of loaded model.yml files: upsert, text change, delete, rename, and redistribution of edited models. | `createModelStore`, `ModelStore`, `upsertRecord`, `applyTextChange`, `applyFileDeleted`, `applyFileRenamed`, `distributeEditedModels`, `replaceModelStore`, `ModelFileRecord`, `LoadedModelFile`, `FailedModelFile` |
 | `src/dbt/edit/index.ts` | pure | Single entry point that dispatches a `ModelEdit` to the right handler. **All mutations go through here.** | `applyEdit` |
 | `src/dbt/edit/types.ts` | pure | The discriminated union of every supported edit. | `ModelEdit` |
@@ -111,6 +112,7 @@ via `ExtensionContext.workspaceState` (spec 27). | `readMatrixColumnPrefs`, `wri
 | `src/vscode/updateCli.ts` | vscode-facing | Executes the authenticated GitHub CLI release query/download and a silent VS Code CLI VSIX installation for private updates (spec 39). | `fetchLatestRelease`, `downloadRelease`, `installVsix` |
 | `src/vscode/updateCheck.ts` | vscode-facing | Adapts extension metadata, storage, prompts, reload, and update CLI calls to the pure update workflow; skips external checks in test hosts (spec 39). | `installedExtensionVersion`, `checkForUpdates`, `UpdateCheckOutcome` |
 | `src/vscode/sourceImportPicker.ts` | vscode-facing | Runs the source-file, source-table, and destination-file Quick Pick sequence (spec 41). | `pickSourceImport` |
+| `src/vscode/clipboard.ts` | vscode-facing | Writes AI rename/type prompts to the VS Code clipboard and shows the success notification (spec 42). | `vscodeAiPromptClipboard`, `showAiPromptCopied` |
 
 ## `src/webview/` — extension-host side of the panel
 
@@ -123,6 +125,7 @@ via `ExtensionContext.workspaceState` (spec 27). | `readMatrixColumnPrefs`, `wri
 | `src/webview/openSql.ts` | pure | Orchestrates "Open SQL file" against a host port: lookup, rescan-on-miss (or on a stale cached path), republish, open or report (spec 38). | `openModelSql`, `OpenSqlHost` |
 | `src/webview/layoutMessages.ts` | pure | Layout-related message handling against a small `LayoutHost` port, so it stays testable. Manual save (spec 22): `cachePendingLayout` only caches the webview's latest layout in host memory, never writes to disk. | `publishActiveLayout`, `openLayout`, `sendActiveLayout`, `saveLayout`, `cachePendingLayout`, `ActiveLayout`, `LayoutHost` |
 | `src/webview/sourceImport.ts` | pure | Orchestrates source loading, selection, conversion, persistence, and reporting (spec 41). | `runSourceImport`, `SourceImportHost`, `SourceImportCandidate`, `SourceImportSelection` |
+| `src/webview/aiPromptExport.ts` | pure | Resolves a current model, builds an AI rename/type prompt, and copies it through a narrow clipboard port (spec 42). | `copyAiRenameTypePrompt`, `AiPromptExportHost`, `AiPromptClipboard` |
 | `src/extension.ts` | vscode-facing | `activate` / `deactivate` only — command registration and disposal. | `activate`, `deactivate` |
 
 ## `webview-ui/` — React front-end (webview)
@@ -140,6 +143,7 @@ via `ExtensionContext.workspaceState` (spec 27). | `readMatrixColumnPrefs`, `wri
 | `webview-ui/SettingsPanel.tsx` | webview | "Open new diagrams" settings overlay: option list with descriptions, radio selection, dismiss conventions matching `ContextMenu` (spec 23). | `SettingsPanel`, `SettingsPanelProps` |
 | `webview-ui/Toast.tsx` | webview | Generic auto-dismissing popup with a manual close button; used for the initial model-selection-cap notice (spec 35). | `Toast`, `ToastProps` |
 | `webview-ui/ImportReport.tsx` | webview | Source-import completion modal listing imported names and broken FKs (spec 41). | `ImportReport`, `ImportReportProps` |
+| `webview-ui/AiPromptExport.tsx` | webview | Batch-size and batch-number dialog for exporting an AI rename/type prompt (spec 42). | `AiPromptExport`, `AiPromptExportProps` |
 | `webview-ui/context-menu-position.ts` | webview (pure) | Viewport flip/clamp geometry for the context menu and its submenu flyouts (spec 15, spec 24). | `placeMenu`, `placeSubmenu`, `MenuBox`, `MenuPoint`, `MenuPlacement`, `SubmenuAnchor` |
 | `webview-ui/details-visibility.ts` | webview (pure) | Details sidebar visibility policy: opens/closes with the selection, manual collapse sticks until it next changes (spec 19); `{visible,key}` transition that keeps the policy safe inside a React state updater (spec 21). | `selectionKey`, `nextDetailsVisible`, `SelectionKey`, `DetailsVisibility`, `initialDetailsVisibility`, `advanceDetailsVisibility` |
 | `webview-ui/initial-fit.ts` | webview (pure) | Viewport-fit policies: the one-off post-measurement corrective fit (spec 21) and the deferred pending fit (spec 32). | `shouldRunInitialFit`, `shouldRunPendingFit` |

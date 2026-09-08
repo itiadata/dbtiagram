@@ -85,6 +85,7 @@ export type MessageToExtension =
   /** Explicitly run the same update workflow used during activation. */
   | { type: 'app:checkForUpdates' }
   | { type: 'sourceImport:start' }
+  | { type: 'aiPrompt:copy'; model: string; batchSize: number; batchNumber: number }
   /** Explicit "Save diagram" action; prompts for a path when none is active. */
   | { type: 'layout:save'; layout: DiagramLayout }
   /**

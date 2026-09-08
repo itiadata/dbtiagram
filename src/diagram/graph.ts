@@ -34,6 +34,8 @@ export interface TableNode {
   id: string;
   label: string;
   description?: string;
+  /** Imported source-table provenance used to enable AI prompt export (spec 42). */
+  sourceName?: string;
   columns: TableNodeColumn[];
   /** The displayed primary key: virtual-first (spec 08, Confirm at Approval (c)). */
   primaryKey?: TablePrimaryKey;
@@ -144,10 +146,18 @@ function buildGraph(
       });
     }
 
+    const configMeta = m.config?.meta;
+    const importedSourceName = configMeta !== undefined && typeof configMeta === 'object'
+      ? (configMeta as Record<string, unknown>).source_name
+      : undefined;
+    const sourceName = typeof importedSourceName === 'string' && importedSourceName.trim() !== ''
+      ? importedSourceName
+      : undefined;
     return {
       id: m.name,
       label: m.name,
       description: m.description,
+      sourceName,
       columns: (m.columns ?? []).map((c: ModelColumn) => {
         const isPk = primaryKey?.columns.includes(c.name) ?? false;
         const tests = columnTestNames(c, isPk);

@@ -48,7 +48,8 @@ import { ImportReport } from './ImportReport';
 import { useSourceImport } from './hooks/useSourceImport';
 import { SIDEBAR_DEFAULT_WIDTH } from './sidebar-constants';
 import { diagramModeLabels, type DiagramMode } from '../src/shared/diagramMode';
-import { Settings, SavePlus, Save, SaveCheck, StickyNotePlus, Grid3x3, ChartNoAxesGantt, BetweenHorizontalStart, Trash2, Waypoints, FileCode2, Import } from './icons';
+import { Settings, SavePlus, Save, SaveCheck, StickyNotePlus, Grid3x3, ChartNoAxesGantt, BetweenHorizontalStart, Trash2, Waypoints, FileCode2, Import, Clipboard } from './icons';
+import { AiPromptExport } from './AiPromptExport';
 
 export function App(): JSX.Element {
   const [graph, setGraph] = useState<DiagramGraph | null>(null);
@@ -68,6 +69,7 @@ export function App(): JSX.Element {
   const [appVersion, setAppVersion] = useState<string | null>(null);
   const [updateStatus, setUpdateStatus] = useState<'unknown' | 'upToDate' | 'updateAvailable'>('unknown');
   const [mode, setMode] = useState<DiagramMode>('model');
+  const [aiPromptModel, setAiPromptModel] = useState<string | null>(null);
   const labels = diagramModeLabels(mode);
 
   const selection = useSelection();
@@ -391,6 +393,7 @@ export function App(): JSX.Element {
       const currentMode = columnDisplay.effectiveMode(model);
       const related = graph === null ? [] : relatedModels(graph, model);
       const missingRelated = related.filter((name) => !filter.visibleModels.has(name));
+      const sourceName = graph?.nodes.find((node) => node.id === model)?.sourceName;
       return [
         { label: `Reveal in ${labels.sourceFile}`, icon: <ChartNoAxesGantt size={16} />, onSelect: () => onOpenModelSource(model, column) },
         ...(mode === 'model' ? [{
@@ -417,6 +420,7 @@ export function App(): JSX.Element {
           })),
         },
         ...(mode === 'model' ? [{ label: 'Edit fields matrix', icon: <Grid3x3 size={16} />, onSelect: () => fieldsMatrix.openForModel(model) }] : []),
+        ...(mode === 'model' ? [{ label: 'AI renaming', items: [{ label: 'Export prompt', icon: <Clipboard size={16} />, disabled: sourceName === undefined, title: sourceName === undefined ? 'This table has no source provenance to export.' : undefined, onSelect: () => setAiPromptModel(model) }] }] : []),
         { label: 'Remove from diagram', icon: <Trash2 size={16} />, onSelect: () => onRemoveTable(model) },
       ];
     },
@@ -780,6 +784,14 @@ export function App(): JSX.Element {
         />
       )}
       {sourceImport.report !== null && <ImportReport report={sourceImport.report} onClose={sourceImport.dismiss} />}
+      {aiPromptModel !== null && graph !== null && (
+        <AiPromptExport
+          model={aiPromptModel}
+          eligibleColumnCount={graph.nodes.find((node) => node.id === aiPromptModel)?.columns.filter((column) => typeof column.meta?.source_name === 'string' && column.meta.source_name.trim() !== '' && typeof column.meta?.source_datatype === 'string' && column.meta.source_datatype.trim() !== '').length ?? 0}
+          onCopy={(batchSize, batchNumber) => { postToHost({ type: 'aiPrompt:copy', model: aiPromptModel, batchSize, batchNumber }); setAiPromptModel(null); }}
+          onClose={() => setAiPromptModel(null)}
+        />
+      )}
     </main>
   );
 }

@@ -1,9 +1,8 @@
-import type { VsCodeApi } from './vscode-api';
-
-declare global {
-  interface Window {
-    acquireVsCodeApi(): VsCodeApi;
-  }
+interface Window {
+  acquireVsCodeApi(): import('./vscode-api').VsCodeApi;
 }
 
-export {};
+declare module '*.md' {
+  const content: string;
+  export default content;
+}

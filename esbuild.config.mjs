@@ -15,6 +15,7 @@ const contexts = [
     target: 'node18',
     sourcemap: true,
     external: ['vscode'],
+    loader: { '.md': 'text' },
     logLevel: 'info',
   }),
   await esbuild.context({
@@ -25,7 +26,7 @@ const contexts = [
     format: 'iife',
     target: 'es2020',
     sourcemap: true,
-    loader: { '.css': 'css' },
+    loader: { '.css': 'css', '.md': 'text' },
     logLevel: 'info',
   }),
 ];
