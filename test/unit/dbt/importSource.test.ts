@@ -48,15 +48,20 @@ describe('source table import', () => {
     expect((selected.table.config?.nested as { value: string }).value).toBe('original');
   });
 
-  it('preserves a virtual primary key without real artifacts', () => {
+  it('imports a source primary key as real with tests', () => {
     const selected = sourceTable('costs', 'finops', {
+      columns: [{ name: 'id' }],
       config: { meta: { dbtiagram: { virtual: { primary_key: { columns: ['id'] } } } } },
     });
     const model = importSourceTables({ models: [] }, [selected], []).destination.models[0];
-    expect(readVirtualConstraints(model).primaryKey).toEqual({ columns: ['id'] });
-    expect(model.constraints).toBeUndefined();
-    expect(model.dataTests).toBeUndefined();
-    expect(model.columns?.[0]?.dataTests).toBeUndefined();
+    expect(readVirtualConstraints(model).primaryKey).toBeUndefined();
+    expect(model.constraints).toEqual([{ type: 'primary_key', columns: ['id'] }]);
+    expect(model.dataTests).toEqual([{
+      'dbt_utils.unique_combination_of_columns': {
+        arguments: { combination_of_columns: ['id'] },
+      },
+    }]);
+    expect(model.columns?.[0]?.dataTests).toEqual(['not_null']);
   });
 
   it("rewrites an FK to the selected target's allocated name", () => {
@@ -68,8 +73,13 @@ describe('source table import', () => {
       [costs, sourceTable('workspaces')],
       [{ name: 'workspaces_from_source' }],
     );
-    expect(readVirtualConstraints(result.destination.models[0]).foreignKeys?.[0].to)
-      .toBe("ref('workspaces_from_source_1')");
+    expect(readVirtualConstraints(result.destination.models[0]).foreignKeys).toBeUndefined();
+    expect(result.destination.models[0].constraints).toContainEqual({
+      type: 'foreign_key',
+      to: "ref('workspaces_from_source_1')",
+      columns: ['workspace_id'],
+      toColumns: ['id'],
+    });
     expect(result.brokenForeignKeys).toEqual([]);
   });
 
@@ -78,8 +88,7 @@ describe('source table import', () => {
       config: { meta: { dbtiagram: { virtual: { foreign_keys: [{ to: "source('finops', 'workspaces')", columns: ['workspace_id'], to_columns: ['id'] }] } } } },
     });
     const result = importSourceTables({ models: [] }, [costs], []);
-    expect(readVirtualConstraints(result.destination.models[0]).foreignKeys?.[0].to)
-      .toBe("ref('workspaces_from_source')");
+    expect(result.destination.models[0].constraints?.[0].to).toBe("ref('workspaces_from_source')");
     expect(result.brokenForeignKeys.map((fk) => fk.display)).toEqual([
       "costs_from_source.workspace_id -> ref('workspaces_from_source').id",
     ]);
@@ -98,7 +107,7 @@ describe('source table import', () => {
       config: { meta: { dbtiagram: { virtual: { foreign_keys: [{ to: 'custom_target', columns: [], to_columns: [] }] } } } },
     });
     const result = importSourceTables({ models: [] }, [costs], []);
-    expect(readVirtualConstraints(result.destination.models[0]).foreignKeys?.[0].to).toBe('custom_target');
+    expect(result.destination.models[0].constraints?.[0].to).toBe('custom_target');
     expect(result.brokenForeignKeys).toEqual([]);
   });
 

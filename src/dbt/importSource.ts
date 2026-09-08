@@ -2,6 +2,7 @@ import { parseSourceRef } from './sourceRefs';
 import type { ModelColumn, ModelDefinition, ModelYmlFile, VirtualForeignKey } from './types';
 import type { QualifiedSourceTable } from './sourceTypes';
 import { readVirtualConstraints, writeVirtualConstraints } from './virtual';
+import { setPrimaryKeyOnModel } from './edit/primaryKey';
 
 export interface BrokenImportedForeignKey {
   model: string;
@@ -58,9 +59,24 @@ function convertTable(source: QualifiedSourceTable, allocated: ReadonlyMap<strin
     ...(table.columns !== undefined ? { columns: table.columns.map(cloneColumn) } : {}),
   };
   const virtual = readVirtualConstraints(model);
+  model = writeVirtualConstraints(model, {});
+  if (virtual.primaryKey !== undefined) {
+    model = setPrimaryKeyOnModel(model, virtual.primaryKey.columns, false, true);
+  }
   if (virtual.foreignKeys !== undefined) {
     const foreignKeys = virtual.foreignKeys.map((fk) => rewriteForeignKey(fk, allocated));
-    model = writeVirtualConstraints(model, { ...virtual, foreignKeys });
+    model = {
+      ...model,
+      constraints: [
+        ...(model.constraints ?? []),
+        ...foreignKeys.map((fk) => ({
+          type: 'foreign_key',
+          to: fk.to,
+          columns: [...fk.columns],
+          toColumns: [...fk.toColumns],
+        })),
+      ],
+    };
   }
   return model;
 }
@@ -74,16 +90,20 @@ function rewriteForeignKey(fk: VirtualForeignKey, allocated: ReadonlyMap<string,
 
 function brokenForModel(model: ModelDefinition, available: ReadonlySet<string>): BrokenImportedForeignKey[] {
   const out: BrokenImportedForeignKey[] = [];
-  for (const fk of readVirtualConstraints(model).foreignKeys ?? []) {
+  const foreignKeys = (model.constraints ?? []).filter((constraint) => constraint.type === 'foreign_key');
+  for (const fk of foreignKeys) {
+    if (fk.to === undefined) continue;
     const match = /^ref\('([^']+)'\)$/.exec(fk.to);
     if (match === null || available.has(match[1])) continue;
-    const sourceSuffix = fk.columns.length === 0 ? '' : `.${fk.columns.join(',')}`;
-    const targetSuffix = fk.toColumns.length === 0 ? '' : `.${fk.toColumns.join(',')}`;
+    const columns = fk.columns ?? [];
+    const toColumns = fk.toColumns ?? [];
+    const sourceSuffix = columns.length === 0 ? '' : `.${columns.join(',')}`;
+    const targetSuffix = toColumns.length === 0 ? '' : `.${toColumns.join(',')}`;
     out.push({
       model: model.name,
-      columns: [...fk.columns],
+      columns: [...columns],
       target: match[1],
-      toColumns: [...fk.toColumns],
+      toColumns: [...toColumns],
       display: `${model.name}${sourceSuffix} -> ref('${match[1]}')${targetSuffix}`,
     });
   }

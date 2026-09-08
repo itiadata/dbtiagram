@@ -41,7 +41,7 @@ lines** under `test/unit/` (see `specs/features/17-modular-source-layout.md`).
 | `src/dbt/sourceLocate.ts` | pure | Locate nested source table and column declarations. | `findSourceTableDeclaration`, `findSourceColumnDeclaration` |
 | `src/dbt/sourceStore.ts` | pure | Source-file last-good store and redistribution. | `createSourceStore`, `applySourceTextChange`, `distributeEditedSources` |
 | `src/dbt/sourceEdit.ts` | pure | Forced-virtual source table edits. | `applySourceEdit` |
-| `src/dbt/importSource.ts` | pure | Collision-safe source-table conversion, virtual FK rewriting, destination append, and broken-FK reporting (spec 41). | `nextImportedModelName`, `importSourceTables`, `SourceImportResult`, `BrokenImportedForeignKey` |
+| `src/dbt/importSource.ts` | pure | Collision-safe source-table conversion, source virtual-key promotion to real constraints/tests, FK rewriting, destination append, and broken-FK reporting (spec 41). | `nextImportedModelName`, `importSourceTables`, `SourceImportResult`, `BrokenImportedForeignKey` |
 | `src/dbt/modelStore.ts` | pure | In-memory set of loaded model.yml files: upsert, text change, delete, rename, and redistribution of edited models. | `createModelStore`, `ModelStore`, `upsertRecord`, `applyTextChange`, `applyFileDeleted`, `applyFileRenamed`, `distributeEditedModels`, `replaceModelStore`, `ModelFileRecord`, `LoadedModelFile`, `FailedModelFile` |
 | `src/dbt/edit/index.ts` | pure | Single entry point that dispatches a `ModelEdit` to the right handler. **All mutations go through here.** | `applyEdit` |
 | `src/dbt/edit/types.ts` | pure | The discriminated union of every supported edit. | `ModelEdit` |
