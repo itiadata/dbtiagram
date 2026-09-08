@@ -134,6 +134,7 @@ Then its "Export prompt" context-menu action is disabled with title "This table 
 |------|--------|----------------|
 | `src/dbt/aiPromptRules.md` | create | Bundled, plainly editable initial AI task instructions and naming/type rules. |
 | `esbuild.config.mjs` | modify | Configure the Markdown text loader so the bundled AI rules can be imported as a string. |
+| `webview-ui/vscode.d.ts` | modify | Declare Markdown imports as strings for strict TypeScript. |
 | `src/dbt/aiPrompt.ts` | create | Pure eligibility, batching, JSON-safe evidence normalization, and deterministic prompt construction. |
 | `src/shared/protocol.ts` | modify | Add the typed webview-to-host prompt-copy request. |
 | `src/vscode/clipboard.ts` | create | Isolate VS Code clipboard writes and success information notification. |
