@@ -10,7 +10,7 @@ export function ProductTitle(props: ProductTitleProps): JSX.Element {
       {props.version !== null && (
         <span className="app__version">
           <span>v{props.version}</span>
-          {props.upToDate && <span className="app__update-status">Up to date</span>}
+          {props.upToDate && <span> (Up to date)</span>}
         </span>
       )}
     </div>

@@ -26,7 +26,7 @@ export async function checkForUpdates(context: vscode.ExtensionContext): Promise
     install: installVsix,
     promptReload: async (message) => vscode.window.showInformationMessage(message, 'Reload Now', 'Later'),
     reload: async () => vscode.commands.executeCommand('workbench.action.reloadWindow'),
-    warn: (message) => { void vscode.window.showWarningMessage(message); },
+    warn: (message) => { void vscode.window.showErrorMessage(message); },
   });
 }
 
