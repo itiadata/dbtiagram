@@ -22,6 +22,7 @@ import type { MessageToWebview } from '../../../src/shared/protocol';
 
 const layout: DiagramLayout = {
   version: LAYOUT_VERSION,
+  mode: 'model',
   name: 'orders',
   tables: [{ name: 'orders', x: 10, y: 20 }],
   notes: [],
@@ -45,6 +46,7 @@ function createHost(overrides: Partial<LayoutHost> = {}): StubHost {
   let active: ActiveLayout | undefined;
   let pendingLayout: { layout: DiagramLayout; dirty: boolean } | undefined;
   const host: StubHost = {
+    mode: 'model',
     posted,
     writes,
     opened,
@@ -63,7 +65,7 @@ function createHost(overrides: Partial<LayoutHost> = {}): StubHost {
       writes.push({ fsPath, layout: written });
     },
     promptForLayoutPath: async () => undefined,
-    knownModelNames: () => new Set(['orders']),
+    knownEntityNames: () => new Set(['orders']),
     onLayoutOpened: (name) => {
       opened.push(name);
     },
@@ -100,7 +102,7 @@ describe('openLayout', () => {
   });
 
   it('reports models in the layout that no longer exist', async () => {
-    const host = createHost({ knownModelNames: () => new Set<string>() });
+    const host = createHost({ knownEntityNames: () => new Set<string>() });
     await openLayout(host, '/w/orders.dbtiagram.yml');
 
     const applied = host.posted.find((m) => m.type === 'layout:apply');

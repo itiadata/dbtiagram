@@ -4,6 +4,8 @@
  */
 import { hasUniqueCombinationTest } from '../dbt/edit/primaryKey';
 import { parseRef } from '../dbt/refs';
+import { parseSourceRef } from '../dbt/sourceRefs';
+import { flattenSourceTables, type SourceDefinition } from '../dbt/sourceTypes';
 import { columnTestNames } from '../dbt/tests';
 import { readVirtualConstraints } from '../dbt/virtual';
 import type { ForeignKeyDescriptor, ModelColumn, ModelDefinition } from '../dbt/types';
@@ -69,6 +71,34 @@ export interface DiagramGraph {
  * not a relationship source and never produces edges.
  */
 export function buildDiagram(models: ModelDefinition[]): DiagramGraph {
+  return buildGraph(models, (value) => parseRef(value)?.name ?? null, true);
+}
+
+export function buildSourceDiagram(sources: SourceDefinition[]): DiagramGraph {
+  const tables = flattenSourceTables(sources);
+  const tableNameCounts = new Map<string, number>();
+  for (const { table } of tables) tableNameCounts.set(table.name, (tableNameCounts.get(table.name) ?? 0) + 1);
+  const models: ModelDefinition[] = tables.map(({ id, table }) => ({
+    name: id,
+    description: table.description,
+    config: table.config,
+    columns: table.columns,
+  }));
+  const graph = buildGraph(models, (value) => parseSourceRef(value)?.id ?? null, false);
+  return {
+    ...graph,
+    nodes: graph.nodes.map((node, index) => ({
+      ...node,
+      label: tableNameCounts.get(tables[index].table.name) === 1 ? tables[index].table.name : node.id,
+    })),
+  };
+}
+
+function buildGraph(
+  models: ModelDefinition[],
+  parseTarget: (value: string) => string | null,
+  includeReal: boolean,
+): DiagramGraph {
   const known = new Set(models.map((m) => m.name));
 
   const nodes: TableNode[] = models.map((m) => {
@@ -79,7 +109,7 @@ export function buildDiagram(models: ModelDefinition[]): DiagramGraph {
       // The dbtiagram-namespaced block records what was last done in the
       // diagram — it wins over a coexisting real constraint for display.
       primaryKey = { columns: virtual.primaryKey.columns, virtual: true, uniqueTest: false };
-    } else {
+    } else if (includeReal) {
       const constraint = (m.constraints ?? []).find((c) => c.type === 'primary_key');
       if (constraint !== undefined) {
         primaryKey = {
@@ -91,12 +121,12 @@ export function buildDiagram(models: ModelDefinition[]): DiagramGraph {
     }
 
     const foreignKeys: ForeignKeyDescriptor[] = [];
-    for (const constraint of m.constraints ?? []) {
+    for (const constraint of includeReal ? (m.constraints ?? []) : []) {
       if (constraint.type !== 'foreign_key') continue;
       const to = constraint.to ?? '';
-      const ref = parseRef(to);
+      const target = parseTarget(to);
       foreignKeys.push({
-        target: ref === null ? undefined : ref.name,
+        target: target ?? undefined,
         to,
         columns: constraint.columns ?? [],
         toColumns: constraint.toColumns ?? [],
@@ -104,9 +134,9 @@ export function buildDiagram(models: ModelDefinition[]): DiagramGraph {
       });
     }
     for (const fk of virtual.foreignKeys ?? []) {
-      const ref = parseRef(fk.to);
+      const target = parseTarget(fk.to);
       foreignKeys.push({
-        target: ref === null ? undefined : ref.name,
+        target: target ?? undefined,
         to: fk.to,
         columns: fk.columns,
         toColumns: fk.toColumns,
@@ -144,9 +174,8 @@ export function buildDiagram(models: ModelDefinition[]): DiagramGraph {
     virtual: boolean,
   ): void => {
     if (constraint.to === undefined) return;
-    const ref = parseRef(constraint.to);
-    if (ref === null) return;
-    const target = ref.name;
+    const target = parseTarget(constraint.to);
+    if (target === null) return;
     if (target === source || !known.has(target)) return;
 
     // Spec 09 (merged): FK edges need at least one column pair of equal length
@@ -177,7 +206,7 @@ export function buildDiagram(models: ModelDefinition[]): DiagramGraph {
   for (const model of models) {
     const virtual = readVirtualConstraints(model);
     // Real constraints first so their edges dedupe ahead of virtual ones.
-    for (const constraint of model.constraints ?? []) {
+    for (const constraint of includeReal ? (model.constraints ?? []) : []) {
       if (constraint.type !== 'foreign_key') continue;
       addEdge(model.name, constraint, false);
     }

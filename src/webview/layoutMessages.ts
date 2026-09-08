@@ -14,6 +14,7 @@ import {
   type DiagramLayout,
 } from '../diagram/layoutFile';
 import type { MessageToWebview } from '../shared/protocol';
+import type { DiagramMode } from '../shared/diagramMode';
 
 /** The saved layout file a panel currently writes back to. */
 export interface ActiveLayout {
@@ -23,6 +24,7 @@ export interface ActiveLayout {
 
 /** Everything the layout handlers need from the owning panel. */
 export interface LayoutHost {
+  mode: DiagramMode;
   postMessage(message: MessageToWebview): void;
   getActiveLayout(): ActiveLayout | undefined;
   setActiveLayout(active: ActiveLayout | undefined): void;
@@ -33,7 +35,7 @@ export interface LayoutHost {
   /** Save-dialog; `undefined` when the user cancels. */
   promptForLayoutPath(defaultName: string): Promise<string | undefined>;
   /** Names of every model currently loaded, for reconciling the layout. */
-  knownModelNames(): Set<string>;
+  knownEntityNames(): Set<string>;
   /** The panel re-titles itself to the layout's stored name. */
   onLayoutOpened(name: string): void;
   /** The panel re-keys and re-titles itself after a first save (spec 14). */
@@ -48,7 +50,7 @@ export interface LayoutHost {
 
 /** Layout entries naming models that no longer exist, in file order. */
 function missingModels(host: LayoutHost, layout: DiagramLayout): string[] {
-  return applyLayout(layout, host.knownModelNames()).missing;
+  return applyLayout(layout, host.knownEntityNames()).missing;
 }
 
 export function publishActiveLayout(host: LayoutHost): void {
@@ -74,6 +76,10 @@ export async function openLayout(host: LayoutHost, fsPath: string): Promise<void
       type: 'diagram:error',
       message: `Could not open ${defaultLayoutName(fsPath)}: ${detail}`,
     });
+    return;
+  }
+  if (layout.mode !== host.mode) {
+    host.postMessage({ type: 'diagram:error', message: `Layout mode "${layout.mode}" does not match panel mode "${host.mode}"` });
     return;
   }
 

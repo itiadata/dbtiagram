@@ -67,6 +67,7 @@ interface ForeignKeySectionProps {
   onDraftAddPair: (draft: DraftForeignKey, source: string, target: string) => void;
   /** Removing the last pair of a persisted FK: deletes it + keeps a draft. */
   onRemoveLastPair: (fk: ForeignKeyDescriptor) => void;
+  forceVirtual?: boolean;
 }
 
 export function ForeignKeySection({
@@ -80,6 +81,7 @@ export function ForeignKeySection({
   onDraftVirtualChange,
   onDraftAddPair,
   onRemoveLastPair,
+  forceVirtual = false,
 }: ForeignKeySectionProps): JSX.Element {
   const modelNames = nodes.map((n) => n.id).sort();
   const foreignKeys = node.foreignKeys;
@@ -101,6 +103,7 @@ export function ForeignKeySection({
             focused={focusedFk !== null && sameFkContent(focusedFk, fk)}
             onEdit={onEdit}
             onRemoveLastPair={onRemoveLastPair}
+            forceVirtual={forceVirtual}
           />
         ))}
         {drafts.map((draft) => (
@@ -112,6 +115,7 @@ export function ForeignKeySection({
             onRemove={onRemoveDraft}
             onVirtualChange={onDraftVirtualChange}
             onAddPair={onDraftAddPair}
+            forceVirtual={forceVirtual}
           />
         ))}
       </div>
@@ -134,9 +138,10 @@ interface FkCardProps {
   focused: boolean;
   onEdit: (edit: ModelEdit) => void;
   onRemoveLastPair: (fk: ForeignKeyDescriptor) => void;
+  forceVirtual: boolean;
 }
 
-function FkCard({ fk, node, nodes, modelNames, focused, onEdit, onRemoveLastPair }: FkCardProps): JSX.Element {
+function FkCard({ fk, node, nodes, modelNames, focused, onEdit, onRemoveLastPair, forceVirtual }: FkCardProps): JSX.Element {
   const cardRef = useRef<HTMLDivElement>(null);
   const wasFocusedRef = useRef(false);
 
@@ -257,8 +262,8 @@ function FkCard({ fk, node, nodes, modelNames, focused, onEdit, onRemoveLastPair
         <label className="details__checkbox-row">
           <input
             type="checkbox"
-            checked={fk.virtual}
-            disabled={isZeroPair}
+            checked={forceVirtual || fk.virtual}
+            disabled={forceVirtual || isZeroPair}
             onChange={toggleVirtual}
           />
           Virtual
@@ -329,6 +334,7 @@ interface DraftFkCardProps {
   onRemove: (draftId: string) => void;
   onVirtualChange: (draftId: string, virtual: boolean) => void;
   onAddPair: (draft: DraftForeignKey, source: string, target: string) => void;
+  forceVirtual: boolean;
 }
 
 function DraftFkCard({
@@ -338,6 +344,7 @@ function DraftFkCard({
   onRemove,
   onVirtualChange,
   onAddPair,
+  forceVirtual,
 }: DraftFkCardProps): JSX.Element {
   const targetNode = nodes.find((n) => n.id === draft.target);
   const sourceColumns = node.columns.map((c) => c.name);
@@ -366,7 +373,8 @@ function DraftFkCard({
         <label className="details__checkbox-row">
           <input
             type="checkbox"
-            checked={draft.virtual}
+            checked={forceVirtual || draft.virtual}
+            disabled={forceVirtual}
             onChange={() => onVirtualChange(draft.draftId, !draft.virtual)}
           />
           Virtual

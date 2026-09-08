@@ -2,7 +2,9 @@ import { fileURLToPath } from 'url';
 import * as fs from 'fs';
 import * as path from 'path';
 import { describe, expect, it } from 'vitest';
-import { parseModelYml } from '../../src/dbt/parse';
+import { NotAModelYmlFileError, parseModelYml } from '../../src/dbt/parse';
+import { parseSourceYml } from '../../src/dbt/sourceParse';
+import { buildSourceDiagram } from '../../src/diagram/graph';
 import { findModelDeclaration } from '../../src/dbt/locate';
 import { serializeModelYml } from '../../src/dbt/serialize';
 import type { ModelDefinition } from '../../src/dbt/types';
@@ -36,7 +38,7 @@ function loadFixtureModels(): ModelDefinition[] {
   const models: ModelDefinition[] = [];
   for (const file of listModelYmlFiles(fixtureModelsDir)) {
     const content = fs.readFileSync(file, 'utf8');
-    models.push(...parseModelYml(content, file).models);
+    try { models.push(...parseModelYml(content, file).models); } catch (error) { if (!(error instanceof NotAModelYmlFileError)) throw error; }
   }
   return models;
 }
@@ -124,8 +126,10 @@ describe('sample fixture (fixtures/sample-dbt)', () => {
   it('round trips every fixture file losslessly', () => {
     for (const file of listModelYmlFiles(fixtureModelsDir)) {
       const content = fs.readFileSync(file, 'utf8');
-      const parsed = parseModelYml(content, file);
-      expect(parseModelYml(serializeModelYml(parsed), file)).toEqual(parsed);
+      try {
+        const parsed = parseModelYml(content, file);
+        expect(parseModelYml(serializeModelYml(parsed), file)).toEqual(parsed);
+      } catch (error) { if (!(error instanceof NotAModelYmlFileError)) throw error; }
     }
   });
 
@@ -157,12 +161,22 @@ describe('sample fixture (fixtures/sample-dbt)', () => {
     for (const file of listModelYmlFiles(fixtureModelsDir)) {
       const content = fs.readFileSync(file, 'utf8');
       const lines = content.split(/\r?\n/);
-      for (const model of parseModelYml(content, file).models) {
+      let parsed;
+      try { parsed = parseModelYml(content, file); } catch (error) { if (error instanceof NotAModelYmlFileError) continue; throw error; }
+      for (const model of parsed.models) {
         const position = findModelDeclaration(content, model.name);
         expect(position, `${file}: ${model.name}`).not.toBeNull();
         expect(lines[position?.line ?? 0]).toContain(model.name);
       }
     }
+  });
+
+  it('loads the source fixture end to end', () => {
+    const file = path.resolve(fixtureModelsDir, 'sources/finops.yml');
+    const source = parseSourceYml(fs.readFileSync(file, 'utf8'), file);
+    const graph = buildSourceDiagram(source.sources);
+    expect(graph.nodes.map((node) => node.id)).toEqual(['finops.costs', 'finops.workspaces']);
+    expect(graph.edges[0]).toMatchObject({ source: 'finops.costs', target: 'finops.workspaces', virtual: true });
   });
 
   it('carries column test names into the diagram graph (spec 30)', () => {

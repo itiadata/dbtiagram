@@ -8,7 +8,7 @@
  * inputs.
  */
 import type { DiagramGraph } from '../diagram/graph';
-import type { DiagramModelFile } from './protocol';
+import type { DiagramEntityFile } from './protocol';
 
 /**
  * Default cap on how many models start checked on a diagram's first load
@@ -70,14 +70,14 @@ export function reconcileSelection(
  * its file is checked AND the model itself is checked.
  */
 export function computeVisibleModels(
-  files: readonly DiagramModelFile[],
+  files: readonly DiagramEntityFile[],
   selectedFiles: ReadonlySet<string>,
   selectedModels: ReadonlySet<string>,
 ): Set<string> {
   const visible = new Set<string>();
   for (const file of files) {
     if (!selectedFiles.has(file.uri)) continue;
-    for (const model of file.models) {
+    for (const model of file.entities) {
       if (selectedModels.has(model)) visible.add(model);
     }
   }
@@ -93,14 +93,14 @@ export function computeVisibleModels(
  * all-checked default rather than blanking the diagram.
  */
 export function scopeSelectionToFile(
-  files: readonly DiagramModelFile[],
+  files: readonly DiagramEntityFile[],
   uri: string,
 ): { files: Set<string>; models: Set<string> } | null {
   const file = files.find((candidate) => candidate.uri === uri);
   if (file === undefined) {
     return null;
   }
-  return { files: new Set([file.uri]), models: new Set(file.models) };
+  return { files: new Set([file.uri]), models: new Set(file.entities) };
 }
 
 /**

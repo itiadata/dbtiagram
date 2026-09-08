@@ -12,8 +12,8 @@ import {
 import type { DiagramModelFile } from '../../../src/shared/protocol';
 
 const files: DiagramModelFile[] = [
-  { uri: 'C:/repo/models/orders.yml', label: 'orders.yml', models: ['orders', 'order_items'] },
-  { uri: 'C:/repo/models/products.yml', label: 'products.yml', models: ['products'] },
+  { uri: 'C:/repo/models/orders.yml', label: 'orders.yml', entities: ['orders', 'order_items'] },
+  { uri: 'C:/repo/models/products.yml', label: 'products.yml', entities: ['products'] },
 ];
 
 const allFileUris = new Set(files.map((file) => file.uri));
@@ -203,7 +203,7 @@ describe('removeModels', () => {
 
   it('hides a removed model from computeVisibleModels', () => {
     const singleFile: DiagramModelFile[] = [
-      { uri: 'f', label: 'f', models: ['orders', 'customers'] },
+      { uri: 'f', label: 'f', entities: ['orders', 'customers'] },
     ];
     const selectedModels = removeModels(new Set(['orders', 'customers']), ['orders']);
     const visible = computeVisibleModels(singleFile, new Set(['f']), selectedModels);

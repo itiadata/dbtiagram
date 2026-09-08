@@ -4,6 +4,7 @@ import {
   layoutFileContextKey,
   modelFileContextKey,
   shouldShowButton,
+  classifyDbtYml,
 } from '../../../src/vscode/editorButton';
 
 const MODEL_PATHS = new Set([
@@ -26,6 +27,15 @@ describe('shouldShowButton', () => {
 
   it('hides the button for an unsaved/untitled editor', () => {
     expect(shouldShowButton('', MODEL_PATHS)).toBe(false);
+  });
+});
+
+describe('classifyDbtYml', () => {
+  it('classifies model source and mixed roots', () => {
+    expect(classifyDbtYml('models: []')).toBe('model');
+    expect(classifyDbtYml('sources: []')).toBe('source');
+    expect(classifyDbtYml('models: []\nsources: []')).toBe('model');
+    expect(classifyDbtYml('[')).toBe('none');
   });
 });
 

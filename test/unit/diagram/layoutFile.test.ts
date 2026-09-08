@@ -13,7 +13,8 @@ import {
 } from '../../../src/diagram/layoutFile';
 
 const sample: DiagramLayout = {
-  version: 1,
+  version: 2,
+  mode: 'model',
   name: 'Order marts',
   tables: [
     { name: 'order_items', x: 520, y: 40 },
@@ -66,12 +67,13 @@ describe('stripLayoutSuffix', () => {
 });
 
 describe('buildLayout', () => {  it('sorts tables by name and rounds coordinates', () => {
-    const layout = buildLayout('My diagram', [
+    const layout = buildLayout('My diagram', 'model', [
       { name: 'orders', x: 120.4, y: 39.6 },
       { name: 'customers', x: -0.2, y: 10 },
     ]);
     expect(layout).toEqual({
-      version: 1,
+      version: 2,
+  mode: 'model',
       name: 'My diagram',
       tables: [
         { name: 'customers', x: -0, y: 10 },
@@ -106,7 +108,8 @@ describe('serializeDiagramLayout / parseDiagramLayout', () => {
       'fallback',
     );
     expect(layout).toEqual({
-      version: 1,
+      version: 2,
+  mode: 'model',
       name: 'x',
       tables: [{ name: 'orders', x: 1, y: 2 }],
       notes: [],
@@ -145,7 +148,8 @@ describe('applyLayout', () => {
 
   it('drops unknown models and reports them in file order', () => {
     const layout: DiagramLayout = {
-      version: 1,
+      version: 2,
+  mode: 'model',
       name: 'x',
       tables: [
         { name: 'legacy_orders', x: 0, y: 0 },
@@ -173,7 +177,8 @@ describe('applyLayout', () => {
       },
     ];
     const layout: DiagramLayout = {
-      version: 1,
+      version: 2,
+  mode: 'model',
       name: 'x',
       tables: [
         { name: 'orders', x: 10, y: 20 },
@@ -202,7 +207,8 @@ describe('notes (spec 16)', () => {
   };
 
   it('round-trips a layout with notes', () => {
-    const layout: DiagramLayout = { version: 1, name: 'd', tables: [], notes: [note] };
+    const layout: DiagramLayout = { version: 2,
+  mode: 'model', name: 'd', tables: [], notes: [note] };
     expect(parseDiagramLayout(serializeDiagramLayout(layout), 'd')).toEqual(layout);
   });
 
@@ -211,12 +217,13 @@ describe('notes (spec 16)', () => {
   });
 
   it('omits the notes key when there are none', () => {
-    expect(serializeDiagramLayout(buildLayout('d', []))).not.toContain('notes');
+    expect(serializeDiagramLayout(buildLayout('d', 'model', []))).not.toContain('notes');
   });
 
   it('sorts notes by id and rounds coordinates and sizes', () => {
     const layout = buildLayout(
       'd',
+      'model',
       [],
       [
         { ...note, id: 'n-b', x: 10.6, y: 20.4, width: 200.5, height: 100.4 },
@@ -309,7 +316,8 @@ describe('notes (spec 16)', () => {
 describe('columnDisplay (spec 24)', () => {
   it('round-trips through serialize/parse', () => {
     const layout: DiagramLayout = {
-      version: 1,
+      version: 2,
+  mode: 'model',
       name: 'd',
       tables: [{ name: 'orders', x: 0, y: 0, columnDisplay: 'pkOnly' }],
       notes: [],
@@ -319,7 +327,7 @@ describe('columnDisplay (spec 24)', () => {
   });
 
   it('omits defaults from serialized YAML', () => {
-    const layout = buildLayout('d', [{ name: 'orders', x: 0, y: 0 }]);
+    const layout = buildLayout('d', 'model', [{ name: 'orders', x: 0, y: 0 }]);
     const text = serializeDiagramLayout(layout);
     expect(text).not.toContain('columnDisplay');
     expect(text).not.toContain('defaultColumnDisplay');
@@ -328,6 +336,7 @@ describe('columnDisplay (spec 24)', () => {
   it('buildLayout carries the default and per-table overrides', () => {
     const layout = buildLayout(
       'd',
+      'model',
       [
         { name: 'orders', x: 0, y: 0 },
         { name: 'customers', x: 10, y: 10 },
@@ -342,7 +351,8 @@ describe('columnDisplay (spec 24)', () => {
 
   it('applyLayout carries the default and per-table overrides through', () => {
     const layout: DiagramLayout = {
-      version: 1,
+      version: 2,
+  mode: 'model',
       name: 'd',
       tables: [{ name: 'orders', x: 0, y: 0, columnDisplay: 'nameOnly' }],
       notes: [],

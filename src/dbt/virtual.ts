@@ -10,11 +10,12 @@
  */
 import type {
   ModelConfig,
-  ModelDefinition,
   VirtualConstraintsBlock,
   VirtualForeignKey,
   VirtualPrimaryKey,
 } from './types';
+
+export interface VirtualConstraintOwner { name?: string; config?: ModelConfig }
 
 /** The meta key under which the dbtiagram block lives inside `config.meta`. */
 const DBTIAGRAM_KEY = 'dbtiagram';
@@ -31,7 +32,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
  * ignored and default to an empty block. An empty virtual PK (`primary_key`
  * with no usable columns) reads as absent — the write side never emits one.
  */
-export function readVirtualConstraints(model: ModelDefinition): VirtualConstraintsBlock {
+export function readVirtualConstraints(model: VirtualConstraintOwner): VirtualConstraintsBlock {
   const meta = model.config?.meta;
   const dbtiagram = isRecord(meta) ? meta[DBTIAGRAM_KEY] : undefined;
   const block = isRecord(dbtiagram) ? dbtiagram[VIRTUAL_KEY] : undefined;
@@ -81,10 +82,10 @@ function stringArray(raw: unknown): string[] {
  * object when nothing changed, preserving identity for
  * `distributeEditedModels` (spec 06).
  */
-export function writeVirtualConstraints(
-  model: ModelDefinition,
+export function writeVirtualConstraints<T extends VirtualConstraintOwner>(
+  model: T,
   block: VirtualConstraintsBlock,
-): ModelDefinition {
+): T {
   if (blocksEqual(readVirtualConstraints(model), block)) return model;
 
   const virtual: Record<string, unknown> = {};

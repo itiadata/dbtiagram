@@ -5,12 +5,18 @@
  * unit-testable without an Electron host.
  */
 import { stripLayoutSuffix } from '../diagram/layoutFile';
+import type { DiagramMode } from '../shared/diagramMode';
 
 /** What a diagram tab was opened from. Its identity and title derive from this. */
 export type DiagramSource =
   | { kind: 'layout'; fsPath: string }
   | { kind: 'model'; fsPath: string }
-  | { kind: 'adhoc'; id: string };
+  | { kind: 'source'; fsPath: string }
+  | { kind: 'adhoc'; id: string; mode: DiagramMode };
+
+export function diagramSourceMode(source: Exclude<DiagramSource, { kind: 'layout' }>): DiagramMode {
+  return source.kind === 'source' ? 'source' : source.kind === 'model' ? 'model' : source.mode;
+}
 
 /** Base title shared by every diagram tab. */
 const BASE_TITLE = 'dbt Diagram';
@@ -55,6 +61,7 @@ export function diagramPanelTitle(source: DiagramSource, layoutName?: string): s
       return `${name} — ${BASE_TITLE}`;
     }
     case 'model':
+    case 'source':
       return `${baseName(source.fsPath)} — ${BASE_TITLE}`;
     case 'adhoc':
       return BASE_TITLE;

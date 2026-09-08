@@ -33,6 +33,14 @@ lines** under `test/unit/` (see `specs/features/17-modular-source-layout.md`).
 | `src/dbt/locate.ts` | pure | Locate a model's `name:` declaration, or a specific column's `name:` entry within it, in model.yml text via the yaml package's node ranges (spec 15, extended by spec 25). | `findModelDeclaration`, `findColumnDeclaration`, `DeclarationPosition` |
 | `src/dbt/refs.ts` | pure | Parse and rewrite `ref('…')` targets inside model properties. | `parseRef`, `renameRefTarget`, `RefTarget` |
 | `src/dbt/virtual.ts` | pure | Read/write the dbtiagram-managed virtual constraints block (PKs/FKs not expressed as dbt constraints). | `readVirtualConstraints`, `writeVirtualConstraints` |
+| `src/dbt/sourceTypes.ts` | pure | Source YAML domain types and qualified-table flattening. | `SourceYmlFile`, `SourceDefinition`, `SourceTableDefinition`, `flattenSourceTables` |
+| `src/dbt/sourceRefs.ts` | pure | Qualified source IDs and canonical dbt source references. | `sourceTableId`, `parseSourceRef`, `formatSourceRef` |
+| `src/dbt/sourceParse.ts` | pure | Parse and classify source YAML files. | `parseSourceYml`, `SourceYmlParseError`, `NotASourceYmlFileError` |
+| `src/dbt/sourceSerialize.ts` | pure | Source YAML fallback serialization. | `toDbtSourceShape`, `serializeSourceYml` |
+| `src/dbt/sourceMerge.ts` | pure | Surgical source YAML write-back. | `mergeSourceYml` |
+| `src/dbt/sourceLocate.ts` | pure | Locate nested source table and column declarations. | `findSourceTableDeclaration`, `findSourceColumnDeclaration` |
+| `src/dbt/sourceStore.ts` | pure | Source-file last-good store and redistribution. | `createSourceStore`, `applySourceTextChange`, `distributeEditedSources` |
+| `src/dbt/sourceEdit.ts` | pure | Forced-virtual source table edits. | `applySourceEdit` |
 | `src/dbt/modelStore.ts` | pure | In-memory set of loaded model.yml files: upsert, text change, delete, rename, and redistribution of edited models. | `createModelStore`, `ModelStore`, `upsertRecord`, `applyTextChange`, `applyFileDeleted`, `applyFileRenamed`, `distributeEditedModels`, `replaceModelStore`, `ModelFileRecord`, `LoadedModelFile`, `FailedModelFile` |
 | `src/dbt/edit/index.ts` | pure | Single entry point that dispatches a `ModelEdit` to the right handler. **All mutations go through here.** | `applyEdit` |
 | `src/dbt/edit/types.ts` | pure | The discriminated union of every supported edit. | `ModelEdit` |
@@ -70,6 +78,7 @@ including sticky notes (spec 16) and per-table/diagram-wide column-display modes
 | Path | Layer | Responsibility | Key exports |
 |------|-------|----------------|-------------|
 | `src/shared/protocol.ts` | shared | The **only** message contract between extension host and webview. | `MessageToWebview`, `MessageToExtension`, `DiagramModelFile`, `DiagramPendingError` |
+| `src/shared/diagramMode.ts` | shared | Diagram mode and mode-specific UI nouns. | `DiagramMode`, `diagramModeLabels` |
 | `src/shared/filter.ts` | shared | File/model filtering and selection reconciliation for the filter sidebar, the initial model-selection cap for large workspaces (spec 35), and the pure `removeModels` unchecking helper for table removal (spec 36). | `filterGraph`, `computeVisibleModels`, `reconcileSelection`, `scopeSelectionToFile`, `matchesSearch`, `capInitialSelection`, `INITIAL_MODEL_SELECTION_LIMIT`, `removeModels` |
 | `src/shared/glob.ts` | shared | Minimal glob matching used for model file discovery patterns. | `matchesGlob`, `globToRegExp`, `normalizePathForGlob` |
 | `src/shared/relations.ts` | shared | Pure one-hop neighbour lookup over a `DiagramGraph`, and the file set declaring a group of models, for "Add related tables" (spec 37). | `relatedModels`, `filesDeclaring` |
@@ -120,7 +129,7 @@ via `ExtensionContext.workspaceState` (spec 27). | `readMatrixColumnPrefs`, `wri
 | `webview-ui/index.tsx` | webview | Mount point: renders `App` into the webview document. | — |
 | `webview-ui/App.tsx` | webview | Top-level composition: state hooks, sidebars, canvas; routes column clicks through the mouse-drawn FK gesture (spec 26). | `App` |
 | `webview-ui/ProductTitle.tsx` | webview | The stacked dbt Diagram header and running extension version (spec 39). | `ProductTitle`, `ProductTitleProps` |
-| `webview-ui/DiagramCanvas.tsx` | webview | React Flow canvas: nodes, edges, pan/zoom, node drag; top-right toolbar groups Auto-layout with the diagram-wide column-display selector (spec 24); top-left toolbar hosts Add note/Add foreign key, plus the FK-draw mouse-follow preview line and crosshair cursor (spec 26). | `DiagramCanvas`, `DiagramCanvasProps` |
+| `webview-ui/DiagramCanvas.tsx` | webview | React Flow canvas: nodes, edges, pan/zoom, node drag; top-right toolbar groups Auto-layout with the diagram-wide column-display selector (spec 24); top-left toolbar hosts Add note/Add foreign key and the model-only Fields Matrix action, plus the FK-draw mouse-follow preview line and crosshair cursor (spec 26/40). | `DiagramCanvas`, `DiagramCanvasProps` |
 | `webview-ui/TableNode.tsx` | webview | Custom React Flow node rendering a table with its column rows and handles, including the header-positioned `HEADER_ANCHOR` handle for a hidden FK column (spec 24). | `TableNode` |
 | `webview-ui/NoteNode.tsx` | webview | Custom React Flow node rendering a sticky note: resizable rectangle, textarea, or collapsed icon (spec 16). | `NoteNode`, `NoteNodeData` |
 | `webview-ui/FkEdge.tsx` | webview | Custom FK edge renderer with hover-friendly interaction width. | `FkEdge`, `roundedPath` |

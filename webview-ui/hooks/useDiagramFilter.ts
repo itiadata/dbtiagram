@@ -13,7 +13,7 @@ import {
   removeModels,
   scopeSelectionToFile,
 } from '../../src/shared/filter';
-import type { DiagramModelFile } from '../../src/shared/protocol';
+import type { DiagramEntityFile } from '../../src/shared/protocol';
 import { filesDeclaring } from '../../src/shared/relations';
 
 /** Spec 35: the one-time popup naming how many models were initially shown. */
@@ -23,7 +23,7 @@ export interface InitialCapNotice {
 }
 
 export interface DiagramFilterState {
-  modelFiles: DiagramModelFile[];
+  modelFiles: DiagramEntityFile[];
   selectedFiles: Set<string>;
   selectedModels: Set<string>;
   availableModelNames: string[];
@@ -47,7 +47,7 @@ export interface DiagramFilterState {
    */
   addModels: (names: readonly string[]) => void;
   /** Adopts new host metadata, keeping the user's checked state (spec 05). */
-  applyModelFiles: (files: DiagramModelFile[]) => void;
+  applyModelFiles: (files: DiagramEntityFile[]) => void;
   /** Scopes to one model.yml unless a layout already won (spec 14). */
   applyScope: (uri: string) => void;
   /** A saved layout's table list becomes the exact visible set (spec 13). */
@@ -59,7 +59,7 @@ export interface DiagramFilterState {
 }
 
 export function useDiagramFilter(): DiagramFilterState {
-  const [modelFiles, setModelFiles] = useState<DiagramModelFile[]>([]);
+  const [modelFiles, setModelFiles] = useState<DiagramEntityFile[]>([]);
   const [selectedFiles, setSelectedFiles] = useState<Set<string>>(new Set());
   const [selectedModels, setSelectedModels] = useState<Set<string>>(new Set());
   const [fileSearch, setFileSearch] = useState('');
@@ -76,7 +76,7 @@ export function useDiagramFilter(): DiagramFilterState {
   // Spec 14: the freshest file metadata, readable synchronously by the
   // `filter:scope` handler (which arrives as its own message event), and a
   // latch making `layout:apply` win over any later scope message.
-  const modelFilesRef = useRef<DiagramModelFile[]>([]);
+  const modelFilesRef = useRef<DiagramEntityFile[]>([]);
   const layoutAppliedRef = useRef(false);
 
   // Models held by files that are currently checked: the Models filter only
@@ -87,7 +87,7 @@ export function useDiagramFilter(): DiagramFilterState {
     const names = new Set<string>();
     for (const file of modelFiles) {
       if (!selectedFiles.has(file.uri)) continue;
-      for (const model of file.models) names.add(model);
+      for (const model of file.entities) names.add(model);
     }
     return [...names];
   }, [modelFiles, selectedFiles]);
@@ -100,7 +100,7 @@ export function useDiagramFilter(): DiagramFilterState {
     [modelFiles, selectedFiles, selectedModels],
   );
 
-  const applyModelFiles = useCallback((files: DiagramModelFile[]): void => {
+  const applyModelFiles = useCallback((files: DiagramEntityFile[]): void => {
     setModelFiles(files);
     modelFilesRef.current = files;
 
@@ -109,7 +109,7 @@ export function useDiagramFilter(): DiagramFilterState {
     setSelectedFiles((current) => reconcileSelection(previousUris, fileUris, current));
     previousFileUrisRef.current = fileUris;
 
-    const modelNames = files.flatMap((file) => file.models);
+    const modelNames = files.flatMap((file) => file.entities);
     const previousNames = previousModelNamesRef.current;
     // Spec 35: only the panel's very first load caps the model selection;
     // every later call reconciles normally, uncapped.

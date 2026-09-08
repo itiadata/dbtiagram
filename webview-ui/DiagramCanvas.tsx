@@ -93,7 +93,7 @@ export interface DiagramCanvasProps {
   /** Creates a note at the given flow point (spec 26's "Add note" toolbar button). */
   onAddNoteAt: (point: { x: number; y: number }) => void;
   /** Opens the global fields matrix (spec 27's toolbar button). */
-  onOpenFieldsMatrix: () => void;
+  onOpenFieldsMatrix?: () => void;
   /** The column picked as the FK gesture's source, or null (spec 26). */
   fkSource: { model: string; column: string } | null;
   fkCreateActive: boolean;
@@ -529,14 +529,14 @@ export function DiagramCanvas({
       <Controls />
       <Panel position="top-left">
         <div className="canvas-toolbar">
-          <button
+          {onOpenFieldsMatrix !== undefined && <button
             type="button"
             className="panel-button panel-button--secondary"
             onClick={onAddNote}
             title="Add note"
           >
             <StickyNotePlus size={16} />
-          </button>
+          </button>}
           <button
             type="button"
             className="panel-button panel-button--secondary"

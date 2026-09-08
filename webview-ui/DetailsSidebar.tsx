@@ -28,6 +28,7 @@ import { isPrimaryKeyColumn, toggleColumnPrimaryKey } from './columnPrimaryKey';
 import { ForeignKeySection, type DraftForeignKey } from './ForeignKeySection';
 import { ChartNoAxesGantt } from './icons';
 import { PrimaryKeySection } from './PrimaryKeySection';
+import type { DiagramMode } from '../src/shared/diagramMode';
 
 /** The entity the sidebar renders: a table, or a column within its table. */
 export type SelectedEntity =
@@ -57,6 +58,7 @@ interface DetailsSidebarProps {
   onColumnDisplayModeChange: (mode: ColumnDisplayMode) => void;
   /** Inline width from the App's resize state (spec 11). */
   style?: CSSProperties;
+  mode: DiagramMode;
 }
 
 export function DetailsSidebar({
@@ -75,6 +77,7 @@ export function DetailsSidebar({
   columnDisplayMode,
   onColumnDisplayModeChange,
   style,
+  mode,
 }: DetailsSidebarProps): JSX.Element {
   return (
     <aside className="details" style={style}>
@@ -98,16 +101,17 @@ export function DetailsSidebar({
           <button
             type="button"
             className="details__reveal"
-            title="Reveal in model.yml"
+            title={`Reveal in ${mode === 'source' ? 'source yml' : 'model.yml'}`}
             onClick={() => onOpenModelSource(entity.node.id)}
           >
             <ChartNoAxesGantt size={14} />
-            Reveal in model.yml
+            Reveal in {mode === 'source' ? 'source yml' : 'model.yml'}
           </button>
           <EditableField
             label="Name"
             value={entity.node.label}
             required
+            readOnly={mode === 'source'}
             onCommit={(value) =>
               onEdit({ kind: 'setModelName', model: entity.node.id, name: value })
             }
@@ -125,7 +129,7 @@ export function DetailsSidebar({
             }
           />
           <ColumnDisplaySection mode={columnDisplayMode} onChange={onColumnDisplayModeChange} />
-          <PrimaryKeySection node={entity.node} onEdit={onEdit} />
+           <PrimaryKeySection node={entity.node} onEdit={onEdit} forceVirtual={mode === 'source'} />
           <ForeignKeySection
             node={entity.node}
             nodes={nodes}
@@ -137,6 +141,7 @@ export function DetailsSidebar({
             onDraftVirtualChange={onDraftVirtualChange}
             onDraftAddPair={onDraftAddPair}
             onRemoveLastPair={onRemoveLastPair}
+            forceVirtual={mode === 'source'}
           />
         </div>
       ) : (
@@ -148,16 +153,17 @@ export function DetailsSidebar({
           <button
             type="button"
             className="details__reveal"
-            title="Reveal in model.yml"
+            title={`Reveal in ${mode === 'source' ? 'source yml' : 'model.yml'}`}
             onClick={() => onOpenModelSource(entity.node.id, entity.column.name)}
           >
             <ChartNoAxesGantt size={14} />
-            Reveal in model.yml
+            Reveal in {mode === 'source' ? 'source yml' : 'model.yml'}
           </button>
           <EditableField
             label="Name"
             value={entity.column.name}
             required
+            readOnly={mode === 'source'}
             onCommit={(value) =>
               onEdit({
                 kind: 'setColumnName',
@@ -170,6 +176,7 @@ export function DetailsSidebar({
           <EditableField
             label="Data type"
             value={entity.column.dataType ?? ''}
+            readOnly={mode === 'source'}
             onCommit={(value) =>
               onEdit({
                 kind: 'setColumnDataType',
@@ -196,7 +203,7 @@ export function DetailsSidebar({
             <input
               type="checkbox"
               checked={isPrimaryKeyColumn(entity.node, entity.column.name)}
-              onChange={() => onEdit(toggleColumnPrimaryKey(entity.node, entity.column.name))}
+              onChange={() => onEdit(toggleColumnPrimaryKey(entity.node, entity.column.name, mode === 'source'))}
             />
             Primary key
           </label>
@@ -214,6 +221,7 @@ interface EditableFieldProps {
   /** Renders a textarea; Enter inserts a newline instead of committing. */
   multiline?: boolean;
   onCommit: (value: string) => void;
+  readOnly?: boolean;
 }
 
 function EditableField({
@@ -222,6 +230,7 @@ function EditableField({
   required,
   multiline,
   onCommit,
+  readOnly,
 }: EditableFieldProps): JSX.Element {
   const [draft, setDraft] = useState(value);
   // Guards the focus->commit session against double commits (Escape then the
@@ -266,7 +275,7 @@ function EditableField({
   };
 
   const commonProps = {
-    className: multiline ? 'details__textarea' : 'details__input',
+    className: `${multiline ? 'details__textarea' : 'details__input'}${readOnly ? ' details__input--readonly' : ''}`,
     value: draft,
     onChange: (event: ChangeEvent<HTMLInputElement | HTMLTextAreaElement>): void =>
       setDraft(event.target.value),
@@ -277,7 +286,7 @@ function EditableField({
   return (
     <label className="details__field">
       <span className="details__label">{label}</span>
-      {multiline ? <textarea {...commonProps} rows={3} /> : <input {...commonProps} />}
+      {multiline ? <textarea {...commonProps} readOnly={readOnly} rows={3} /> : <input {...commonProps} readOnly={readOnly} />}
     </label>
   );
 }

@@ -23,6 +23,10 @@ describe('diagramPanelKey', () => {
     );
   });
 
+  it('distinguishes model and source panels for one path', () => {
+    expect(diagramPanelKey({ kind: 'model', fsPath: '/a/x.yml' }, false)).not.toBe(diagramPanelKey({ kind: 'source', fsPath: '/a/x.yml' }, false));
+  });
+
   it('unifies path separators', () => {
     expect(diagramPanelKey({ kind: 'model', fsPath: 'C:\\repo\\models\\a.yml' }, false)).toBe(
       diagramPanelKey({ kind: 'model', fsPath: 'C:/repo/models/a.yml' }, false),
@@ -37,8 +41,8 @@ describe('diagramPanelKey', () => {
   });
 
   it('gives every adhoc invocation its own key', () => {
-    expect(diagramPanelKey({ kind: 'adhoc', id: '1' }, false)).not.toBe(
-      diagramPanelKey({ kind: 'adhoc', id: '2' }, false),
+    expect(diagramPanelKey({ kind: 'adhoc', id: '1', mode: 'model' }, false)).not.toBe(
+      diagramPanelKey({ kind: 'adhoc', id: '2', mode: 'model' }, false),
     );
   });
 });
@@ -69,6 +73,6 @@ describe('diagramPanelTitle', () => {
   });
 
   it('uses the plain title for an adhoc source', () => {
-    expect(diagramPanelTitle({ kind: 'adhoc', id: '1' })).toBe('dbt Diagram');
+    expect(diagramPanelTitle({ kind: 'adhoc', id: '1', mode: 'model' })).toBe('dbt Diagram');
   });
 });

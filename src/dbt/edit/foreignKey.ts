@@ -15,6 +15,8 @@ import type {
 } from '../types';
 import { ApplyEditResult, EditError, arraysEqual, mapModel } from './internal';
 
+export type ForeignKeyTargetFormatter = (target: string) => string;
+
 /** Content match of a real constraint against a descriptor (spec 08, (d)). */
 function isFkMatch(constraint: ModelConstraint, fk: ForeignKeyDescriptor): boolean {
   return (
@@ -49,11 +51,12 @@ export function applyForeignKeyTarget(
   modelName: string,
   fk: ForeignKeyDescriptor,
   target: string,
+  formatTarget: ForeignKeyTargetFormatter = (value) => `ref('${value}')`,
 ): ApplyEditResult {
   if (!models.some((m) => m.name === target)) {
     throw new EditError(`No model named "${target}" exists in the workspace`);
   }
-  return mapModel(models, modelName, (m) => setFkTargetOnModel(m, fk, target));
+  return mapModel(models, modelName, (m) => setFkTargetOnModel(m, fk, formatTarget(target)));
 }
 
 /**
@@ -64,9 +67,8 @@ export function applyForeignKeyTarget(
 function setFkTargetOnModel(
   model: ModelDefinition,
   fk: ForeignKeyDescriptor,
-  target: string,
+  to: string,
 ): ModelDefinition {
-  const to = `ref('${target}')`;
   if (fk.virtual) {
     const block = readVirtualConstraints(model);
     const foreignKeys = block.foreignKeys ?? [];
@@ -130,6 +132,7 @@ export function createForeignKey(
   columns: string[],
   toColumns: string[],
   virtual: boolean,
+  formatTarget: ForeignKeyTargetFormatter = (value) => `ref('${value}')`,
 ): ApplyEditResult {
   const model = models.find((m) => m.name === modelName);
   if (model === undefined) throw new EditError(`No model named "${modelName}" exists in the workspace`);
@@ -147,7 +150,7 @@ export function createForeignKey(
   if (targetModel === undefined) throw new EditError(`No model named "${target}" exists in the workspace`);
   validateColumnsExist(targetModel, toColumns);
   return mapModel(models, modelName, (m) => {
-    const to = `ref('${target}')`;
+    const to = formatTarget(target);
     if (virtual) {
       const block = readVirtualConstraints(m);
       const existing = block.foreignKeys ?? [];

@@ -24,18 +24,19 @@ import { SearchSelect } from './SearchSelect';
 interface PrimaryKeySectionProps {
   node: TableNode;
   onEdit: (edit: ModelEdit) => void;
+  forceVirtual?: boolean;
 }
 
-export function PrimaryKeySection({ node, onEdit }: PrimaryKeySectionProps): JSX.Element {
+export function PrimaryKeySection({ node, onEdit, forceVirtual = false }: PrimaryKeySectionProps): JSX.Element {
   const pk = node.primaryKey;
-  const virtual = pk?.virtual ?? false;
+  const virtual = forceVirtual || (pk?.virtual ?? false);
   const columns = pk?.columns ?? [];
   const uniqueTest = pk?.uniqueTest ?? true;
   const pkSet = new Set(columns);
   const nonPkColumns = node.columns.map((c) => c.name).filter((name) => !pkSet.has(name));
 
   const setColumns = (nextColumns: string[]): void => {
-    onEdit({ kind: 'setPrimaryKey', model: node.id, columns: nextColumns, virtual, uniqueTest });
+    onEdit({ kind: 'setPrimaryKey', model: node.id, columns: nextColumns, virtual, uniqueTest: forceVirtual ? false : uniqueTest });
   };
 
   const addColumn = (name: string): void => setColumns([...columns, name]);
@@ -54,10 +55,10 @@ export function PrimaryKeySection({ node, onEdit }: PrimaryKeySectionProps): JSX
     <section className="details__sub-section">
       <h3 className="details__sub-section-title">Primary key</h3>
       <label className="details__checkbox-row">
-        <input type="checkbox" checked={virtual} onChange={toggleVirtual} />
+        <input type="checkbox" checked={virtual} disabled={forceVirtual} onChange={toggleVirtual} />
         Virtual
       </label>
-      <label className="details__checkbox-row">
+      {!forceVirtual && <label className="details__checkbox-row">
         <input
           type="checkbox"
           checked={!uniqueTest}
@@ -65,8 +66,8 @@ export function PrimaryKeySection({ node, onEdit }: PrimaryKeySectionProps): JSX
           onChange={toggleUniqueTest}
         />
         Omit unique combination test
-      </label>
-      {!virtual && columns.length > 0 && (
+      </label>}
+      {!forceVirtual && !virtual && columns.length > 0 && (
         <p className="details__note">
           Writes the primary_key constraint and not_null checks to the model file. The
           unique combination test is omitted while the box above is checked.

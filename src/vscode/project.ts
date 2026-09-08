@@ -9,6 +9,10 @@ import { mergeModelYml } from '../dbt/merge';
 import { isLayoutFilePath } from '../diagram/layoutFile';
 import type { ModelYmlFile } from '../dbt/types';
 import type { DeclarationPosition } from '../dbt/locate';
+import { parseSourceYml, NotASourceYmlFileError, SourceYmlParseError } from '../dbt/sourceParse';
+import { mergeSourceYml } from '../dbt/sourceMerge';
+import { serializeSourceYml } from '../dbt/sourceSerialize';
+import type { SourceYmlFile } from '../dbt/sourceTypes';
 
 export interface ModelYmlRecord {
   uri: vscode.Uri;
@@ -25,10 +29,33 @@ export interface ModelYmlLoadResult {
   records: ModelYmlRecord[];
   failures: ModelYmlFailure[];
 }
+export interface SourceYmlRecord { uri: vscode.Uri; file: SourceYmlFile }
+export interface SourceYmlFailure { uri: vscode.Uri; message: string }
+export interface SourceYmlLoadResult { records: SourceYmlRecord[]; failures: SourceYmlFailure[] }
 
 /** Reads a workspace file as UTF-8 text. */
 export async function readFileText(uri: vscode.Uri): Promise<string> {
   return Buffer.from(await vscode.workspace.fs.readFile(uri)).toString('utf8');
+}
+
+export async function loadSourceYmlFiles(glob = '**/models/**/*.yml'): Promise<SourceYmlLoadResult> {
+  const uris = await vscode.workspace.findFiles(glob, '**/node_modules/**');
+  const records: SourceYmlRecord[] = []; const failures: SourceYmlFailure[] = [];
+  for (const uri of uris) {
+    if (isLayoutFilePath(uri.fsPath)) continue;
+    try { records.push({ uri, file: parseSourceYml(await readFileText(uri), uri.fsPath) }); }
+    catch (error) {
+      if (error instanceof NotASourceYmlFileError) continue;
+      failures.push({ uri, message: error instanceof SourceYmlParseError ? error.message : `Failed to read ${uri.fsPath}: ${String(error)}` });
+    }
+  }
+  return { records, failures };
+}
+
+export async function writeSourceYmlFile(uri: vscode.Uri, file: SourceYmlFile): Promise<void> {
+  let text: string | undefined;
+  try { text = await readFileText(uri); } catch { text = undefined; }
+  await vscode.workspace.fs.writeFile(uri, Buffer.from(text === undefined ? serializeSourceYml(file) : mergeSourceYml(text, file), 'utf8'));
 }
 
 /**

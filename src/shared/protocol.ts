@@ -7,6 +7,7 @@ import type { DiagramLayout } from '../diagram/layoutFile';
 import type { ModelEdit } from '../dbt/edit';
 import type { OpenBehavior } from './openBehavior';
 import type { MatrixScope, StoredMatrixColumnPref } from './matrixColumns';
+import type { DiagramMode } from './diagramMode';
 
 /** A model.yml file whose most recent parse failed (last good data shown). */
 export interface DiagramPendingError {
@@ -21,22 +22,24 @@ export interface DiagramPendingError {
  * and by model (spec 05). The webview never sends filter state back: it
  * derives its own filtered view from the full graph plus this metadata.
  */
-export interface DiagramModelFile {
+export interface DiagramEntityFile {
   /** File-system path of the model.yml file (stable key for selection). */
   uri: string;
   /** VS Code-style display name (bare name or folder-disambiguated path). */
   label: string;
   /** Model names defined in this file, in file order. */
-  models: string[];
+  entities: string[];
 }
+export type DiagramModelFile = DiagramEntityFile;
 
 /** Messages sent from the extension host to the webview. */
 export type MessageToWebview =
   | {
       type: 'diagram:update';
+      mode: DiagramMode;
       diagram: DiagramGraph;
       pendingErrors: DiagramPendingError[];
-      modelFiles: DiagramModelFile[];
+      files: DiagramEntityFile[];
     }
   | { type: 'diagram:error'; message: string }
   /**
@@ -80,7 +83,7 @@ export type MessageToExtension =
    */
   | { type: 'layout:pending'; layout: DiagramLayout; dirty: boolean }
     /** Open the model.yml declaring `model` and reveal its declaration, or a specific `column` within it (spec 15, extended by spec 25). */
-    | { type: 'model:openSource'; model: string; column?: string }
+    | { type: 'diagram:openSource'; entity: string; column?: string }
   /** Persist a new "Open new diagrams" choice as a VS Code user setting (spec 23). */
   | { type: 'settings:setOpenBehavior'; openBehavior: OpenBehavior }
   /** Persist grid column visibility/order for one matrix scope (spec 27). */

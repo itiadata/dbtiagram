@@ -45,6 +45,7 @@ import { useSettings } from './hooks/useSettings';
 import { SidebarRail, SidebarResizer } from './SidebarChrome';
 import { ProductTitle } from './ProductTitle';
 import { SIDEBAR_DEFAULT_WIDTH } from './sidebar-constants';
+import { diagramModeLabels, type DiagramMode } from '../src/shared/diagramMode';
 import { Settings, SavePlus, Save, SaveCheck, StickyNotePlus, Grid3x3, ChartNoAxesGantt, BetweenHorizontalStart, Trash2, Waypoints, FileCode2 } from './icons';
 
 export function App(): JSX.Element {
@@ -64,13 +65,15 @@ export function App(): JSX.Element {
   const [sqlModels, setSqlModels] = useState<Set<string>>(new Set());
   const [appVersion, setAppVersion] = useState<string | null>(null);
   const [upToDate, setUpToDate] = useState(false);
+  const [mode, setMode] = useState<DiagramMode>('model');
+  const labels = diagramModeLabels(mode);
 
   const selection = useSelection();
   const filter = useDiagramFilter();
   const notes = useNotes();
   const columnDisplay = useColumnDisplay();
   const fkCreate = useFkCreateMode();
-  const layout = useLayoutPersistence(notes.notes, {
+  const layout = useLayoutPersistence(mode, notes.notes, {
     defaultMode: columnDisplay.defaultMode,
     overrides: columnDisplay.overrides,
   });
@@ -103,7 +106,8 @@ export function App(): JSX.Element {
         message.pendingErrors.map((pending) => `${pending.uri}: ${pending.message}`),
       );
       setError(null);
-      filter.applyModelFiles(message.modelFiles);
+      setMode(message.mode);
+      filter.applyModelFiles(message.files);
       selection.reconcileToGraph(message.diagram);
     },
     onDiagramError: (message) => {
@@ -189,7 +193,7 @@ export function App(): JSX.Element {
     [notePendingRename],
   );
 
-  const drafts = useDraftForeignKeys(onEdit);
+  const drafts = useDraftForeignKeys(onEdit, mode === 'source');
 
   // Spec 26: column clicks route through the FK-draw gesture first; when the
   // mode is inactive `handleColumnClick` returns null and the click falls
@@ -209,19 +213,19 @@ export function App(): JSX.Element {
           target: target.model,
           columns: [source.column],
           toColumns: [target.column],
-          virtual: false,
+           virtual: mode === 'source',
         });
         onTableSelect(source.model);
         setFocusedFk({
-          to: `ref('${target.model}')`,
+           to: mode === 'source' ? `source('${target.model.split('.')[0]}', '${target.model.split('.').slice(1).join('.')}')` : `ref('${target.model}')`,
           target: target.model,
           columns: [source.column],
           toColumns: [target.column],
-          virtual: false,
+           virtual: mode === 'source',
         });
       }
     },
-    [fkCreate, onColumnSelect, onEdit, onTableSelect, setFocusedFk],
+    [fkCreate, onColumnSelect, onEdit, onTableSelect, setFocusedFk, mode],
   );
 
   // Feature 07: a defined onEdgeClick is what keeps React Flow from tagging
@@ -288,7 +292,7 @@ export function App(): JSX.Element {
   const { revealTarget, revealModel } = useRevealModel(onRevealed);
 
   const onOpenModelSource = useCallback((model: string, column?: string): void => {
-    postToHost({ type: 'model:openSource', model, column });
+    postToHost({ type: 'diagram:openSource', entity: model, column });
   }, []);
 
   // Spec 38: opens (or focuses) the model's .sql file beside the diagram.
@@ -379,14 +383,14 @@ export function App(): JSX.Element {
       const related = graph === null ? [] : relatedModels(graph, model);
       const missingRelated = related.filter((name) => !filter.visibleModels.has(name));
       return [
-        { label: 'Reveal in model.yml', icon: <ChartNoAxesGantt size={16} />, onSelect: () => onOpenModelSource(model, column) },
-        {
+        { label: `Reveal in ${labels.sourceFile}`, icon: <ChartNoAxesGantt size={16} />, onSelect: () => onOpenModelSource(model, column) },
+        ...(mode === 'model' ? [{
           label: 'Open SQL file',
           icon: <FileCode2 size={16} />,
           disabled: !sqlModels.has(model),
           title: sqlModels.has(model) ? undefined : `No .sql file found for "${model}"`,
           onSelect: () => onOpenModelSql(model),
-        },
+        }] : []),
         {
           label: 'Add related tables',
           icon: <Waypoints size={16} />,
@@ -403,11 +407,11 @@ export function App(): JSX.Element {
             onSelect: () => columnDisplay.setTableMode(model, option.value),
           })),
         },
-        { label: 'Edit fields matrix', icon: <Grid3x3 size={16} />, onSelect: () => fieldsMatrix.openForModel(model) },
+        ...(mode === 'model' ? [{ label: 'Edit fields matrix', icon: <Grid3x3 size={16} />, onSelect: () => fieldsMatrix.openForModel(model) }] : []),
         { label: 'Remove from diagram', icon: <Trash2 size={16} />, onSelect: () => onRemoveTable(model) },
       ];
     },
-    [columnDisplay, onOpenModelSource, onOpenModelSql, sqlModels, fieldsMatrix, onRemoveTable, graph, filter],
+    [columnDisplay, onOpenModelSource, onOpenModelSql, sqlModels, fieldsMatrix, onRemoveTable, graph, filter, mode, labels.sourceFile],
   );
 
   const onColumnContextMenu = useCallback(
@@ -515,8 +519,8 @@ export function App(): JSX.Element {
     graph === null || visibleGraph === null
       ? 'loading…'
       : visibleGraph.nodes.length === graph.nodes.length
-        ? `${graph.nodes.length} models`
-        : `${visibleGraph.nodes.length} of ${graph.nodes.length} models`;
+        ? `${graph.nodes.length} ${labels.entitySection.toLowerCase()}`
+        : `${visibleGraph.nodes.length} of ${graph.nodes.length} ${labels.entitySection.toLowerCase()}`;
 
   const activeLayout = layout.activeLayout;
   const selectedTableId = selectedEntity?.kind === 'table' ? selectedEntity.node.id : null;
@@ -528,6 +532,8 @@ export function App(): JSX.Element {
           <FilterSidebar
             style={{ width: filterWidth }}
             files={filter.modelFiles}
+            labels={labels}
+            showSql={mode === 'model'}
             availableModelNames={filter.availableModelNames}
             selectedFiles={filter.selectedFiles}
             selectedModels={filter.selectedModels}
@@ -666,7 +672,7 @@ export function App(): JSX.Element {
                     onDeleteSelectedNotes={onDeleteSelectedNotes}
                     onRemoveSelectedTable={onRemoveSelectedTable}
                     onAddNoteAt={onAddNoteAt}
-                    onOpenFieldsMatrix={fieldsMatrix.openGlobal}
+                     onOpenFieldsMatrix={mode === 'model' ? fieldsMatrix.openGlobal : undefined}
                     fkSource={fkPickedSource}                    fkCreateActive={fkCreate.state.active}
                     onStartFkCreate={fkCreate.start}
                     onCancelFkCreate={fkCreate.cancel}
@@ -681,6 +687,7 @@ export function App(): JSX.Element {
         {detailsVisible ? (
           <DetailsSidebar
             style={{ width: detailsWidth }}
+            mode={mode}
             key={detailsKey}
             entity={selectedEntity}
             nodes={graph?.nodes ?? []}
@@ -738,7 +745,7 @@ export function App(): JSX.Element {
           onClose={settings.closePanel}
         />
       )}
-      {fieldsMatrix.target !== null && graph !== null && (
+      {mode === 'model' && fieldsMatrix.target !== null && graph !== null && (
         <FieldsMatrix
           target={fieldsMatrix.target}
           graph={graph}
@@ -754,7 +761,7 @@ export function App(): JSX.Element {
       )}
       {filter.initialCapNotice !== null && (
         <Toast
-          message={`Showing ${filter.initialCapNotice.shown} of ${filter.initialCapNotice.total} models — use the Filter section in the sidebar to change which models are loaded.`}
+          message={`Showing ${filter.initialCapNotice.shown} of ${filter.initialCapNotice.total} ${labels.entitySection.toLowerCase()} — use the Filter section in the sidebar to change which ${labels.entitySection.toLowerCase()} are loaded.`}
           onDismiss={filter.dismissInitialCapNotice}
         />
       )}

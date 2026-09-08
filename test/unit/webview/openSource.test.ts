@@ -5,7 +5,7 @@ const FILE = '/w/models/orders.yml';
 
 function makeHost(overrides: Partial<OpenSourceHost> = {}): OpenSourceHost {
   return {
-    findModelFile: () => FILE,
+    findEntityFile: () => FILE,
     readFileText: () => Promise.resolve('models:\n  - name: orders\n'),
     reveal: vi.fn(() => Promise.resolve()),
     showWarning: vi.fn(),
@@ -36,7 +36,7 @@ describe('openModelSource', () => {
   });
 
   it('reports a model that no longer exists', async () => {
-    const host = makeHost({ findModelFile: () => undefined });
+    const host = makeHost({ findEntityFile: () => undefined });
     await openModelSource(host, 'ghost');
 
     expect(host.reveal).not.toHaveBeenCalled();
@@ -55,7 +55,7 @@ describe('openModelSource', () => {
 
   it('resolves duplicates to the first file in store order', async () => {
     const files = ['/w/a.yml', '/w/b.yml'];
-    const host = makeHost({ findModelFile: () => files[0] });
+    const host = makeHost({ findEntityFile: () => files[0] });
     await openModelSource(host, 'orders');
 
     expect(host.reveal).toHaveBeenCalledWith('/w/a.yml', { line: 1, column: 10, length: 6 });

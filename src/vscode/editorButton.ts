@@ -3,9 +3,24 @@
  * unit tests.
  */
 import { isLayoutFilePath } from '../diagram/layoutFile';
+import { parse } from 'yaml';
+import type { DiagramMode } from '../shared/diagramMode';
 
 /** Context key gating the editor/title menu item. */
 export const modelFileContextKey = 'dbtiagram.isModelYml';
+export const sourceFileContextKey = 'dbtiagram.isSourceYml';
+export type DbtYmlKind = DiagramMode | 'none';
+
+export function classifyDbtYml(content: string): DbtYmlKind {
+  try {
+    const raw: unknown = parse(content);
+    if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) return 'none';
+    const record = raw as Record<string, unknown>;
+    if ('models' in record) return 'model';
+    if ('sources' in record) return 'source';
+    return 'none';
+  } catch { return 'none'; }
+}
 
 /** Context key gating the "Open dbt Diagram" item for saved layout files. */
 export const layoutFileContextKey = 'dbtiagram.isDiagramLayout';
@@ -31,4 +46,3 @@ export function shouldShowButton(
 export function isDiagramLayoutFile(activePath: string | undefined): boolean {
   return isLayoutFilePath(activePath);
 }
-

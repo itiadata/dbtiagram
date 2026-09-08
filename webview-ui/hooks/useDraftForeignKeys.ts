@@ -27,6 +27,7 @@ export interface DraftForeignKeysState {
 
 export function useDraftForeignKeys(
   onEdit: (edit: ModelEdit) => void,
+  forceVirtual = false,
 ): DraftForeignKeysState {
   // Keyed by model id; each draft carries a locally unique id.
   const [draftFks, setDraftFks] = useState<Record<string, DraftForeignKey[]>>({});
@@ -51,9 +52,9 @@ export function useDraftForeignKeys(
 
   const addDraft = useCallback(
     (model: string, target: string): void => {
-      appendDraft(model, target, false);
+      appendDraft(model, target, forceVirtual);
     },
-    [appendDraft],
+    [appendDraft, forceVirtual],
   );
 
   const removeDraft = useCallback((model: string, draftId: string): void => {
@@ -71,11 +72,11 @@ export function useDraftForeignKeys(
       setDraftFks((current) => ({
         ...current,
         [model]: (current[model] ?? []).map((d) =>
-          d.draftId === draftId ? { ...d, virtual } : d,
+          d.draftId === draftId ? { ...d, virtual: forceVirtual || virtual } : d,
         ),
       }));
     },
-    [],
+    [forceVirtual],
   );
 
   const addDraftPair = useCallback(
@@ -86,11 +87,11 @@ export function useDraftForeignKeys(
         target: draft.target,
         columns: [source],
         toColumns: [target],
-        virtual: draft.virtual,
+        virtual: forceVirtual || draft.virtual,
       });
       removeDraft(model, draft.draftId);
     },
-    [onEdit, removeDraft],
+    [onEdit, removeDraft, forceVirtual],
   );
 
   const removeLastPair = useCallback(
@@ -98,10 +99,10 @@ export function useDraftForeignKeys(
       onEdit({ kind: 'removeForeignKey', model, fk });
       const target = fk.target;
       if (target !== undefined) {
-        appendDraft(model, target, fk.virtual);
+        appendDraft(model, target, forceVirtual || fk.virtual);
       }
     },
-    [onEdit, appendDraft],
+    [onEdit, appendDraft, forceVirtual],
   );
 
   return { draftFks, addDraft, removeDraft, setDraftVirtual, addDraftPair, removeLastPair };

@@ -3,7 +3,7 @@
  * declaring a group of models (spec 37). Shared — MUST NOT import `vscode`.
  */
 import type { DiagramGraph } from '../diagram/graph';
-import type { DiagramModelFile } from './protocol';
+import type { DiagramEntityFile } from './protocol';
 
 /**
  * The models one FK hop away from `model`, in both directions: edge targets
@@ -30,13 +30,13 @@ export function relatedModels(graph: DiagramGraph, model: string): string[] {
  * which otherwise hides it by file precedence (spec 05).
  */
 export function filesDeclaring(
-  files: readonly DiagramModelFile[],
+  files: readonly DiagramEntityFile[],
   models: readonly string[],
 ): string[] {
   const modelSet = new Set(models);
   const uris: string[] = [];
   for (const file of files) {
-    if (file.models.some((name) => modelSet.has(name))) {
+    if (file.entities.some((name) => modelSet.has(name))) {
       uris.push(file.uri);
     }
   }

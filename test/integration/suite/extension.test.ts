@@ -22,6 +22,16 @@ suite('dbtiagram extension', () => {
       commands.includes('dbtiagram.open'),
       'the "dbtiagram.open" command must be registered after activation',
     );
+    assert.ok(commands.includes('dbtiagram.openSource'), 'the source-open command must be registered');
+  });
+
+  test('source command opens an independent source diagram', async () => {
+    const sourceUri = vscode.Uri.file(
+      path.resolve(__dirname, '../../../../fixtures/sample-dbt/models/sources/finops.yml'),
+    );
+    await vscode.commands.executeCommand('dbtiagram.openSource', sourceUri);
+    const appeared = await waitFor(() => diagramTabLabels().includes('finops.yml — dbt Diagram'), 10_000);
+    assert.ok(appeared, 'the source diagram should open for the source fixture');
   });
 
   test('open command creates a webview panel', async () => {

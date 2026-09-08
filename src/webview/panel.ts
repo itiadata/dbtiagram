@@ -20,22 +20,23 @@ import {
   type ModelStore,
 } from '../dbt/modelStore';
 import type { ModelDefinition } from '../dbt/types';
-import { buildDiagram } from '../diagram/graph';
+import { buildDiagram, buildSourceDiagram } from '../diagram/graph';
 import { isLayoutFilePath, type DiagramLayout } from '../diagram/layoutFile';
 import { matchesGlob } from '../shared/glob';
 import { disambiguateFileLabels } from '../shared/labels';
 import { DEFAULT_OPEN_BEHAVIOR, type OpenBehavior } from '../shared/openBehavior';
-import type { DiagramModelFile, MessageToExtension, MessageToWebview } from '../shared/protocol';
+import type { DiagramEntityFile, MessageToExtension, MessageToWebview } from '../shared/protocol';
+import type { DiagramMode } from '../shared/diagramMode';
 import type { MatrixScope } from '../shared/matrixColumns';
 import { readMatrixColumnPrefs, writeMatrixColumnPrefs } from '../vscode/matrixColumnPrefs';
 import { registerModelWatcher } from '../vscode/modelWatcher';
 import { resolvePlacement, untrackPanel } from '../vscode/openBehaviorWindows';
 import { promptForLayoutPath, readLayoutFile, writeLayoutFile } from '../vscode/layoutFiles';
-import { loadModelYmlFiles, readFileText, revealInEditor, writeModelYmlFile } from '../vscode/project';
+import { loadModelYmlFiles, loadSourceYmlFiles, readFileText, revealInEditor, writeModelYmlFile, writeSourceYmlFile } from '../vscode/project';
 import { findSqlFiles, openSqlFile } from '../vscode/sqlFiles';
 import { sqlGlobForModelGlob } from '../shared/sqlFiles';
 import { buildWebviewHtml } from './html';
-import { openModelSource, type OpenSourceHost } from './openSource';
+import { openDiagramSource, type OpenSourceHost } from './openSource';
 import { openModelSql, type OpenSqlHost } from './openSql';
 import {
   openLayout,
@@ -46,7 +47,10 @@ import {
   type ActiveLayout,
   type LayoutHost,
 } from './layoutMessages';
-import { diagramPanelKey, diagramPanelTitle, type DiagramSource } from './panelKey';
+import { diagramPanelKey, diagramPanelTitle, diagramSourceMode, type DiagramSource } from './panelKey';
+import { applySourceEdit } from '../dbt/sourceEdit';
+import { applySourceFileDeleted, applySourceFileRenamed, applySourceTextChange, createSourceStore, distributeEditedSources, replaceSourceStore, upsertSourceRecord, type SourceStore } from '../dbt/sourceStore';
+import type { SourceDefinition } from '../dbt/sourceTypes';
 
 /** Ignore text-change echoes of our own disk writes within this window. */
 const SELF_WRITE_IGNORE_MS = 250;
@@ -63,6 +67,8 @@ export class DiagramPanel {
   private readonly panel: vscode.WebviewPanel;
   private readonly disposables: vscode.Disposable[] = [];
   private store: ModelStore;
+  private sourceStore: SourceStore;
+  private readonly mode: DiagramMode;
   /** fsPath -> timestamp of our own disk writes, to ignore their echo. */
   private readonly selfWrites = new Map<string, number>();
   /** The saved layout file this panel writes back to, if any (spec 13). */
@@ -87,6 +93,8 @@ export class DiagramPanel {
   private constructor(
     panel: vscode.WebviewPanel,
     store: ModelStore,
+    sourceStore: SourceStore,
+    mode: DiagramMode,
     source: DiagramSource,
     key: string,
     workspaceState: vscode.Memento,
@@ -94,6 +102,8 @@ export class DiagramPanel {
   ) {
     this.panel = panel;
     this.store = store;
+    this.sourceStore = sourceStore;
+    this.mode = mode;
     this.source = source;
     this.key = key;
     this.workspaceState = workspaceState;
@@ -158,6 +168,8 @@ export class DiagramPanel {
     workspaceState: vscode.Memento,
     installedVersion: string,
   ): Promise<void> {
+    const initialLayout = source.kind === 'layout' ? await readLayoutFile(vscode.Uri.file(source.fsPath)) : undefined;
+    const mode = source.kind === 'layout' ? initialLayout?.mode ?? 'model' : diagramSourceMode(source);
     const key = diagramPanelKey(source);
 
     const existing = DiagramPanel.panels.get(key);
@@ -183,14 +195,16 @@ export class DiagramPanel {
       },
     );
 
-    const result = await loadModelYmlFiles(this.modelFileGlob());
+    const result = mode === 'model' ? await loadModelYmlFiles(this.modelFileGlob()) : undefined;
+    const sourceResult = mode === 'source' ? await loadSourceYmlFiles(this.sourceFileGlob()) : undefined;
     const store = replaceModelStore(
       createModelStore(),
-      result.records.map((record) => ({ uri: record.uri.fsPath, file: record.file })),
-      result.failures.map((failure) => ({ uri: failure.uri.fsPath, error: failure.message })),
+      (result?.records ?? []).map((record) => ({ uri: record.uri.fsPath, file: record.file })),
+      (result?.failures ?? []).map((failure) => ({ uri: failure.uri.fsPath, error: failure.message })),
     );
+    const sourceStore = replaceSourceStore(createSourceStore(), (sourceResult?.records ?? []).map((record) => ({ uri: record.uri.fsPath, file: record.file })), (sourceResult?.failures ?? []).map((failure) => ({ uri: failure.uri.fsPath, error: failure.message })));
 
-    const current = new DiagramPanel(panel, store, source, key, workspaceState, installedVersion);
+    const current = new DiagramPanel(panel, store, sourceStore, mode, source, key, workspaceState, installedVersion);
     DiagramPanel.panels.set(key, current);
     panel.webview.html = buildWebviewHtml(panel.webview, extensionUri);
 
@@ -219,6 +233,7 @@ export class DiagramPanel {
       .getConfiguration('dbtiagram')
       .get<string>('modelFileGlob', '**/models/**/*.yml');
   }
+  private static sourceFileGlob(): string { return vscode.workspace.getConfiguration('dbtiagram').get<string>('sourceFileGlob', '**/models/**/*.yml'); }
 
   private static openBehavior(): OpenBehavior {
     return vscode.workspace
@@ -227,7 +242,7 @@ export class DiagramPanel {
   }
 
   private get modelGlob(): string {
-    return DiagramPanel.modelFileGlob();
+    return this.mode === 'source' ? DiagramPanel.sourceFileGlob() : DiagramPanel.modelFileGlob();
   }
 
   /** Adapter handing the pure layout handlers everything they need. */
@@ -242,10 +257,8 @@ export class DiagramPanel {
       writeLayout: (fsPath, layout) => this.persistLayout(fsPath, layout),
       promptForLayoutPath: async (defaultName) =>
         (await promptForLayoutPath(defaultName))?.fsPath,
-      knownModelNames: () =>
-        new Set(
-          this.store.records.flatMap((record) => record.file.models.map((model) => model.name)),
-        ),
+      mode: this.mode,
+      knownEntityNames: () => new Set(this.mode === 'model' ? this.store.records.flatMap((record) => record.file.models.map((model) => model.name)) : this.sourceStore.records.flatMap((record) => record.file.sources.flatMap((source) => source.tables.map((table) => `${source.name}.${table.name}`)))),
       onLayoutOpened: (name) => {
         if (this.source.kind === 'layout') {
           // The stored `name` can differ from the file's base name.
@@ -266,6 +279,7 @@ export class DiagramPanel {
   }
 
   private publish(): void {
+    if (this.mode === 'source') { this.publishSources(); return; }
     const models: ModelDefinition[] = this.store.records.flatMap((record) => record.file.models);
     const pendingErrors = [...this.store.pendingErrors.entries()].map(([uri, message]) => ({
       uri,
@@ -276,18 +290,26 @@ export class DiagramPanel {
     // full graph is always sent; filtering is a webview-side view concern.
     const uris = this.store.records.map((record) => record.uri);
     const labels = disambiguateFileLabels(uris, workspaceRoot());
-    const modelFiles: DiagramModelFile[] = this.store.records.map((record) => ({
+    const files: DiagramEntityFile[] = this.store.records.map((record) => ({
       uri: record.uri,
       label: labels.get(record.uri) ?? fallbackLabel(record.uri),
-      models: record.file.models.map((model) => model.name),
+      entities: record.file.models.map((model) => model.name),
     }));
 
     this.postMessage({
       type: 'diagram:update',
+      mode: this.mode,
       diagram: buildDiagram(models),
       pendingErrors,
-      modelFiles,
+      files,
     });
+  }
+
+  private publishSources(): void {
+    const sources = this.sourceStore.records.flatMap((record) => record.file.sources);
+    const labels = disambiguateFileLabels(this.sourceStore.records.map((record) => record.uri), workspaceRoot());
+    const files: DiagramEntityFile[] = this.sourceStore.records.map((record) => ({ uri: record.uri, label: labels.get(record.uri) ?? fallbackLabel(record.uri), entities: record.file.sources.flatMap((source) => source.tables.map((table) => `${source.name}.${table.name}`)) }));
+    this.postMessage({ type: 'diagram:update', mode: 'source', diagram: buildSourceDiagram(sources), pendingErrors: [...this.sourceStore.pendingErrors].map(([uri, message]) => ({ uri, message })), files });
   }
 
   /**
@@ -296,7 +318,7 @@ export class DiagramPanel {
    * defaults (the layout's tables / all files checked).
    */
   private publishScope(): void {
-    if (this.source.kind !== 'model') {
+    if (this.source.kind !== this.mode) {
       return;
     }
     this.postMessage({ type: 'filter:scope', uri: this.source.fsPath });
@@ -304,6 +326,11 @@ export class DiagramPanel {
 
   /** Reloads every model.yml file from disk, keeping last good data for broken files. */
   public async refresh(): Promise<void> {
+    if (this.mode === 'source') {
+      const result = await loadSourceYmlFiles(this.modelGlob);
+      this.sourceStore = replaceSourceStore(this.sourceStore, result.records.map((record) => ({ uri: record.uri.fsPath, file: record.file })), result.failures.map((failure) => ({ uri: failure.uri.fsPath, error: failure.message })));
+      this.publish(); return;
+    }
     const result = await loadModelYmlFiles(this.modelGlob);
     this.store = replaceModelStore(
       this.store,
@@ -318,7 +345,8 @@ export class DiagramPanel {
   private onDocumentChanged(uri: vscode.Uri, content: string): void {
     const fsPath = uri.fsPath;
     if (this.isSelfWrite(fsPath)) return;
-    this.store = applyTextChange(this.store, fsPath, content);
+    if (this.mode === 'source') this.sourceStore = applySourceTextChange(this.sourceStore, fsPath, content);
+    else this.store = applyTextChange(this.store, fsPath, content);
     this.publish();
   }
 
@@ -328,7 +356,8 @@ export class DiagramPanel {
       if (this.isSelfWrite(fsPath)) continue;
       try {
         const content = await readFileText(uri);
-        this.store = applyTextChange(this.store, fsPath, content);
+        if (this.mode === 'source') this.sourceStore = applySourceTextChange(this.sourceStore, fsPath, content);
+        else this.store = applyTextChange(this.store, fsPath, content);
       } catch {
         // The file vanished between the create event and the read; the next
         // workspace event reconciles it.
@@ -339,7 +368,8 @@ export class DiagramPanel {
 
   private onFilesDeleted(uris: vscode.Uri[]): void {
     for (const uri of uris) {
-      this.store = applyFileDeleted(this.store, uri.fsPath);
+      if (this.mode === 'source') this.sourceStore = applySourceFileDeleted(this.sourceStore, uri.fsPath);
+      else this.store = applyFileDeleted(this.store, uri.fsPath);
     }
     this.publish();
   }
@@ -348,15 +378,15 @@ export class DiagramPanel {
     const oldPath = oldUri.fsPath;
     const newPath = newUri.fsPath;
     if (!matchesGlob(newPath, this.modelGlob) || isLayoutFilePath(newPath)) {
-      this.store = applyFileDeleted(this.store, oldPath);
+      if (this.mode === 'source') this.sourceStore = applySourceFileDeleted(this.sourceStore, oldPath); else this.store = applyFileDeleted(this.store, oldPath);
       this.publish();
       return;
     }
     try {
       const content = await readFileText(newUri);
-      this.store = applyFileRenamed(this.store, oldPath, newPath, content);
+      if (this.mode === 'source') this.sourceStore = applySourceFileRenamed(this.sourceStore, oldPath, newPath, content); else this.store = applyFileRenamed(this.store, oldPath, newPath, content);
     } catch {
-      this.store = applyFileDeleted(this.store, oldPath);
+      if (this.mode === 'source') this.sourceStore = applySourceFileDeleted(this.sourceStore, oldPath); else this.store = applyFileDeleted(this.store, oldPath);
     }
     this.publish();
   }
@@ -408,8 +438,8 @@ export class DiagramPanel {
       case 'layout:pending':
         cachePendingLayout(this.layoutHost, message.layout, message.dirty);
         return;
-        case 'model:openSource':
-          await openModelSource(this.openSourceHost, message.model, message.column);
+        case 'diagram:openSource':
+          await openDiagramSource(this.openSourceHost, { mode: this.mode, entity: message.entity, column: message.column });
           return;
         case 'model:openSql':
           await openModelSql(this.openSqlHost, message.model);
@@ -438,10 +468,9 @@ export class DiagramPanel {
   private get openSourceHost(): OpenSourceHost {
     return {
       // Store order resolves duplicate model names to the first declaring file.
-      findModelFile: (model) =>
-        this.store.records.find((record) =>
-          record.file.models.some((candidate) => candidate.name === model),
-        )?.uri,
+      findEntityFile: (mode, entity) => mode === 'model'
+        ? this.store.records.find((record) => record.file.models.some((candidate) => candidate.name === entity))?.uri
+        : this.sourceStore.records.find((record) => record.file.sources.some((source) => source.tables.some((table) => `${source.name}.${table.name}` === entity)))?.uri,
       readFileText: (fsPath) => readFileText(vscode.Uri.file(fsPath)),
       reveal: (fsPath, position) => revealInEditor(vscode.Uri.file(fsPath), position),
       showWarning: (message) => {
@@ -497,6 +526,15 @@ export class DiagramPanel {
   }
 
   private async applyEditAndPersist(edit: ModelEdit): Promise<void> {
+    if (this.mode === 'source') {
+      const all: SourceDefinition[] = this.sourceStore.records.flatMap((record) => record.file.sources);
+      const { sources } = applySourceEdit(all, edit);
+      for (const record of distributeEditedSources(this.sourceStore, sources)) {
+        this.sourceStore = upsertSourceRecord(this.sourceStore, record.uri, record.file);
+        await writeSourceYmlFile(vscode.Uri.file(record.uri), record.file); this.selfWrites.set(record.uri, Date.now());
+      }
+      this.publish(); return;
+    }
     const all: ModelDefinition[] = this.store.records.flatMap((record) => record.file.models);
     const { models } = applyEdit(all, edit);
 

@@ -17,11 +17,11 @@ export function isPrimaryKeyColumn(node: TableNode, columnName: string): boolean
  * The `setPrimaryKey` edit that adds `columnName` to the table's primary key
  * when it is not a member, or removes it when it is.
  */
-export function toggleColumnPrimaryKey(node: TableNode, columnName: string): ModelEdit {
+export function toggleColumnPrimaryKey(node: TableNode, columnName: string, forceVirtual = false): ModelEdit {
   const columns = node.primaryKey?.columns ?? [];
   const virtual = node.primaryKey?.virtual ?? false;
   const uniqueTest = node.primaryKey?.uniqueTest ?? true;
   const isMember = columns.includes(columnName);
   const next = isMember ? columns.filter((c) => c !== columnName) : [...columns, columnName];
-  return { kind: 'setPrimaryKey', model: node.id, columns: next, virtual, uniqueTest };
+  return { kind: 'setPrimaryKey', model: node.id, columns: next, virtual: forceVirtual || virtual, uniqueTest: forceVirtual ? false : uniqueTest };
 }

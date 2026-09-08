@@ -68,8 +68,8 @@ describe('relatedModels', () => {
 
 describe('filesDeclaring', () => {
   const files: DiagramModelFile[] = [
-    { uri: 'a.yml', label: 'a', models: ['orders'] },
-    { uri: 'b.yml', label: 'b', models: ['customers'] },
+    { uri: 'a.yml', label: 'a', entities: ['orders'] },
+    { uri: 'b.yml', label: 'b', entities: ['customers'] },
   ];
 
   it('returns the uris declaring the models', () => {
@@ -78,7 +78,7 @@ describe('filesDeclaring', () => {
 
   it('collapses a file declaring several of the models', () => {
     const merged: DiagramModelFile[] = [
-      { uri: 'a.yml', label: 'a', models: ['orders', 'customers'] },
+      { uri: 'a.yml', label: 'a', entities: ['orders', 'customers'] },
     ];
     expect(filesDeclaring(merged, ['orders', 'customers'])).toEqual(['a.yml']);
   });

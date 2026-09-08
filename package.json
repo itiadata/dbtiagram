@@ -33,6 +33,12 @@
         "icon": "$(database)"
       },
       {
+        "command": "dbtiagram.openSource",
+        "title": "Open dbt Source Diagram",
+        "category": "dbt Diagram",
+        "icon": "$(database)"
+      },
+      {
         "command": "dbtiagram.openLayout",
         "title": "Open dbt Diagram",
         "category": "dbt Diagram",
@@ -45,6 +51,11 @@
           "command": "dbtiagram.open",
           "group": "navigation@1",
           "when": "dbtiagram.isModelYml"
+        },
+        {
+          "command": "dbtiagram.openSource",
+          "group": "navigation@1",
+          "when": "dbtiagram.isSourceYml"
         },
         {
           "command": "dbtiagram.openLayout",
@@ -61,10 +72,15 @@
           "default": "**/models/**/*.yml",
           "description": "Glob pattern used to discover dbt model.yml files in the workspace."
         },
+        "dbtiagram.sourceFileGlob": {
+          "type": "string",
+          "default": "**/models/**/*.yml",
+          "description": "Glob pattern used to discover dbt source YAML files in the workspace."
+        },
         "dbtiagram.watchModelFiles": {
           "type": "boolean",
           "default": true,
-          "description": "Reload the diagram automatically when model.yml files change on disk."
+          "description": "Reload the diagram automatically when dbt YAML files change on disk."
         },
         "dbtiagram.openBehavior": {
           "type": "string",

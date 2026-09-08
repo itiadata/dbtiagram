@@ -9,7 +9,8 @@
  */
 import { useState, type CSSProperties, type ReactNode } from 'react';
 import { matchesSearch } from '../src/shared/filter';
-import type { DiagramModelFile } from '../src/shared/protocol';
+import type { DiagramEntityFile } from '../src/shared/protocol';
+import type { DiagramModeLabels } from '../src/shared/diagramMode';
 import type { ContextMenuItem } from './ContextMenu';
 import { FileCode2 } from './icons';
 
@@ -73,7 +74,9 @@ function CollapsibleSection({
 }
 
 interface FilterSidebarProps {
-  files: DiagramModelFile[];
+  files: DiagramEntityFile[];
+  labels: DiagramModeLabels;
+  showSql: boolean;
   /** Models of currently checked files — the reactive universe of the Models list. */
   availableModelNames: string[];
   selectedFiles: ReadonlySet<string>;
@@ -106,6 +109,8 @@ interface FilterSidebarProps {
 
 export function FilterSidebar({
   files,
+  labels,
+  showSql,
   availableModelNames,
   selectedFiles,
   selectedModels,
@@ -148,14 +153,14 @@ export function FilterSidebar({
       title: selectedModels.has(name) ? undefined : 'Model is hidden by the filter',
       onSelect: () => onRevealModel(name),
     },
-    { label: 'Reveal in model.yml', onSelect: () => onOpenModelSource(name) },
-    {
+    { label: `Reveal in ${labels.sourceFile}`, onSelect: () => onOpenModelSource(name) },
+    ...(showSql ? [{
       label: 'Open SQL file',
       icon: <FileCode2 size={16} />,
       disabled: !sqlModels.has(name),
       title: sqlModels.has(name) ? undefined : `No .sql file found for "${name}"`,
       onSelect: () => onOpenModelSql(name),
-    },
+    }] : []),
   ];
 
   return (
@@ -168,7 +173,7 @@ export function FilterSidebar({
         large
       >
         <CollapsibleSection
-          title="Model yml files"
+          title={labels.fileSection}
           count={`${checkedFileCount}/${files.length}`}
           open={filesOpen}
           onToggle={() => setFilesOpen((open) => !open)}
@@ -222,7 +227,7 @@ export function FilterSidebar({
         </CollapsibleSection>
 
         <CollapsibleSection
-          title="Models"
+          title={labels.entitySection}
           count={`${checkedModelCount}/${availableModelNames.length}`}
           open={modelsOpen}
           onToggle={() => setModelsOpen((open) => !open)}

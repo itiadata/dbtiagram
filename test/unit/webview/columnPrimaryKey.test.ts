@@ -27,6 +27,9 @@ describe('isPrimaryKeyColumn', () => {
 });
 
 describe('toggleColumnPrimaryKey', () => {
+  it('forces a source column toggle virtual', () => {
+    expect(toggleColumnPrimaryKey({ id: 'finops.costs', label: 'finops.costs', columns: [{ name: 'id' }], foreignKeys: [], foreignKeyColumns: [] }, 'id', true)).toEqual({ kind: 'setPrimaryKey', model: 'finops.costs', columns: ['id'], virtual: true, uniqueTest: false });
+  });
   it('creates a real primary key with the unique test when none exists', () => {
     const node = makeNode();
     expect(toggleColumnPrimaryKey(node, 'id')).toEqual({

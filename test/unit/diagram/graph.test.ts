@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildDiagram } from '../../../src/diagram/graph';
+import { buildDiagram, buildSourceDiagram } from '../../../src/diagram/graph';
 import type { ModelDefinition } from '../../../src/dbt/types';
 
 const models: ModelDefinition[] = [
@@ -566,5 +566,26 @@ describe('buildDiagram', () => {
       const order_id = node.columns.find((c) => c.name === 'order_id')!;
       expect(order_id.tests).toEqual(['unique']);
     });
+  });
+});
+
+describe('buildSourceDiagram', () => {
+  it('builds qualified source nodes and dashed edges', () => {
+    const graph = buildSourceDiagram([{ name: 'finops', tables: [{ name: 'costs', columns: [{ name: 'workspace_id' }], config: { meta: { dbtiagram: { virtual: { foreign_keys: [{ to: "source('finops', 'workspaces')", columns: ['workspace_id'], to_columns: ['id'] }] } } } } }, { name: 'workspaces', columns: [{ name: 'id' }] }] }]);
+    expect(graph.nodes.map((node) => node.id)).toEqual(['finops.costs', 'finops.workspaces']);
+    expect(graph.edges).toEqual([{ source: 'finops.costs', target: 'finops.workspaces', sourceColumns: ['workspace_id'], targetColumns: ['id'], virtual: true }]);
+  });
+
+  it('qualifies only duplicate source table labels', () => {
+    const graph = buildSourceDiagram([
+      { name: 'finops', tables: [{ name: 'orders' }] },
+      { name: 'sales', tables: [{ name: 'orders' }] },
+      { name: 'crm', tables: [{ name: 'customers' }] },
+    ]);
+    expect(graph.nodes.map(({ id, label }) => ({ id, label }))).toEqual([
+      { id: 'finops.orders', label: 'finops.orders' },
+      { id: 'sales.orders', label: 'sales.orders' },
+      { id: 'crm.customers', label: 'customers' },
+    ]);
   });
 });

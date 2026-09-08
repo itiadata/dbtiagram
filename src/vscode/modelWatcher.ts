@@ -61,6 +61,7 @@ export function registerModelWatcher(callbacks: ModelWatcherCallbacks): vscode.D
     vscode.workspace.onDidChangeConfiguration((event) => {
       if (
         event.affectsConfiguration('dbtiagram.modelFileGlob') ||
+        event.affectsConfiguration('dbtiagram.sourceFileGlob') ||
         event.affectsConfiguration('dbtiagram.watchModelFiles')
       ) {
         callbacks.onConfigurationChanged();

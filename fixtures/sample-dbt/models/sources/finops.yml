@@ -1,0 +1,27 @@
+version: 2
+sources:
+  - name: finops
+    schema: raw_finops
+    tables:
+      - name: costs
+        description: Raw cost records
+        config:
+          meta:
+            sample_values: [daily]
+            dbtiagram:
+              virtual:
+                primary_key:
+                  columns: [id]
+                foreign_keys:
+                  - to: source('finops', 'workspaces')
+                    columns: [workspace_id]
+                    to_columns: [id]
+        columns:
+          - name: id
+            data_type: integer
+          - name: workspace_id
+            data_type: integer
+      - name: workspaces
+        columns:
+          - name: id
+            data_type: integer

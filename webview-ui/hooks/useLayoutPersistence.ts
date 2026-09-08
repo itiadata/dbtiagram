@@ -12,6 +12,7 @@ import type { NodePosition } from '../../src/diagram/positions';
 import { postToHost } from '../host';
 import { isLayoutDirty, type LayoutSnapshot } from '../layout-dirty';
 import type { LayoutActiveMessage, LayoutApplyMessage } from './useHostMessages';
+import type { DiagramMode } from '../../src/shared/diagramMode';
 
 /** Debounce before the pending layout cache-sync message is posted. */
 const WRITE_DEBOUNCE_MS = 400;
@@ -32,6 +33,7 @@ export interface LayoutPersistenceState {
 }
 
 export function useLayoutPersistence(
+  mode: DiagramMode,
   notes: readonly DiagramNote[] = [],
   columnDisplay?: { defaultMode: ColumnDisplayMode; overrides: Map<string, ColumnDisplayMode> },
 ): LayoutPersistenceState {
@@ -102,6 +104,7 @@ export function useLayoutPersistence(
   const onSaveDiagram = useCallback((): void => {
     const layout = buildLayout(
       activeLayout?.name ?? 'mydiagram',
+      mode,
       tablePositions,
       notes,
       columnDisplay === undefined
@@ -117,7 +120,7 @@ export function useLayoutPersistence(
       defaultColumnDisplay: layout.defaultColumnDisplay,
     };
     setDirty(false);
-  }, [activeLayout, tablePositions, notes, columnDisplay]);
+  }, [activeLayout, tablePositions, notes, columnDisplay, mode]);
 
   // Recompute dirty whenever the live tables/notes change, comparing through
   // `buildLayout` so both sides are sorted/rounded the same way (spec 22).
@@ -128,6 +131,7 @@ export function useLayoutPersistence(
     }
     const current = buildLayout(
       activeLayout.name,
+      mode,
       tablePositions,
       notes,
       columnDisplay === undefined
@@ -140,7 +144,7 @@ export function useLayoutPersistence(
         savedSnapshotRef.current,
       ),
     );
-  }, [activeLayout, tablePositions, notes, columnDisplay]);
+  }, [activeLayout, tablePositions, notes, columnDisplay, mode]);
 
   // Pending-layout cache sync (spec 22): once a layout is active, every drag
   // or visibility change posts the current layout (with its dirty flag) to
@@ -154,6 +158,7 @@ export function useLayoutPersistence(
     const handle = window.setTimeout(() => {
       const layout = buildLayout(
         activeLayout.name,
+        mode,
         tablePositions,
         notes,
         columnDisplay === undefined
@@ -170,7 +175,7 @@ export function useLayoutPersistence(
       });
     }, WRITE_DEBOUNCE_MS);
     return () => window.clearTimeout(handle);
-  }, [activeLayout, tablePositions, notes, columnDisplay]);
+  }, [activeLayout, tablePositions, notes, columnDisplay, mode]);
 
   return {
     activeLayout,

@@ -6,11 +6,13 @@
  * Pure logic — MUST NOT import `vscode`.
  */
 import { findModelDeclaration, findColumnDeclaration, type DeclarationPosition } from '../dbt/locate';
+import { findSourceColumnDeclaration, findSourceTableDeclaration } from '../dbt/sourceLocate';
+import type { DiagramMode } from '../shared/diagramMode';
 
 /** Everything `openModelSource` needs from the extension host. */
 export interface OpenSourceHost {
   /** fsPath of the first stored file declaring `model`, or undefined. */
-  findModelFile(model: string): string | undefined;
+  findEntityFile(mode: DiagramMode, entity: string): string | undefined;
   readFileText(fsPath: string): Promise<string>;
   reveal(fsPath: string, position: DeclarationPosition | null): Promise<void>;
   showWarning(message: string): void;
@@ -36,14 +38,13 @@ export interface OpenSourceHost {
  * but cannot be located, the model's own declaration line is revealed instead,
  * with a column-specific warning.
  */
-export async function openModelSource(
-  host: OpenSourceHost,
-  model: string,
-  column?: string,
-): Promise<void> {
-  const fsPath = host.findModelFile(model);
+export interface OpenSourceRequest { mode: DiagramMode; entity: string; column?: string }
+
+export async function openDiagramSource(host: OpenSourceHost, request: OpenSourceRequest): Promise<void> {
+  const { mode, entity, column } = request;
+  const fsPath = host.findEntityFile(mode, entity);
   if (fsPath === undefined) {
-    host.postError(`Model "${model}" is no longer defined in any model.yml`);
+    host.postError(`${mode === 'model' ? 'Model' : 'Table'} "${entity}" is no longer defined in any ${mode === 'model' ? 'model.yml' : 'source yml'}`);
     return;
   }
 
@@ -56,24 +57,32 @@ export async function openModelSource(
   }
 
   if (column === undefined) {
-    const position = findModelDeclaration(text, model);
+    const [sourceName, tableName] = splitSource(entity);
+    const position = mode === 'model' ? findModelDeclaration(text, entity) : findSourceTableDeclaration(text, sourceName, tableName);
     await host.reveal(fsPath, position);
 
     if (position === null) {
-      host.showWarning(`Could not locate "${model}" in ${fsPath}; opened the file at the top.`);
+      host.showWarning(`Could not locate "${entity}" in ${fsPath}; opened the file at the top.`);
     }
     return;
   }
 
-  const columnPosition = findColumnDeclaration(text, model, column);
+  const [sourceName, tableName] = splitSource(entity);
+  const columnPosition = mode === 'model' ? findColumnDeclaration(text, entity, column) : findSourceColumnDeclaration(text, sourceName, tableName, column);
   if (columnPosition !== null) {
     await host.reveal(fsPath, columnPosition);
     return;
   }
 
-  const modelPosition = findModelDeclaration(text, model);
+  const modelPosition = mode === 'model' ? findModelDeclaration(text, entity) : findSourceTableDeclaration(text, sourceName, tableName);
   await host.reveal(fsPath, modelPosition);
   host.showWarning(
-    `Could not locate column "${column}" on "${model}" in ${fsPath}; revealed the model declaration instead.`,
+    `Could not locate column "${column}" on "${entity}" in ${fsPath}; revealed the ${mode === 'model' ? 'model' : 'table'} declaration instead.`,
   );
+}
+
+function splitSource(entity: string): [string, string] { const dot = entity.indexOf('.'); return [entity.slice(0, dot), entity.slice(dot + 1)]; }
+
+export function openModelSource(host: OpenSourceHost, model: string, column?: string): Promise<void> {
+  return openDiagramSource(host, { mode: 'model', entity: model, column });
 }

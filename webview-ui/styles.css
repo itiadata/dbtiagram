@@ -585,6 +585,13 @@ body {
   color: var(--text);
 }
 
+.details__input--readonly {
+  color: var(--vscode-disabledForeground);
+  background: var(--vscode-input-background);
+  opacity: 0.72;
+  cursor: default;
+}
+
 .details__textarea {
   resize: vertical;
   min-height: 48px;
