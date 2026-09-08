@@ -53,7 +53,7 @@ function convertTable(source: QualifiedSourceTable, allocated: ReadonlyMap<strin
   const table = source.table;
   const tableConfig = cloneRecord(table.config) ?? {};
   const tableMeta = isRecord(tableConfig.meta) ? tableConfig.meta : {};
-  tableConfig.meta = { ...tableMeta, source_table_name: table.name };
+  tableConfig.meta = { ...tableMeta, source_name: table.name };
   let model: ModelDefinition = {
     ...(cloneRecord(table.extra) !== undefined ? { extra: cloneRecord(table.extra) } : {}),
     name: allocated.get(source.id) ?? `${table.name}_from_source`,

@@ -58,7 +58,7 @@ up-to-date spec in `specs/features/`.
 | 38  | Open a model's .sql file from the diagram and the sidebar | Done |
 | 39  | Update the private extension from GitHub Releases | Done |
 | 40  | Add a source.yml diagram mode | Done |
-| 41  | Import source tables as models | Approved |
+| 41  | Import source tables as models | Implemented |
 
 Status values: `draft` → `approved` → `implemented` → `done`.
 

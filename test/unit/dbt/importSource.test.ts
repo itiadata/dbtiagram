@@ -32,7 +32,7 @@ describe('source table import', () => {
     expect(result.destination.models[0]).toEqual({
       name: 'costs_from_source',
       description: 'Costs',
-      config: { tags: ['finance'], meta: { source_table_name: 'costs' } },
+      config: { tags: ['finance'], meta: { source_name: 'costs' } },
       extra: { identifier: 'RAW_COSTS', tags: ['daily'] },
       columns: [{ name: 'id', meta: { source_pii: false, source_name: 'id' }, extra: { quote: true } }],
     });
@@ -50,7 +50,7 @@ describe('source table import', () => {
 
   it('adds source provenance and prefixes all column metadata', () => {
     const selected = sourceTable('costs', 'finops', {
-      config: { meta: { source_table_name: 'wrong', owner: 'finance' } },
+      config: { meta: { source_name: 'wrong', owner: 'finance' } },
       columns: [{
         name: 'workspace_id',
         dataType: 'bigint',
@@ -67,7 +67,7 @@ describe('source table import', () => {
       }],
     });
     const model = importSourceTables({ models: [] }, [selected], []).destination.models[0];
-    expect(model.config?.meta).toEqual({ source_table_name: 'costs', owner: 'finance' });
+    expect(model.config?.meta).toEqual({ source_name: 'costs', owner: 'finance' });
     expect(model.columns?.[0].meta).toEqual({
       source_name: 'workspace_id',
       source_datatype: 'bigint',
