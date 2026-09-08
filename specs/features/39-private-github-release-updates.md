@@ -77,6 +77,7 @@ And that release contains dbtiagram-0.0.3.vsix
 When VS Code finishes starting and the extension activates
 Then the extension asks: dbt Diagram v0.0.3 is available (installed: v0.0.2).
 And the choices are "Update" and "Later"
+And the prompt is modal so VS Code does not automatically hide it while waiting
 When the user chooses "Update"
 Then the extension downloads only dbtiagram-0.0.3.vsix through gh
 And silently installs it with the VS Code CLI and --force
@@ -90,9 +91,10 @@ Then the current VS Code window reloads
 
 ```
 Given a newer designated Latest release is available
-When the update prompt is dismissed or the user chooses "Later"
+When the modal update prompt is closed, dismissed with Escape, or the user chooses "Later"
 Then no VSIX is downloaded or installed
 And the extension may offer the release again after the next VS Code startup
+And any open diagram's manual update button is enabled again
 ```
 
 ### Reload is postponed
@@ -171,15 +173,16 @@ And directly below that text it shows "v0.0.2"
 ```
 Given a diagram panel is open
 When the user clicks "Check for updates"
-Then the button is disabled and reads "Checking..." while the check runs
+Then the visible text remains "Check for updates" while the check runs
 And the extension runs the same GitHub release check, update prompt, install,
   and native reload prompt used by the activation check
-And all open diagram panels reflect the in-progress state
 And a second automatic or manual request cannot start a concurrent check
 When the check finishes
-Then the button is enabled and reads "Check for updates"
-And a successful no-update result shows "(Up to date)"
-And a failure shows the existing native VS Code error notification
+Then a successful no-update result replaces the button with "(Up to date)"
+And an available update replaces the button with green clickable "Update available"
+And clicking "Update available" opens the modal update prompt again
+And a failure shows the existing native VS Code error notification and leaves
+  "Check for updates" available
 ```
 
 ## Implementation Plan
@@ -192,14 +195,15 @@ And a failure shows the existing native VS Code error notification
 | `src/vscode/updateCli.ts` | create | Execute `gh release view`, `gh release download`, and the platform-appropriate VS Code CLI installation command without opening a terminal. |
 | `src/vscode/updateCheck.ts` | modify | Adapt extension metadata, global storage, VS Code prompts/reload, and the CLI wrapper to the pure update workflow; show check/install failures as visible error notifications; skip test extension hosts. |
 | `src/extension.ts` | modify | Own one process-wide guarded update-check runner, invoke it once during activation, and register it for manual diagram requests. |
-| `src/shared/protocol.ts` | modify | Add the manual-check request and update-check progress message. |
-| `src/webview/panel.ts` | modify | Retain the installed version and process-wide update status/progress; dispatch manual requests to the registered runner and publish changes to all panels. |
-| `webview-ui/hooks/useHostMessages.ts` | modify | Dispatch installed-version, result, and checking-state messages. |
-| `webview-ui/ProductTitle.tsx` | modify | Render the product heading, installed version/status, and explicit check button with enabled/checking states. |
-| `webview-ui/App.tsx` | modify | Hold update progress, post the manual-check request, and render `ProductTitle`. |
+| `src/shared/protocol.ts` | modify | Add the manual-check request and three-state update result message. |
+| `src/webview/panel.ts` | modify | Retain the installed version and process-wide update result; dispatch manual requests to the registered runner and publish result changes to all panels. |
+| `webview-ui/hooks/useHostMessages.ts` | modify | Dispatch installed-version and three-state update-result messages. |
+| `webview-ui/ProductTitle.tsx` | modify | Render the product heading, installed version, and state-dependent check/up-to-date/update-available action. |
+| `webview-ui/App.tsx` | modify | Hold the update result, post the manual-check request, and render `ProductTitle`. |
 | `webview-ui/styles.css` | modify | Style the stacked product title, subdued version/status, and compact secondary check button. |
 | `test/unit/shared/update.test.ts` | create | Unit-test release validation, version comparison, exact messages, and the complete update workflow with a fake host. |
-| `test/unit/webview/ProductTitle.test.tsx` | create | Verify the exact static heading/version markup. |
+| `test/unit/webview/ProductTitle.test.tsx` | remove | Replace the test path that Vitest's `*.test.ts` include pattern silently excludes. |
+| `test/unit/webview/ProductTitle.test.ts` | create | Verify the exact heading/version/button markup using `React.createElement` so the suite is discovered without changing global test configuration. |
 | `specs/ARCHITECTURE.md` | modify | Document the three new modules and changed responsibilities/exports. |
 | `specs/README.md` | modify | Add feature 39 to the feature index and track its lifecycle status. |
 
@@ -289,8 +293,7 @@ export function checkForUpdates(context: vscode.ExtensionContext): Promise<Updat
 
 // added to MessageToWebview:
 | { type: 'app:version'; version: string }
-| { type: 'app:updateStatus'; upToDate: boolean }
-| { type: 'app:updateChecking'; checking: boolean }
+| { type: 'app:updateStatus'; status: 'unknown' | 'upToDate' | 'updateAvailable' }
 
 // added to MessageToExtension:
 | { type: 'app:checkForUpdates' }
@@ -307,14 +310,12 @@ public static async createOrShow(
   installedVersion: string,
 ): Promise<void>;
 
-/** Sends the status to all currently open panels and retains it for new panels. */
-public static setUpdateStatus(upToDate: boolean): void;
+/** Sends the result to all currently open panels and retains it for new panels. */
+public static setUpdateStatus(status: 'unknown' | 'upToDate' | 'updateAvailable'): void;
 
 /** Registers the activation-owned, concurrency-guarded manual check callback. */
 public static setUpdateCheckHandler(handler: () => void): void;
 
-/** Sends progress to all currently open panels and retains it for new panels. */
-public static setUpdateChecking(checking: boolean): void;
 ```
 
 ```ts
@@ -323,8 +324,7 @@ public static setUpdateChecking(checking: boolean): void;
 export interface HostMessageHandlers {
   // existing members unchanged
   onAppVersion: (version: string) => void;
-  onAppUpdateStatus: (upToDate: boolean) => void;
-  onAppUpdateChecking: (checking: boolean) => void;
+  onAppUpdateStatus: (status: 'unknown' | 'upToDate' | 'updateAvailable') => void;
 }
 ```
 
@@ -333,8 +333,7 @@ export interface HostMessageHandlers {
 
 export interface ProductTitleProps {
   version: string | null;
-  upToDate: boolean;
-  checking: boolean;
+  updateStatus: 'unknown' | 'upToDate' | 'updateAvailable';
   onCheckForUpdates: () => void;
 }
 
@@ -368,8 +367,11 @@ export function ProductTitle(props: ProductTitleProps): JSX.Element;
    whether the user updates or postpones; a query/decode/version-comparison
    failure returns `checkFailed` after warning.
 6. **Prompt text.** The first message is exactly
-   `dbt Diagram v{candidate} is available (installed: v{installed}).`; only an
-   exact `Update` response continues. The completion message is exactly
+    `dbt Diagram v{candidate} is available (installed: v{installed}).`; it is
+    shown through `showInformationMessage` with `{ modal: true }`, so VS Code
+    cannot automatically hide the actionable prompt while leaving its promise
+    unresolved. Only an exact `Update` response continues; `Later`, the close
+    control, and Escape all resolve without installing. The completion message is exactly
    `dbt Diagram v{candidate} was installed. Reload VS Code to use it.`; only an
    exact `Reload Now` response executes `workbench.action.reloadWindow`.
 7. **Download and install.** Downloading happens only after confirmation. The
@@ -410,14 +412,20 @@ export function ProductTitle(props: ProductTitleProps): JSX.Element;
 12. **Manual check and concurrency.** The automatic check still runs exactly
     once on activation; opening a diagram does not itself run a check. The
     explicit button posts `app:checkForUpdates`. `activate` owns a single
-    in-flight promise shared by startup and every panel, ignores requests while
-    it is present, and clears it in `finally`. The panel broadcasts checking
-    state to every current panel and retains it for panels opened mid-check.
-13. **Button behavior.** The compact secondary button appears beside the version
-    only after the version arrives. It reads `Check for updates` normally and
-    `Checking...` while disabled. Completion re-enables it regardless of result.
-    Manual checks use the existing native update, error, installation, and
-    `Reload Now` / `Later` notifications without adding webview toasts.
+    in-flight promise shared by startup and every panel and ignores requests
+    while it is present. No checking label or disabled UI state is rendered.
+13. **Button behavior.** The compact text action appears beside the version only
+    after the version arrives. With unknown status, including while checking or
+    after failure, it reads `Check for updates`. An `upToDate` result replaces it
+    with non-clickable `(Up to date)`. An `updateAvailable` result replaces it
+    with green clickable `Update available`; clicking it runs the workflow again
+    and therefore reopens the modal update prompt. All current and future panels
+    receive the latest result. Manual checks use the existing native update,
+    error, installation, and `Reload Now` / `Later` notifications.
+14. **Prompt completion.** Every explicit dismissal resolves the modal prompt
+    and clears the runner's in-flight guard, permitting `Update available` to be
+    clicked again. There is no hidden unresolved prompt that blocks another
+    check.
 
 ### Tests
 
@@ -436,10 +444,10 @@ export function ProductTitle(props: ProductTitleProps): JSX.Element;
 | `test/unit/shared/update.test.ts` | `warns when checking fails` | fetch rejection `gh not found` | warning exactly `'dbt Diagram could not check for updates: gh not found'`; no prompt/install/reload |
 | `test/unit/shared/update.test.ts` | `warns when download fails` | accepted `0.0.3`; download rejection `network error` | warning exactly `'dbt Diagram could not install v0.0.3: network error'`; no install/reload |
 | `test/unit/shared/update.test.ts` | `reports the VSIX path when installation fails` | download returns `C:\\store\\dbtiagram-0.0.3.vsix`; install rejects `code not found` | warning exactly `'dbt Diagram could not install v0.0.3: code not found Downloaded VSIX: C:\\store\\dbtiagram-0.0.3.vsix'`; no reload |
-| `test/unit/webview/ProductTitle.test.tsx` | `renders the version and parenthesized up-to-date text directly below the product name` | render `{version:'0.0.2',upToDate:true}` to static markup | markup contains one `.app__product` with `<h1>dbt Diagram</h1>` followed by `v0.0.2` and `(Up to date)`; status has no separate success-color class |
-| `test/unit/webview/ProductTitle.test.tsx` | `omits the version until supplied by the host` | render `{version:null}` | markup contains `<h1>dbt Diagram</h1>` and no `.app__version` |
-| `test/unit/webview/ProductTitle.test.tsx` | `renders the enabled manual check button` | render version `0.0.2`, `checking:false` | markup contains enabled `Check for updates` button |
-| `test/unit/webview/ProductTitle.test.tsx` | `renders the disabled checking button` | render version `0.0.2`, `checking:true` | markup contains disabled `Checking...` button |
+| `test/unit/webview/ProductTitle.test.ts` | `renders the version and parenthesized up-to-date text directly below the product name` | render `{version:'0.0.2',updateStatus:'upToDate'}` to static markup | markup contains one `.app__product` with `<h1>dbt Diagram</h1>` followed by `v0.0.2` and `(Up to date)` and no button |
+| `test/unit/webview/ProductTitle.test.ts` | `omits the version until supplied by the host` | render `{version:null}` | markup contains `<h1>dbt Diagram</h1>` and no `.app__version` |
+| `test/unit/webview/ProductTitle.test.ts` | `renders the manual check action for unknown status` | render version `0.0.2`, status `unknown` | markup contains clickable `Check for updates` and no `Checking...` text |
+| `test/unit/webview/ProductTitle.test.ts` | `renders the available-update action` | render version `0.0.2`, status `updateAvailable` | markup contains green-styled clickable `Update available` |
 
 The `ExtensionMode.Test` scenario is covered by the existing integration suite:
 activation continues to register/open diagrams while `checkForUpdates` returns
@@ -461,8 +469,11 @@ the pure host-port tests above.
   confirm an error notification containing the `gh` authentication reason is
   present when the diagram is opened.
 - Manual: authenticate `gh`, open two diagrams, click `Check for updates`, and
-  confirm both buttons show `Checking...`, only one check/prompt occurs, and a
-  successful installation offers the native `Reload Now` / `Later` prompt.
+  confirm only one check/prompt occurs and a successful installation offers the
+  native `Reload Now` / `Later` prompt.
+- Manual: with an update available, confirm its modal prompt remains visible;
+  close it or press Escape and confirm every diagram shows green clickable
+  `Update available`, which can open the prompt again.
 
 ### Do not touch
 
@@ -479,7 +490,7 @@ the pure host-port tests above.
 - [ ] Every non-test activation checks `itiadata/dbtiagram` through `gh` for
       GitHub's designated Latest release without blocking activation.
 - [ ] Only a strictly newer `X.Y.Z` release with the exact expected VSIX asset
-      produces the `Update` / `Later` prompt.
+      produces a modal `Update` / `Later` prompt that cannot auto-hide.
 - [ ] Accepting Update downloads and silently installs the VSIX with `--force`.
 - [ ] Successful installation offers `Reload Now` / `Later`, and reload occurs
       only when explicitly accepted.
@@ -492,5 +503,6 @@ the pure host-port tests above.
       every diagram's installed version; check failures show a VS Code error
       toast instead.
 - [ ] Every diagram exposes an explicit manual check button; all panels show its
-      progress and startup/manual requests never overlap.
+      latest result, startup/manual requests never overlap, and dismissing the
+      update prompt leaves a clickable green `Update available` retry action.
 - [ ] `npm run verify`, `npm test`, and `npm run typecheck` are green.
