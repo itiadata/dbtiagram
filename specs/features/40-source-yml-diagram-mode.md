@@ -47,10 +47,12 @@ them independently later. It defaults to the same `**/models/**/*.yml` pattern.
 - One source diagram tab per source YAML path, independent from model tabs.
 - Source panels load only source YAML files and source tables. Model panels load
   only model YAML files and models. The two universes never mix.
-- Every table identity, graph node ID, card label, filter row, relationship
-  target, and saved-layout table name is `source_name.table_name`, for example
-  `finops.astro_cost_breakdown`. The source's physical `schema` is not used for
-  identity or display.
+- Every table identity, graph node ID, filter row, relationship target, and
+  saved-layout table name is `source_name.table_name`, for example
+  `finops.astro_cost_breakdown`. A card header normally shows only `table_name`;
+  when two or more loaded source tables share that table name, only those
+  colliding headers show their qualified `source_name.table_name` identities.
+  The source's physical `schema` is not used for identity or display.
 - All source entries and all their nested tables from every discovered source
   file are available to source mode. A file opened from the title bar is initially
   scoped to that file, matching model mode.
@@ -144,8 +146,19 @@ And the diagram opens in model mode
 ```
 Given a source named finops has schema raw_finops and table astro_cost_breakdown
 When its source diagram is rendered
-Then the table node ID, card label, and Tables-filter label are "finops.astro_cost_breakdown"
+Then the table node ID and Tables-filter label are "finops.astro_cost_breakdown"
+And the card header is "astro_cost_breakdown"
 And "raw_finops.astro_cost_breakdown" is not used as its identity or label
+```
+
+### Qualify only duplicate source table headers
+
+```
+Given source tables finops.orders, sales.orders, and crm.customers are loaded
+When their source diagram is rendered
+Then the finops.orders and sales.orders card headers use their qualified IDs
+And the crm.customers card header is "customers"
+And every graph ID and Tables-filter label remains qualified
 ```
 
 ### Multiple source blocks and files are reusable through the filter
@@ -177,6 +190,7 @@ When the Properties sidebar is shown
 Then its table name is visible but read-only
 When one of its columns is selected
 Then the column name and data type are visible but read-only
+And every read-only input has a visibly muted background, foreground, and cursor
 And the column description remains editable
 And source-level database and schema fields are not shown
 ```
@@ -300,6 +314,7 @@ And it never falls back to matching model names
 | `src/webview/panel.ts` | modify | Own a model or source store, load/watch/publish/edit/write/reveal only that mode, and preserve existing model paths. |
 | `src/extension.ts` | modify | Register source-open and mode-aware layout opening; palette `dbtiagram.open` remains model mode. |
 | `webview-ui/App.tsx` | modify | Thread mode through labels/actions, force virtual source FK gestures, hide model-only matrix/SQL actions, and retain domain-neutral features. |
+| `webview-ui/DiagramCanvas.tsx` | modify | Hide the Fields Matrix canvas action in source mode. |
 | `webview-ui/FilterSidebar.tsx` | modify | Render mode nouns (`Model yml files`/`Models` or `Source yml files`/`Tables`) and hide Open SQL in source mode. |
 | `webview-ui/DetailsSidebar.tsx` | modify | Render source names/types read-only, source reveal wording, and forced-virtual PK/FK sections. |
 | `webview-ui/PrimaryKeySection.tsx` | modify | Add forced-virtual presentation and hide the unique-test option in source mode. |
@@ -309,6 +324,7 @@ And it never falls back to matching model names
 | `webview-ui/hooks/useFkCreateMode.ts` | modify | Carry source-mode forced-virtual creation through the existing mouse gesture. |
 | `webview-ui/hooks/useHostMessages.ts` | modify | Expose the mode supplied by `diagram:update`. |
 | `webview-ui/hooks/useDiagramFilter.ts` | modify | Use mode-neutral entity metadata and reuse the existing selection cap/toast with mode nouns. |
+| `webview-ui/styles.css` | modify | Visually mute read-only source identity inputs with theme-aware colors and a read-only cursor. |
 | `specs/ARCHITECTURE.md` | modify | Add new modules and update changed responsibilities/exports. |
 | `specs/README.md` | modify | Add feature 40 as Draft (or Approved at approval time). |
 | `fixtures/sample-dbt/models/sources/finops.yml` | create | Minimal multi-table source fixture with descriptions, metadata, and virtual relationships. |
@@ -327,7 +343,7 @@ And it never falls back to matching model names
 | `test/unit/webview/layoutMessages.test.ts` | modify | Mode match/mismatch and v1-model behavior. |
 | `test/unit/webview/columnPrimaryKey.test.ts` | modify | Forced-virtual source toggle output and model regression. |
 | `test/unit/fixture.test.ts` | modify | Exercise the sample source file through parse, graph, edit, and merge. |
-| `test/integration/extension.test.ts` | modify | Source editor action, independent source panel, write-back, and mode-aware layout smoke coverage. |
+| `test/integration/suite/extension.test.ts` | modify | Source editor action, independent source panel, write-back, and mode-aware layout smoke coverage. |
 
 ### Signatures
 
@@ -561,7 +577,10 @@ selection, layout, or message state machine.
 3. **Identity.** `sourceTableId` concatenates the exact source and table names
    with `.` and performs no trimming/case folding. Empty names are parse errors.
    Duplicate qualified IDs follow existing model-mode behavior; this feature
-   adds no new duplicate-name validation or resolution policy.
+   adds no new duplicate-name validation or resolution policy. Source graph
+   node IDs remain qualified. Their display labels are the unqualified table
+   name unless that table name occurs more than once in the loaded source
+   universe; every member of that collision set then uses its qualified ID.
 4. **Reference grammar.** `parseSourceRef` accepts `source('a', 'b')` and
    `source("a", "b")` with arbitrary surrounding/argument whitespace but no
    Jinja braces, package argument, concatenation, or mixed expression. It returns
@@ -596,7 +615,9 @@ selection, layout, or message state machine.
    `serializeSourceYml`, and line endings follow the original when mergeable.
 9. **UI read-only fields.** Read-only Name/Data type controls use the same visual
    field layout with `readOnly` and no commit handler; they remain selectable for
-   copying. Table and column descriptions keep current commit/revert semantics.
+   copying. They use theme-aware muted background/foreground colors and the
+   default cursor so their read-only state is visually apparent. Table and
+   column descriptions keep current commit/revert semantics.
 10. **Forced virtual UI.** Source mode passes `forceVirtual`. PK/FK Virtual
     checkboxes render checked and disabled. Drafts initialize virtual true; no
     source callback can flip them. The unique-test checkbox and real-key note are
@@ -653,6 +674,7 @@ selection, layout, or message state machine.
 | `test/unit/dbt/sourceEdit.test.ts` | `creates a canonical virtual source FK` | create FK carrying `virtual:false` | virtual entry `to` equals `source('finops', 'workspaces')` and no constraint exists |
 | `test/unit/dbt/sourceEdit.test.ts` | `rejects read-only edits` | set name, data type, meta, or FK virtual | each returns error `This field is read-only in source mode` |
 | `test/unit/diagram/graph.test.ts` | `builds qualified source nodes and dashed edges` | finops costs/workspaces with virtual FK | node IDs `finops.costs`,`finops.workspaces`; one edge with `virtual:true` |
+| `test/unit/diagram/graph.test.ts` | `qualifies only duplicate source table labels` | finops.orders, sales.orders, crm.customers | labels `finops.orders`, `sales.orders`, `customers`; IDs remain qualified |
 | `test/unit/diagram/graph.test.ts` | `ignores model relationships in source mode` | source table extras containing constraints/ref | no source edge |
 | `test/unit/diagram/graph.test.ts` | `model graph is unchanged` | existing model fixture | existing literal model graph snapshot/equality remains green |
 | `test/unit/diagram/layoutFile.test.ts` | `normalizes version 1 to model mode` | v1 layout text | `{version:2,mode:'model',…}` in memory |
@@ -670,7 +692,7 @@ selection, layout, or message state machine.
 | `test/integration/extension.test.ts` | `opens and edits a source diagram` | active fixture source editor | source panel opens; description edit persists; model records absent |
 | `test/integration/extension.test.ts` | `opens a mode-aware source layout` | v2/source layout | source panel and matching qualified node position |
 
-React rendering scenarios (exact labels/read-only controls, hidden matrix/SQL,
+React rendering scenarios (read-only styling, hidden matrix/SQL,
 disabled Virtual controls, hidden unique-test option, and mode-specific toast)
 are covered by Manual Verify because this repository has no React component test
 harness. Their state-producing helpers and host effects are covered above.
@@ -704,12 +726,12 @@ harness. Their state-producing helpers and host effects are covered above.
       with model precedence for mixed files.
 - [ ] `dbtiagram.sourceFileGlob` exists with the agreed default and only
       classified source files enter source panels.
-- [ ] Source tables use `source_name.table_name` consistently and never mix with
-      models.
+- [ ] Source tables use `source_name.table_name` for identity and never mix with
+      models; card headers qualify only table-name collisions.
 - [ ] Source sidebar labels, initial file scope, selection cap, toast, filtering,
       and domain-neutral diagram features behave as specified.
 - [ ] Only table/column descriptions and virtual PK/FK definitions are editable;
-      names/types are read-only and source-level fields are absent.
+      names/types are visibly read-only and source-level fields are absent.
 - [ ] Every source PK/FK is stored only under table
       `config.meta.dbtiagram.virtual`, and FKs use canonical `source(...)`.
 - [ ] Source reveal actions locate nested table and column declarations.
