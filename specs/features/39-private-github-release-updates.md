@@ -45,7 +45,7 @@ the tag `vX.Y.Z` (a tag without the leading `v` is also accepted).
   extension's global storage and silently running the VS Code CLI equivalent of
   `code --install-extension <path> --force`.
 - Prompting to reload the current VS Code window after successful installation.
-- Clear warnings for a missing/unusable `gh`, inaccessible repository, malformed
+- Clear error notifications for a missing/unusable `gh`, inaccessible repository, malformed
   release, missing expected VSIX asset, failed download, or failed installation.
 - Showing the installed package version as `vX.Y.Z` directly below the
   `dbt Diagram` heading in every diagram panel.
@@ -109,7 +109,8 @@ And GitHub's designated Latest release is v0.0.3 or v0.0.2
 When the startup update check completes
 Then no notification is shown
 And no VSIX is downloaded or installed
-And every open diagram header shows "Up to date" beside its installed version
+And every open diagram header shows "(Up to date)" beside its installed version
+And that text uses the same subdued color as the installed version
 ```
 
 ### The designated release cannot be used
@@ -119,7 +120,7 @@ Given the startup update check cannot run gh, cannot access itiadata/dbtiagram,
   receives a tag other than vX.Y.Z or X.Y.Z, or finds no asset named
   dbtiagram-X.Y.Z.vsix
 When the check completes
-Then the extension shows a warning beginning "dbt Diagram could not check for updates:"
+Then the extension shows an error notification beginning "dbt Diagram could not check for updates:"
 And no VSIX is installed
 
 ### The latest-release check cannot be run
@@ -128,7 +129,7 @@ And no VSIX is installed
 Given gh is not installed, is not authenticated for itiadata/dbtiagram, or
   cannot reach GitHub
 When the startup update check completes
-Then VS Code shows a warning toast beginning
+Then VS Code shows an error toast beginning
   "dbt Diagram could not check for updates:"
 And no diagram header shows "Up to date"
 ```
@@ -139,7 +140,7 @@ And no diagram header shows "Up to date"
 ```
 Given the user chose "Update" for v0.0.3
 When the VSIX download or the VS Code CLI installation fails
-Then the extension shows a warning beginning "dbt Diagram could not install v0.0.3:"
+Then the extension shows an error notification beginning "dbt Diagram could not install v0.0.3:"
 And the current VS Code window is not reloaded
 And when download succeeded, the warning ends with the downloaded VSIX path
 ```
@@ -170,14 +171,14 @@ And directly below that text it shows "v0.0.2"
 |------|--------|----------------|
 | `src/shared/update.ts` | create | Pure release decoding, stable semantic-version comparison, expected asset selection, messages, and update workflow against a host port. |
 | `src/vscode/updateCli.ts` | create | Execute `gh release view`, `gh release download`, and the platform-appropriate VS Code CLI installation command without opening a terminal. |
-| `src/vscode/updateCheck.ts` | create | Adapt extension metadata, global storage, VS Code prompts/reload, and the CLI wrapper to the pure update workflow; skip test extension hosts. |
+| `src/vscode/updateCheck.ts` | modify | Adapt extension metadata, global storage, VS Code prompts/reload, and the CLI wrapper to the pure update workflow; show check/install failures as visible error notifications; skip test extension hosts. |
 | `src/extension.ts` | modify | Start one non-blocking update check during activation, publish a successful up-to-date result to open/future panels, and pass the installed version when opening panels. |
 | `src/shared/protocol.ts` | modify | Add the installed-version host-to-webview message. |
 | `src/webview/panel.ts` | modify | Retain the installed version, retain the process-wide current update status, publish both when the webview announces readiness, and publish a status change to every open panel. |
 | `webview-ui/hooks/useHostMessages.ts` | modify | Dispatch the installed-version message. |
-| `webview-ui/ProductTitle.tsx` | create | Render the product heading and installed version as a stacked header label. |
+| `webview-ui/ProductTitle.tsx` | modify | Render the product heading, installed version, and parenthesized up-to-date status as a stacked header label. |
 | `webview-ui/App.tsx` | modify | Hold the installed version received from the host and render `ProductTitle`. |
-| `webview-ui/styles.css` | modify | Style the stacked product title and subdued version text. |
+| `webview-ui/styles.css` | modify | Style the stacked product title, version, and status with the same subdued text color. |
 | `test/unit/shared/update.test.ts` | create | Unit-test release validation, version comparison, exact messages, and the complete update workflow with a fake host. |
 | `test/unit/webview/ProductTitle.test.tsx` | create | Verify the exact static heading/version markup. |
 | `specs/ARCHITECTURE.md` | modify | Document the three new modules and changed responsibilities/exports. |
@@ -347,21 +348,25 @@ export function ProductTitle(props: ProductTitleProps): JSX.Element;
    On Windows, the `code.cmd` launcher is invoked through `cmd.exe` with separate
    fixed arguments; other platforms invoke `code` directly. stdout is ignored,
    stderr is captured for a concise failure reason, and non-zero exit rejects.
-8. **Failures.** Check/metadata failures call `showWarningMessage` with
+8. **Failures.** Check/metadata failures call `showErrorMessage` with
    `dbt Diagram could not check for updates: {reason}`. A failure after the user
    chooses Update uses `dbt Diagram could not install v{version}: {reason}`; if
    download completed, append ` Downloaded VSIX: {absolutePath}`. A failure
-   never invokes reload. Failure warnings have no action buttons.
+    never invokes reload. Failure notifications have no action buttons. Calling
+    `showErrorMessage` is not deferred until a diagram is opened, so a failed
+    activation check remains visible in VS Code's Notification Center even when
+    the check finishes before the user opens a diagram.
 9. **Panel version and status.** On `webview:ready`, the panel posts
    `app:version` and `app:updateStatus` with its other initial state. The UI
    renders the version as `v{version}` in subdued 11px text immediately below
    the heading. When, and only when, the release check returned `upToDate`, it
-   renders `Up to date` beside that version. Until the messages arrive, it
+    renders `(Up to date)` beside that version, using the same subdued color and
+    typography as the version rather than a green success color. Until the messages arrive, it
    renders the heading without an empty placeholder. A failed, pending, or
    update-available check never renders `Up to date`. The version is the
    currently running extension's version; installing an update does not change
    it until reload.
-10. **Failure toast.** `showWarningMessage` is the requested VS Code warning
+10. **Failure toast.** `showErrorMessage` is the requested VS Code error
     toast. The existing `gh release view` command is the reachability and
     authorization check: it fails when `gh` is absent, authentication is absent
     or lacks repository access, GitHub cannot be reached, or its output is not
@@ -388,7 +393,7 @@ export function ProductTitle(props: ProductTitleProps): JSX.Element;
 | `test/unit/shared/update.test.ts` | `warns when checking fails` | fetch rejection `gh not found` | warning exactly `'dbt Diagram could not check for updates: gh not found'`; no prompt/install/reload |
 | `test/unit/shared/update.test.ts` | `warns when download fails` | accepted `0.0.3`; download rejection `network error` | warning exactly `'dbt Diagram could not install v0.0.3: network error'`; no install/reload |
 | `test/unit/shared/update.test.ts` | `reports the VSIX path when installation fails` | download returns `C:\\store\\dbtiagram-0.0.3.vsix`; install rejects `code not found` | warning exactly `'dbt Diagram could not install v0.0.3: code not found Downloaded VSIX: C:\\store\\dbtiagram-0.0.3.vsix'`; no reload |
-| `test/unit/webview/ProductTitle.test.tsx` | `renders the version and up-to-date text directly below the product name` | render `{version:'0.0.2',upToDate:true}` to static markup | markup contains one `.app__product` with `<h1>dbt Diagram</h1>` followed by `v0.0.2` and `Up to date` |
+| `test/unit/webview/ProductTitle.test.tsx` | `renders the version and parenthesized up-to-date text directly below the product name` | render `{version:'0.0.2',upToDate:true}` to static markup | markup contains one `.app__product` with `<h1>dbt Diagram</h1>` followed by `v0.0.2` and `(Up to date)`; status has no separate success-color class |
 | `test/unit/webview/ProductTitle.test.tsx` | `omits the version until supplied by the host` | render `{version:null}` | markup contains `<h1>dbt Diagram</h1>` and no `.app__version` |
 
 The `ExtensionMode.Test` scenario is covered by the existing integration suite:
@@ -407,7 +412,9 @@ the pure host-port tests above.
   accept Update, confirm installation is silent, accept Reload Now, and confirm
   the diagram displays `v0.0.3` below `dbt Diagram` after reload.
 - Manual: start again at the designated latest version and confirm no prompt.
-- Manual: temporarily make `gh` unavailable and confirm the check warning.
+- Manual: run `gh auth logout`, reload the Extension Development Host, and
+  confirm an error notification containing the `gh` authentication reason is
+  present when the diagram is opened.
 
 ### Do not touch
 
@@ -428,11 +435,12 @@ the pure host-port tests above.
 - [ ] Accepting Update downloads and silently installs the VSIX with `--force`.
 - [ ] Successful installation offers `Reload Now` / `Later`, and reload occurs
       only when explicitly accepted.
-- [ ] Check, download, and installation failures show the specified warnings and
+- [ ] Check, download, and installation failures show the specified error notifications and
       never trigger reload.
 - [ ] Test extension hosts never invoke external update commands or prompts.
 - [ ] Every diagram shows the running extension version directly below the
       `dbt Diagram` heading.
-- [ ] A successful no-update check shows `Up to date` beside every diagram's
-      installed version; check failures show a VS Code warning toast instead.
+- [ ] A successful no-update check shows `(Up to date)` in subdued text beside
+      every diagram's installed version; check failures show a VS Code error
+      toast instead.
 - [ ] `npm run verify`, `npm test`, and `npm run typecheck` are green.
