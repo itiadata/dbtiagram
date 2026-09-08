@@ -1,7 +1,7 @@
 ---
 id: 41
 title: Import source tables as models
-status: done
+status: approved
 priority: high
 created: 2026-09-08
 owner: unassigned
@@ -48,6 +48,14 @@ promote selected source tables into model definitions and then edit those models
   default. A real imported PK also receives the model-level
   `dbt_utils.unique_combination_of_columns` test and column-level `not_null`
   tests; developers may explicitly convert imported keys to virtual afterward.
+- Adding import provenance metadata: model `config.meta.source_table_name` stores
+  the original source table name; every imported column stores its original name
+  as `config.meta.source_name` and, when present, its source data type as
+  `config.meta.source_datatype`.
+- Renaming source column metadata keys during import: `max_length` becomes
+  `source_mx_length`, `sample_values` becomes `source_sample_values`, and
+  `filled_percentage` becomes `source_filled_percentage`. The original three
+  keys are not retained on the imported column; all other metadata is preserved.
 - Rewriting each imported virtual FK target from
   `source('<source>', '<table>')` to `ref('<imported-model-name>')`. If its exact
   target table is selected in the same operation, its allocated collision-safe
@@ -115,6 +123,20 @@ Then staging.yml gains a model named costs_from_source
 And the table description, identifier, tags, config, columns, column metadata, and unknown column keys are retained
 And source name finops, database RAW, schema FINOPS, the sources key, and the tables key are not added to that model
 And every pre-existing model and unrelated YAML detail in staging.yml is retained
+```
+
+### Add source provenance and rename profiling metadata
+
+```
+Given source table costs has column workspace_id with data type bigint
+And its column config.meta contains max_length, sample_values, filled_percentage, and owner
+When costs is imported
+Then the model config.meta.source_table_name is costs
+And workspace_id config.meta.source_name is workspace_id
+And workspace_id config.meta.source_datatype is bigint
+And max_length, sample_values, and filled_percentage are stored respectively as source_mx_length, source_sample_values, and source_filled_percentage
+And the original three metadata keys are absent
+And owner is retained unchanged
 ```
 
 ### Allocate collision-safe model names
@@ -209,7 +231,7 @@ And no file is written
 | `src/dbt/parse.ts` | modify | Parse unknown model-column keys into the new typed storage. |
 | `src/dbt/sourceParse.ts` | modify | Parse unknown source-column keys needed by import. |
 | `src/dbt/merge/shape.ts` | modify | Emit preserved unknown column keys before modeled keys. |
-| `src/dbt/importSource.ts` | modify | Convert imported source virtual keys to real PK/FK constraints, including PK-owned unique-combination and not-null tests, while retaining naming, FK rewriting, append, and broken-FK reporting. |
+| `src/dbt/importSource.ts` | modify | Convert imported source virtual keys to real PK/FK constraints and map table/column import provenance metadata while retaining naming, FK rewriting, append, and broken-FK reporting. |
 | `src/shared/protocol.ts` | modify | Add the import request and import-result report messages. |
 | `src/vscode/sourceImportPicker.ts` | create | Own the VS Code source-file, multi-table, and destination-file Quick Pick sequence plus unavailable-input warnings. |
 | `src/webview/sourceImport.ts` | create | Testable host orchestration: load candidates, prompt, transform, persist, and return the result. |
@@ -399,39 +421,49 @@ export interface DiagramFilterState {
     `foreign_key` constraint after target rewriting. No imported PK/FK remains
     virtual; the developer can explicitly toggle it to virtual after import.
     Other copied keys are not interpreted or normalized.
-9. **FK rewrite map.** Before converting models, allocate all selected model
+9. **Import metadata.** After deep-copying the source table, merge
+   `source_table_name: <original table name>` into model `config.meta`; this
+   modeled import value wins over a source value with the same key. For each
+   column, merge `source_name: <original column name>` and, only when `dataType`
+   exists, `source_datatype: <original data type>` into column `config.meta`.
+   Rename existing column-meta keys `max_length`, `sample_values`, and
+   `filled_percentage` to `source_mx_length`, `source_sample_values`, and
+   `source_filled_percentage`. The renamed values and provenance values win on
+   destination-key collisions. Do not emit `source_datatype` for a column with
+   no source data type. All metadata objects are deep-copied.
+10. **FK rewrite map.** Before converting models, allocate all selected model
    names and map each selected qualified source ID to its final name. A valid
    source FK targeting an ID in that map uses that final name. Any other valid
    source target uses `<target table name>_from_source` with no numeric suffix.
    The source name is deliberately dropped in the latter case. Invalid/non-
    canonical `to` strings are retained unchanged and are not included in the
    broken-target report because no model target can be derived safely.
-10. **Broken definition and display.** After appending, build the available-name
+11. **Broken definition and display.** After appending, build the available-name
     set from every pre-existing workspace model plus every imported model. A
     rewritten FK is broken exactly when its `ref(...)` target is absent from that
     set. Report only FKs belonging to imported models, in imported-model/FK order.
     `display` is exactly
     `<model>.<comma-separated columns> -> ref('<target>').<comma-separated to_columns>`;
     when either column list is empty, omit only that side's dot and column text.
-11. **Persistence and model store.** Exactly one destination write occurs after
+12. **Persistence and model store.** Exactly one destination write occurs after
     successful conversion, through `writeModelYmlFile`, so merge spec 29 appends
     the new model nodes without rewriting existing nodes. After the write, the
     panel upserts the returned destination into its model store, publishes
     `diagram:update`, then sends `sourceImport:result`; no source store/file is
     mutated.
-12. **Visibility.** On `sourceImport:result`, `showImportedModels` unions the
+13. **Visibility.** On `sourceImport:result`, `showImportedModels` unions the
     report names into selected models and the explicit destination URI into
     selected files, increments `filterTick`, and changes no other selection.
     Thus imported cards appear even when the destination or new names were
     filtered out before import.
-13. **Report UI.** The modal title is `Source import complete`. Its summary is
+14. **Report UI.** The modal title is `Source import complete`. Its summary is
     exactly `Imported <N> model(s) successfully.` with singular grammar. It lists
     every final imported name. With no broken relationships it shows
     `No broken foreign keys.` Otherwise it shows heading
     `Broken foreign keys (<N>)` and every literal `display` row. A **Close**
     button, Escape, or backdrop click dismisses it. A later import replaces the
     previous report.
-14. **Mode enforcement.** The host ignores `sourceImport:start` unless its
+15. **Mode enforcement.** The host ignores `sourceImport:start` unless its
     immutable panel mode is `model`; source mode cannot trigger the flow even if
     a crafted webview message is received.
 
@@ -443,6 +475,8 @@ export interface DiagramFilterState {
 | `test/unit/dbt/importSource.test.ts` | `increments an occupied imported name` | occupied `costs_from_source`, `costs_from_source_1` | imported name `costs_from_source_2` |
 | `test/unit/dbt/importSource.test.ts` | `copies table and column properties but drops source properties` | source with database/schema plus table description/config/identifier/tags and column meta/unknown key | imported model has every listed table/column value; no database/schema/source wrapper value |
 | `test/unit/dbt/importSource.test.ts` | `deep copies imported properties` | mutate nested imported config after conversion | original source nested value remains unchanged |
+| `test/unit/dbt/importSource.test.ts` | `adds source provenance and renames profiling metadata` | table `costs`; column `workspace_id bigint`; meta with `max_length`, `sample_values`, `filled_percentage`, `owner`, and conflicting destination keys | model meta contains `source_table_name: costs`; column meta contains `source_name`, `source_datatype`, renamed values and unchanged `owner`; original keys are absent; generated values win collisions |
+| `test/unit/dbt/importSource.test.ts` | `omits source datatype metadata when absent` | source column without `data_type` | column meta has `source_name` and no `source_datatype` |
 | `test/unit/dbt/importSource.test.ts` | `imports a source primary key as real with tests` | virtual PK `[id]` | real PK constraint, unique-combination test, and column `not_null` exist; virtual PK is absent |
 | `test/unit/dbt/importSource.test.ts` | `rewrites an FK to the selected target's allocated name` | costs/workspaces selected; `workspaces_from_source` occupied | real FK constraint `to` is `ref('workspaces_from_source_1')`; virtual FK absent; broken list `[]` |
 | `test/unit/dbt/importSource.test.ts` | `keeps and reports an unselected FK` | only costs selected; FK `workspace_id -> source('finops','workspaces').id`; target absent | `to` is `ref('workspaces_from_source')`; display `costs_from_source.workspace_id -> ref('workspaces_from_source').id` |
@@ -495,6 +529,8 @@ suites above.
       all workspace model names.
 - [ ] Table/column metadata and unknown keys survive while source/root properties
       are discarded.
+- [ ] Imported models and columns record source names/data types, and the three
+      profiling metadata keys are renamed to their `source_` forms.
 - [ ] Source virtual PKs/FKs become real constraints by default, imported PKs
       include unique-combination and not-null tests, and valid source targets
       become collision-aware `ref(...)` targets.
