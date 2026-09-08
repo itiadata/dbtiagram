@@ -20,4 +20,5 @@ export {
   Trash2,
   Waypoints,
   FileCode2,
+  Import,
 } from 'lucide-react';

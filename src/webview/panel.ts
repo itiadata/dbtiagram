@@ -51,6 +51,8 @@ import { diagramPanelKey, diagramPanelTitle, diagramSourceMode, type DiagramSour
 import { applySourceEdit } from '../dbt/sourceEdit';
 import { applySourceFileDeleted, applySourceFileRenamed, applySourceTextChange, createSourceStore, distributeEditedSources, replaceSourceStore, upsertSourceRecord, type SourceStore } from '../dbt/sourceStore';
 import type { SourceDefinition } from '../dbt/sourceTypes';
+import { pickSourceImport } from '../vscode/sourceImportPicker';
+import { runSourceImport, type SourceImportHost } from './sourceImport';
 
 /** Ignore text-change echoes of our own disk writes within this window. */
 const SELF_WRITE_IGNORE_MS = 250;
@@ -430,6 +432,18 @@ export class DiagramPanel {
       case 'app:checkForUpdates':
         DiagramPanel.updateCheckHandler?.();
         return;
+      case 'sourceImport:start':
+        if (this.mode !== 'model') return;
+        try {
+          const report = await runSourceImport(this.sourceImportHost);
+          if (report !== undefined) {
+            this.publish();
+            this.postMessage({ type: 'sourceImport:result', report });
+          }
+        } catch (error) {
+          this.postMessage({ type: 'diagram:error', message: error instanceof Error ? error.message : String(error) });
+        }
+        return;
       case 'diagram:edit': {
         try {
           await this.applyEditAndPersist(message.edit);
@@ -500,6 +514,29 @@ export class DiagramPanel {
       open: (fsPath) => openSqlFile(vscode.Uri.file(fsPath)),
       publish: (models) => this.postMessage({ type: 'model:sqlFiles', models }),
       postError: (message) => this.postMessage({ type: 'diagram:error', message }),
+    };
+  }
+
+  private get sourceImportHost(): SourceImportHost {
+    return {
+      loadSources: async () => {
+        const result = await loadSourceYmlFiles(DiagramPanel.sourceFileGlob());
+        const uris = result.records.map((record) => record.uri.fsPath);
+        const labels = disambiguateFileLabels(uris, workspaceRoot());
+        return result.records.map((record) => ({ uri: record.uri.fsPath, label: labels.get(record.uri.fsPath) ?? fallbackLabel(record.uri.fsPath), file: record.file }));
+      },
+      modelFiles: () => {
+        const uris = this.store.records.map((record) => record.uri);
+        const labels = disambiguateFileLabels(uris, workspaceRoot());
+        return this.store.records.map((record) => ({ uri: record.uri, label: labels.get(record.uri) ?? fallbackLabel(record.uri), file: record.file }));
+      },
+      workspaceModels: () => this.store.records.flatMap((record) => record.file.models),
+      pick: pickSourceImport,
+      writeDestination: async (uri, file) => {
+        await writeModelYmlFile(vscode.Uri.file(uri), file);
+        this.selfWrites.set(uri, Date.now());
+        this.store = upsertRecord(this.store, uri, file);
+      },
     };
   }
 

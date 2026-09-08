@@ -32,7 +32,8 @@ function column(raw: Record<string, unknown>, source: string): ModelColumn {
   const dataTests = Array.isArray(raw.data_tests)
     ? raw.data_tests.filter((entry): entry is DataTestEntry => typeof entry === 'string' || isRecord(entry))
     : undefined;
-  return { name: raw.name, ...(typeof raw.data_type === 'string' ? { dataType: raw.data_type } : {}), ...(typeof raw.description === 'string' ? { description: raw.description } : {}), ...(Array.isArray(raw.tests) ? { tests: raw.tests.filter((v): v is string => typeof v === 'string') } : {}), ...(dataTests !== undefined ? { dataTests } : {}), ...(meta !== undefined ? { meta } : {}), ...(config !== undefined ? { config } : {}) };
+  const extra = extras(raw, ['name', 'data_type', 'description', 'tests', 'data_tests', 'config', 'meta']);
+  return { ...(extra !== undefined ? { extra } : {}), name: raw.name, ...(typeof raw.data_type === 'string' ? { dataType: raw.data_type } : {}), ...(typeof raw.description === 'string' ? { description: raw.description } : {}), ...(Array.isArray(raw.tests) ? { tests: raw.tests.filter((v): v is string => typeof v === 'string') } : {}), ...(dataTests !== undefined ? { dataTests } : {}), ...(meta !== undefined ? { meta } : {}), ...(config !== undefined ? { config } : {}) };
 }
 
 function table(raw: Record<string, unknown>, source: string): SourceTableDefinition {

@@ -107,6 +107,12 @@ models:
 });
 
 describe('round trip', () => {
+  it('round trips unknown model column keys', () => {
+    const file = parseModelYml(`models:\n  - name: orders\n    columns:\n      - name: id\n        quote: true\n        policy_tags: [x]\n`);
+    expect(file.models[0].columns?.[0].extra).toEqual({ quote: true, policy_tags: ['x'] });
+    expect(parseModelYml(serializeModelYml(file))).toEqual(file);
+  });
+
   it('parse -> serialize -> parse preserves model data', () => {
     const file = parseModelYml(SAMPLE);
     const reparsed = parseModelYml(serializeModelYml(file));
@@ -308,4 +314,3 @@ models:
     expect(reparsed).toEqual(file);
   });
 });
-

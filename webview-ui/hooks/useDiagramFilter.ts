@@ -46,6 +46,7 @@ export interface DiagramFilterState {
    * checked are left as they are; nothing is ever unchecked.
    */
   addModels: (names: readonly string[]) => void;
+  showImportedModels: (names: readonly string[], destinationUri: string) => void;
   /** Adopts new host metadata, keeping the user's checked state (spec 05). */
   applyModelFiles: (files: DiagramEntityFile[]) => void;
   /** Scopes to one model.yml unless a layout already won (spec 14). */
@@ -228,6 +229,12 @@ export function useDiagramFilter(): DiagramFilterState {
     setFilterTick((tick) => tick + 1);
   }, []);
 
+  const showImportedModels = useCallback((names: readonly string[], destinationUri: string): void => {
+    setSelectedFiles((current) => new Set([...current, destinationUri]));
+    setSelectedModels((current) => new Set([...current, ...names]));
+    setFilterTick((tick) => tick + 1);
+  }, []);
+
   return {
     modelFiles,
     selectedFiles,
@@ -247,6 +254,7 @@ export function useDiagramFilter(): DiagramFilterState {
     clearModels,
     removeModels: removeModelsCallback,
     addModels: addModelsCallback,
+    showImportedModels,
     applyModelFiles,
     applyScope,
     applyLayoutTables,

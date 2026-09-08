@@ -40,7 +40,7 @@ import { COLUMN_DISPLAY_OPTIONS, type ColumnDisplayMode } from '../src/diagram/c
 import type { DiagramLayoutTable } from '../src/diagram/layoutFile';
 import { mergeFlowNodes, type NodePosition } from '../src/diagram/positions';
 import { FkEdge } from './FkEdge';
-import { StickyNotePlus, Cable, Grid3x3, Network } from './icons';
+import { StickyNotePlus, Cable, Grid3x3, Network, Import } from './icons';
 import type { RevealTarget } from './hooks/useRevealModel';
 import { shouldRunInitialFit, shouldRunPendingFit } from './initial-fit';
 import { NoteNode } from './NoteNode';
@@ -94,6 +94,7 @@ export interface DiagramCanvasProps {
   onAddNoteAt: (point: { x: number; y: number }) => void;
   /** Opens the global fields matrix (spec 27's toolbar button). */
   onOpenFieldsMatrix?: () => void;
+  onImportSourceModels?: () => void;
   /** The column picked as the FK gesture's source, or null (spec 26). */
   fkSource: { model: string; column: string } | null;
   fkCreateActive: boolean;
@@ -128,6 +129,7 @@ export function DiagramCanvas({
   onRemoveSelectedTable,
   onAddNoteAt,
   onOpenFieldsMatrix,
+  onImportSourceModels,
   fkSource,
   fkCreateActive,
   onStartFkCreate,
@@ -536,6 +538,14 @@ export function DiagramCanvas({
             title="Add note"
           >
             <StickyNotePlus size={16} />
+          </button>}
+          {onImportSourceModels !== undefined && <button
+            type="button"
+            className="panel-button panel-button--secondary"
+            onClick={onImportSourceModels}
+            title="Import models from source yml"
+          >
+            <Import size={16} />
           </button>}
           <button
             type="button"

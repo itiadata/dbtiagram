@@ -9,4 +9,8 @@ describe('parseSourceYml', () => {
   });
   it('model root wins over source root', () => expect(() => parseSourceYml('models: []\nsources: []\n')).toThrow(NotASourceYmlFileError));
   it('requires a sources array', () => expect(() => parseSourceYml('sources: nope\n')).toThrow(new SourceYmlParseError('<unknown>', 'source yml is missing the required "sources" array')));
+  it('retains unknown source column keys for import', () => {
+    const file = parseSourceYml('sources:\n  - name: finops\n    tables:\n      - name: costs\n        columns:\n          - name: id\n            quote: true\n');
+    expect(file.sources[0].tables[0].columns?.[0].extra).toEqual({ quote: true });
+  });
 });

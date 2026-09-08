@@ -25,6 +25,8 @@ export interface ModelColumn {
    * `config` keys such as `tags` (spec 27 addendum).
    */
   config?: Record<string, unknown>;
+  /** Remaining unmodeled column-level keys, preserved on write-back. */
+  extra?: Record<string, unknown>;
 }
 
 export interface ModelConfig {

@@ -45,6 +45,7 @@ export function toDbtColumn(column: ModelColumn): Record<string, unknown> {
     ...(column.meta !== undefined ? { meta: column.meta } : {}),
   };
   return {
+    ...(column.extra ?? {}),
     name: column.name,
     ...(column.dataType !== undefined ? { data_type: column.dataType } : {}),
     ...(column.description !== undefined ? { description: column.description } : {}),

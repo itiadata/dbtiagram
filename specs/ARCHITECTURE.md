@@ -22,12 +22,12 @@ lines** under `test/unit/` (see `specs/features/17-modular-source-layout.md`).
 
 | Path | Layer | Responsibility | Key exports |
 |------|-------|----------------|-------------|
-| `src/dbt/types.ts` | pure | The dbt model.yml data model shared across parsing, editing and diagramming. | `ModelYmlFile`, `ModelDefinition`, `ModelColumn`, `ModelConfig`, `ModelConstraint`, `DataTestEntry`, `ForeignKeyDescriptor`, `VirtualPrimaryKey`, `VirtualForeignKey`, `VirtualConstraintsBlock` |
+| `src/dbt/types.ts` | pure | The dbt model.yml data model shared across parsing, editing and diagramming, including preserved unknown model/column keys. | `ModelYmlFile`, `ModelDefinition`, `ModelColumn`, `ModelConfig`, `ModelConstraint`, `DataTestEntry`, `ForeignKeyDescriptor`, `VirtualPrimaryKey`, `VirtualForeignKey`, `VirtualConstraintsBlock` |
 | `src/dbt/tests.ts` | pure | Pure helpers for resolving a column's displayable data-test names, excluding the PK-owned `not_null` (spec 30). | `dataTestName`, `columnTestNames` |
-| `src/dbt/parse.ts` | pure | Parse model.yml text into `ModelYmlFile`, raising a typed error on malformed YAML. Column meta is read from `config.meta` only; a flat column-level `meta:` is ignored (spec 27 addendum). | `parseModelYml`, `ModelYmlParseError`, `NotAModelYmlFileError` |
+| `src/dbt/parse.ts` | pure | Parse model.yml text into `ModelYmlFile`, preserving unknown model/column keys and raising a typed error on malformed YAML. Column meta is read from `config.meta` only; a flat column-level `meta:` is ignored (spec 27 addendum). | `parseModelYml`, `ModelYmlParseError`, `NotAModelYmlFileError` |
 | `src/dbt/serialize.ts` | pure | Regenerate a whole `ModelYmlFile` as YAML text. **Fallback** write path only (spec 29); it drops comments and on-disk key order. | `serializeModelYml` |
 | `src/dbt/merge/index.ts` | pure | Surgical write-back (spec 29): patch the existing YAML text with the desired state so unknown keys, key order and comments survive; falls back to `serializeModelYml`. Owns the per-level merge policies. | `mergeModelYml` |
-| `src/dbt/merge/shape.ts` | pure | The single camelCase -> snake_case dbt representation shared by the serializer and the merge. Column meta is written back inside `config`, never as a flat `meta:` (spec 27 addendum). | `toDbtShape`, `toDbtModel`, `toDbtColumn`, `toDbtConstraint` |
+| `src/dbt/merge/shape.ts` | pure | The single camelCase -> snake_case dbt representation shared by the serializer and the merge, including preserved unknown column keys. Column meta is written back inside `config`, never as a flat `meta:` (spec 27 addendum). | `toDbtShape`, `toDbtModel`, `toDbtColumn`, `toDbtConstraint` |
 | `src/dbt/merge/reconcile.ts` | pure | Recursive YAML node reconciler: merges maps by key, sequences positionally, mutates scalars in place, applies the deletion allowlist, and emits `flowOnCreate` mappings in flow style. | `reconcileNode`, `MergePolicy`, `deepEqual`, `isPlainObject` |
 | `src/dbt/merge/order.ts` | pure | Key-insertion ordering used only when a key must be created; existing keys are never reordered. | `insertionIndex`, `KeyOrder`, `MODEL_KEY_ORDER`, `COLUMN_KEY_ORDER`, `FREE_KEY_ORDER` |
 | `src/dbt/locate.ts` | pure | Locate a model's `name:` declaration, or a specific column's `name:` entry within it, in model.yml text via the yaml package's node ranges (spec 15, extended by spec 25). | `findModelDeclaration`, `findColumnDeclaration`, `DeclarationPosition` |
@@ -35,12 +35,13 @@ lines** under `test/unit/` (see `specs/features/17-modular-source-layout.md`).
 | `src/dbt/virtual.ts` | pure | Read/write the dbtiagram-managed virtual constraints block (PKs/FKs not expressed as dbt constraints). | `readVirtualConstraints`, `writeVirtualConstraints` |
 | `src/dbt/sourceTypes.ts` | pure | Source YAML domain types and qualified-table flattening. | `SourceYmlFile`, `SourceDefinition`, `SourceTableDefinition`, `flattenSourceTables` |
 | `src/dbt/sourceRefs.ts` | pure | Qualified source IDs and canonical dbt source references. | `sourceTableId`, `parseSourceRef`, `formatSourceRef` |
-| `src/dbt/sourceParse.ts` | pure | Parse and classify source YAML files. | `parseSourceYml`, `SourceYmlParseError`, `NotASourceYmlFileError` |
+| `src/dbt/sourceParse.ts` | pure | Parse and classify source YAML files, preserving unknown table and column keys. | `parseSourceYml`, `SourceYmlParseError`, `NotASourceYmlFileError` |
 | `src/dbt/sourceSerialize.ts` | pure | Source YAML fallback serialization. | `toDbtSourceShape`, `serializeSourceYml` |
 | `src/dbt/sourceMerge.ts` | pure | Surgical source YAML write-back. | `mergeSourceYml` |
 | `src/dbt/sourceLocate.ts` | pure | Locate nested source table and column declarations. | `findSourceTableDeclaration`, `findSourceColumnDeclaration` |
 | `src/dbt/sourceStore.ts` | pure | Source-file last-good store and redistribution. | `createSourceStore`, `applySourceTextChange`, `distributeEditedSources` |
 | `src/dbt/sourceEdit.ts` | pure | Forced-virtual source table edits. | `applySourceEdit` |
+| `src/dbt/importSource.ts` | pure | Collision-safe source-table conversion, virtual FK rewriting, destination append, and broken-FK reporting (spec 41). | `nextImportedModelName`, `importSourceTables`, `SourceImportResult`, `BrokenImportedForeignKey` |
 | `src/dbt/modelStore.ts` | pure | In-memory set of loaded model.yml files: upsert, text change, delete, rename, and redistribution of edited models. | `createModelStore`, `ModelStore`, `upsertRecord`, `applyTextChange`, `applyFileDeleted`, `applyFileRenamed`, `distributeEditedModels`, `replaceModelStore`, `ModelFileRecord`, `LoadedModelFile`, `FailedModelFile` |
 | `src/dbt/edit/index.ts` | pure | Single entry point that dispatches a `ModelEdit` to the right handler. **All mutations go through here.** | `applyEdit` |
 | `src/dbt/edit/types.ts` | pure | The discriminated union of every supported edit. | `ModelEdit` |
@@ -77,7 +78,7 @@ including sticky notes (spec 16) and per-table/diagram-wide column-display modes
 
 | Path | Layer | Responsibility | Key exports |
 |------|-------|----------------|-------------|
-| `src/shared/protocol.ts` | shared | The **only** message contract between extension host and webview. | `MessageToWebview`, `MessageToExtension`, `DiagramModelFile`, `DiagramPendingError` |
+| `src/shared/protocol.ts` | shared | The **only** message contract between extension host and webview, including source-import requests and reports. | `MessageToWebview`, `MessageToExtension`, `DiagramModelFile`, `DiagramPendingError`, `SourceImportReport` |
 | `src/shared/diagramMode.ts` | shared | Diagram mode and mode-specific UI nouns. | `DiagramMode`, `diagramModeLabels` |
 | `src/shared/filter.ts` | shared | File/model filtering and selection reconciliation for the filter sidebar, the initial model-selection cap for large workspaces (spec 35), and the pure `removeModels` unchecking helper for table removal (spec 36). | `filterGraph`, `computeVisibleModels`, `reconcileSelection`, `scopeSelectionToFile`, `matchesSearch`, `capInitialSelection`, `INITIAL_MODEL_SELECTION_LIMIT`, `removeModels` |
 | `src/shared/glob.ts` | shared | Minimal glob matching used for model file discovery patterns. | `matchesGlob`, `globToRegExp`, `normalizePathForGlob` |
@@ -109,17 +110,19 @@ via `ExtensionContext.workspaceState` (spec 27). | `readMatrixColumnPrefs`, `wri
 | `src/vscode/sqlFiles.ts` | vscode-facing | Discovers `.sql` files by glob and opens/focuses one as a normal tab in the main window — never split, never the diagram's own separate window (spec 23) — reusing `findOpenViewColumn` from `project.ts` but setting no selection (spec 38). | `findSqlFiles`, `openSqlFile` |
 | `src/vscode/updateCli.ts` | vscode-facing | Executes the authenticated GitHub CLI release query/download and a silent VS Code CLI VSIX installation for private updates (spec 39). | `fetchLatestRelease`, `downloadRelease`, `installVsix` |
 | `src/vscode/updateCheck.ts` | vscode-facing | Adapts extension metadata, storage, prompts, reload, and update CLI calls to the pure update workflow; skips external checks in test hosts (spec 39). | `installedExtensionVersion`, `checkForUpdates`, `UpdateCheckOutcome` |
+| `src/vscode/sourceImportPicker.ts` | vscode-facing | Runs the source-file, source-table, and destination-file Quick Pick sequence (spec 41). | `pickSourceImport` |
 
 ## `src/webview/` — extension-host side of the panel
 
 | Path | Layer | Responsibility | Key exports |
 |------|-------|----------------|-------------|
-| `src/webview/panel.ts` | vscode-facing | The diagram panel: lifecycle, message pump, model store wiring, write-back, in-memory pending-layout cache and close-time save prompt (spec 22); also holds the model → `.sql` path map and republishes it on ready/refresh/rescan (spec 38), and coordinates running extension version/update status and manual checks (spec 39). | `DiagramPanel`, `DiagramPanel.setUpdateStatus`, `DiagramPanel.setUpdateCheckHandler` |
+| `src/webview/panel.ts` | vscode-facing | The diagram panel: lifecycle, message pump, model/source store wiring, write-back, source-import wiring (spec 41), in-memory pending-layout cache and close-time save prompt (spec 22); also holds the model → `.sql` path map and republishes it on ready/refresh/rescan (spec 38), and coordinates running extension version/update status and manual checks (spec 39). | `DiagramPanel`, `DiagramPanel.setUpdateStatus`, `DiagramPanel.setUpdateCheckHandler` |
 | `src/webview/html.ts` | vscode-facing | Build the webview HTML shell (CSP, nonce, asset URIs). | `buildWebviewHtml` |
 | `src/webview/panelKey.ts` | pure | One panel per source file: key and title derivation. | `diagramPanelKey`, `diagramPanelTitle`, `DiagramSource`, `defaultCaseInsensitive` |
 | `src/webview/openSource.ts` | pure | Orchestrates "Reveal in model.yml" against a host port: resolve, read, locate (model or a specific column, falling back to the model), reveal or report (spec 15, extended by spec 25). | `openModelSource`, `OpenSourceHost` |
 | `src/webview/openSql.ts` | pure | Orchestrates "Open SQL file" against a host port: lookup, rescan-on-miss (or on a stale cached path), republish, open or report (spec 38). | `openModelSql`, `OpenSqlHost` |
 | `src/webview/layoutMessages.ts` | pure | Layout-related message handling against a small `LayoutHost` port, so it stays testable. Manual save (spec 22): `cachePendingLayout` only caches the webview's latest layout in host memory, never writes to disk. | `publishActiveLayout`, `openLayout`, `sendActiveLayout`, `saveLayout`, `cachePendingLayout`, `ActiveLayout`, `LayoutHost` |
+| `src/webview/sourceImport.ts` | pure | Orchestrates source loading, selection, conversion, persistence, and reporting (spec 41). | `runSourceImport`, `SourceImportHost`, `SourceImportCandidate`, `SourceImportSelection` |
 | `src/extension.ts` | vscode-facing | `activate` / `deactivate` only — command registration and disposal. | `activate`, `deactivate` |
 
 ## `webview-ui/` — React front-end (webview)
@@ -136,6 +139,7 @@ via `ExtensionContext.workspaceState` (spec 27). | `readMatrixColumnPrefs`, `wri
 | `webview-ui/ContextMenu.tsx` | webview | Reusable portal-rendered context menu with disabled/checkable items and submenu flyouts (spec 15, spec 24). | `ContextMenu`, `ContextMenuItem`, `ContextMenuProps` |
 | `webview-ui/SettingsPanel.tsx` | webview | "Open new diagrams" settings overlay: option list with descriptions, radio selection, dismiss conventions matching `ContextMenu` (spec 23). | `SettingsPanel`, `SettingsPanelProps` |
 | `webview-ui/Toast.tsx` | webview | Generic auto-dismissing popup with a manual close button; used for the initial model-selection-cap notice (spec 35). | `Toast`, `ToastProps` |
+| `webview-ui/ImportReport.tsx` | webview | Source-import completion modal listing imported names and broken FKs (spec 41). | `ImportReport`, `ImportReportProps` |
 | `webview-ui/context-menu-position.ts` | webview (pure) | Viewport flip/clamp geometry for the context menu and its submenu flyouts (spec 15, spec 24). | `placeMenu`, `placeSubmenu`, `MenuBox`, `MenuPoint`, `MenuPlacement`, `SubmenuAnchor` |
 | `webview-ui/details-visibility.ts` | webview (pure) | Details sidebar visibility policy: opens/closes with the selection, manual collapse sticks until it next changes (spec 19); `{visible,key}` transition that keeps the policy safe inside a React state updater (spec 21). | `selectionKey`, `nextDetailsVisible`, `SelectionKey`, `DetailsVisibility`, `initialDetailsVisibility`, `advanceDetailsVisibility` |
 | `webview-ui/initial-fit.ts` | webview (pure) | Viewport-fit policies: the one-off post-measurement corrective fit (spec 21) and the deferred pending fit (spec 32). | `shouldRunInitialFit`, `shouldRunPendingFit` |
@@ -177,6 +181,7 @@ every model's, with filter, column show/hide + reorder, editable cells, and batc
 `FieldsMatrixProps` |
 | `webview-ui/hooks/useFieldsMatrix.ts` | webview | Open/close state, column-prefs round trip, and the always-reset 
 filter text for the fields matrix (spec 27). | `useFieldsMatrix`, `FieldsMatrixState`, `MatrixTarget` |
+| `webview-ui/hooks/useSourceImport.ts` | webview | Owns source-import request/report state and reveals successful imports through the filter (spec 41). | `useSourceImport`, `SourceImportState` |
 
 ## Tests
 

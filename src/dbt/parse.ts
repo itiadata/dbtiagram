@@ -154,8 +154,14 @@ function normalizeColumn(raw: Record<string, unknown>, source: string) {
     const { meta: _meta, ...rest } = rawConfig;
     config = Object.keys(rest).length > 0 ? rest : undefined;
   }
+  const modeledKeys = new Set(['name', 'data_type', 'description', 'tests', 'data_tests', 'config', 'meta']);
+  const extra: Record<string, unknown> = {};
+  for (const key of Object.keys(raw)) {
+    if (!modeledKeys.has(key)) extra[key] = raw[key];
+  }
 
   return {
+    ...(Object.keys(extra).length > 0 ? { extra } : {}),
     name,
     ...(typeof raw.data_type === 'string' ? { dataType: raw.data_type } : {}),
     ...(typeof raw.description === 'string' ? { description: raw.description } : {}),

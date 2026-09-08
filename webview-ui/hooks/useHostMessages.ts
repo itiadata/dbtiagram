@@ -7,7 +7,7 @@
  */
 import { useEffect, useRef } from 'react';
 import { postToHost } from '../host';
-import type { MessageToWebview } from '../../src/shared/protocol';
+import type { MessageToWebview, SourceImportReport } from '../../src/shared/protocol';
 import type { OpenBehavior } from '../../src/shared/openBehavior';
 import type { MatrixScope, StoredMatrixColumnPref } from '../../src/shared/matrixColumns';
 
@@ -27,6 +27,7 @@ export interface HostMessageHandlers {
   onSqlFiles: (models: string[]) => void;
   onAppVersion: (version: string) => void;
   onAppUpdateStatus: (status: 'unknown' | 'upToDate' | 'updateAvailable') => void;
+  onSourceImportResult: (report: SourceImportReport) => void;
 }
 
 export function useHostMessages(handlers: HostMessageHandlers): void {
@@ -67,6 +68,9 @@ export function useHostMessages(handlers: HostMessageHandlers): void {
           break;
         case 'app:updateStatus':
           current.onAppUpdateStatus(message.status);
+          break;
+        case 'sourceImport:result':
+          current.onSourceImportResult(message.report);
           break;
       }
     };

@@ -44,9 +44,11 @@ import { useSelection } from './hooks/useSelection';
 import { useSettings } from './hooks/useSettings';
 import { SidebarRail, SidebarResizer } from './SidebarChrome';
 import { ProductTitle } from './ProductTitle';
+import { ImportReport } from './ImportReport';
+import { useSourceImport } from './hooks/useSourceImport';
 import { SIDEBAR_DEFAULT_WIDTH } from './sidebar-constants';
 import { diagramModeLabels, type DiagramMode } from '../src/shared/diagramMode';
-import { Settings, SavePlus, Save, SaveCheck, StickyNotePlus, Grid3x3, ChartNoAxesGantt, BetweenHorizontalStart, Trash2, Waypoints, FileCode2 } from './icons';
+import { Settings, SavePlus, Save, SaveCheck, StickyNotePlus, Grid3x3, ChartNoAxesGantt, BetweenHorizontalStart, Trash2, Waypoints, FileCode2, Import } from './icons';
 
 export function App(): JSX.Element {
   const [graph, setGraph] = useState<DiagramGraph | null>(null);
@@ -70,6 +72,7 @@ export function App(): JSX.Element {
 
   const selection = useSelection();
   const filter = useDiagramFilter();
+  const sourceImport = useSourceImport(filter.showImportedModels);
   const notes = useNotes();
   const columnDisplay = useColumnDisplay();
   const fkCreate = useFkCreateMode();
@@ -136,6 +139,7 @@ export function App(): JSX.Element {
     onSqlFiles: (models) => setSqlModels(new Set(models)),
     onAppVersion: setAppVersion,
     onAppUpdateStatus: setUpdateStatus,
+    onSourceImportResult: sourceImport.applyResult,
   });
   const visibleGraph = useMemo(
     () => (graph === null ? null : filterGraph(graph, filter.visibleModels)),
@@ -339,6 +343,11 @@ export function App(): JSX.Element {
           icon: <StickyNotePlus size={16} />,
           onSelect: () => focusNoteText(notes.addNote(flowPoint.x, flowPoint.y)),
         },
+        ...(mode === 'model' ? [{
+          label: 'Import models from source yml',
+          icon: <Import size={16} />,
+          onSelect: sourceImport.start,
+        }] : []),
         {
           label: 'Edit fields matrix (all models)',
           icon: <Grid3x3 size={16} />,
@@ -346,7 +355,7 @@ export function App(): JSX.Element {
         },
       ]);
     },
-    [openMenu, notes, focusNoteText, fieldsMatrix],
+    [openMenu, notes, focusNoteText, fieldsMatrix, mode, sourceImport.start],
   );
 
   const onDeleteSelectedNotes = useCallback((): void => {
@@ -677,6 +686,7 @@ export function App(): JSX.Element {
                     onRemoveSelectedTable={onRemoveSelectedTable}
                     onAddNoteAt={onAddNoteAt}
                      onOpenFieldsMatrix={mode === 'model' ? fieldsMatrix.openGlobal : undefined}
+                    onImportSourceModels={mode === 'model' ? sourceImport.start : undefined}
                     fkSource={fkPickedSource}                    fkCreateActive={fkCreate.state.active}
                     onStartFkCreate={fkCreate.start}
                     onCancelFkCreate={fkCreate.cancel}
@@ -769,6 +779,7 @@ export function App(): JSX.Element {
           onDismiss={filter.dismissInitialCapNotice}
         />
       )}
+      {sourceImport.report !== null && <ImportReport report={sourceImport.report} onClose={sourceImport.dismiss} />}
     </main>
   );
 }

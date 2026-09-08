@@ -8,6 +8,13 @@ import type { ModelEdit } from '../dbt/edit';
 import type { OpenBehavior } from './openBehavior';
 import type { MatrixScope, StoredMatrixColumnPref } from './matrixColumns';
 import type { DiagramMode } from './diagramMode';
+import type { BrokenImportedForeignKey } from '../dbt/importSource';
+
+export interface SourceImportReport {
+  destinationUri: string;
+  importedModels: string[];
+  brokenForeignKeys: BrokenImportedForeignKey[];
+}
 
 /** A model.yml file whose most recent parse failed (last good data shown). */
 export interface DiagramPendingError {
@@ -68,7 +75,8 @@ export type MessageToWebview =
   /** Version of the currently running extension, shown in the diagram header. */
   | { type: 'app:version'; version: string }
   /** Latest displayable result of the process-wide automatic/manual update check. */
-  | { type: 'app:updateStatus'; status: 'unknown' | 'upToDate' | 'updateAvailable' };
+  | { type: 'app:updateStatus'; status: 'unknown' | 'upToDate' | 'updateAvailable' }
+  | { type: 'sourceImport:result'; report: SourceImportReport };
 
 /** Messages sent from the webview to the extension host. */
 export type MessageToExtension =
@@ -76,6 +84,7 @@ export type MessageToExtension =
   | { type: 'webview:ready' }
   /** Explicitly run the same update workflow used during activation. */
   | { type: 'app:checkForUpdates' }
+  | { type: 'sourceImport:start' }
   /** Explicit "Save diagram" action; prompts for a path when none is active. */
   | { type: 'layout:save'; layout: DiagramLayout }
   /**
