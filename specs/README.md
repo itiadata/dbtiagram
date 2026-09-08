@@ -59,6 +59,7 @@ up-to-date spec in `specs/features/`.
 | 39  | Update the private extension from GitHub Releases | Done |
 | 40  | Add a source.yml diagram mode | Done |
 | 41  | Import source tables as models | Done |
+| 42  | Copy an AI column rename and type prompt | Approved |
 
 Status values: `draft` → `approved` → `implemented` → `done`.
 
