@@ -1,7 +1,7 @@
 ---
 id: 42
 title: Copy an AI column rename and type prompt
-status: implemented
+status: approved
 priority: high
 created: 2026-09-08
 owner: unassigned
@@ -36,6 +36,9 @@ feature will validate, preview, and apply the AI's clipboard JSON response.
 - A webview batch dialog that lets the user select a batch number and choose
   25, 50, or 100 eligible columns per batch, or enter a custom positive integer
   batch size.
+- Clear visual hierarchy in the batch dialog: a distinct model context label,
+  emphasized eligible-column and batch counts, grouped form controls, and a
+  visually distinct empty-eligibility explanation.
 - Generation of a compact JSON Lines (JSONL) prompt from column provenance and
   a source-table label, copied through the VS Code clipboard and confirmed with
   a VS Code information notification.
@@ -145,7 +148,7 @@ Then its prompt identifies the model name as its source table
 | `webview-ui/AiPromptExport.tsx` | create | Render the batch-size/batch-number dialog and post valid copy requests. |
 | `webview-ui/App.tsx` | modify | Own prompt-dialog visibility, expose the model-mode table-menu action, and mount the dialog. |
 | `webview-ui/icons.ts` | modify | Re-export the `PencilSparkles` icon for the AI renaming submenu and the clipboard-copy icon for Export prompt. |
-| `webview-ui/styles.css` | modify | Style the AI prompt batch dialog. |
+| `webview-ui/styles.css` | modify | Style the AI prompt batch dialog, including visual hierarchy for context, counts, controls, and the empty-eligibility state. |
 | `test/unit/dbt/aiPrompt.test.ts` | create | Unit-test eligibility, batch selection, JSONL evidence, rules, and response contract. |
 | `test/unit/webview/aiPromptExport.test.ts` | create | Unit-test host-side model lookup, validation, clipboard call, and no-copy failure paths. |
 | `specs/ARCHITECTURE.md` | modify | Add new modules/components and amend the changed panel/protocol responsibilities. |
@@ -245,7 +248,13 @@ export function AiPromptExport(props: AiPromptExportProps): JSX.Element;
    Copy button and the exact message `No columns with source name and data type
    provenance are available to export.`
 3. **Batch dialog.** The dialog title is `Copy AI rename/type prompt`. It shows
-   `Eligible columns: <N>`. Its batch-size control has choices `25`, `50`,
+   the model name as context, plus visually emphasized `Eligible columns: <N>`
+   and `Batches: <total>` count values whose labels remain visually secondary.
+   Its batch-size and batch-number controls are visually grouped. When there
+   are no eligible columns, the exact message `No columns with source name and
+   data type provenance are available to export.` is shown in a visually
+   distinct explanatory callout; it is not styled as ordinary dialog text. Its
+   batch-size control has choices `25`, `50`,
    `100`, and `Custom`; `25` is initial. Choosing Custom reveals an integer
    input initially set to `25`. A batch-number integer input starts at `1` and
    is constrained to `1` through the currently displayed total. The dialog
@@ -335,6 +344,8 @@ a VS Code API. The pure generator and host orchestration are unit-tested.
   `PencilSparkles` and export clipboard-copy icons, copied prompt,
   source-table fallback, notification, final partial batch,
   source-mode absence, and no YAML modifications.
+  Confirm that the dialog distinguishes its model context, labels, numeric
+  counts, control group, and zero-eligible explanatory callout.
 
 ### Do not touch
 
@@ -358,7 +369,9 @@ a VS Code API. The pure generator and host orchestration are unit-tested.
 - [ ] Default and custom positive batch sizes select the requested model-order
       block and identify its batch number/total correctly.
 - [ ] A successful copy writes the prompt to the VS Code clipboard and displays
-      the exact success notification.
+       the exact success notification.
+- [ ] The batch dialog visually distinguishes model context, labels/counts,
+      controls, and the zero-eligible explanation.
 - [ ] Invalid/stale requests copy nothing and surface the specified error.
 - [ ] No YAML file is changed by prompt export.
 - [ ] No file outside the Implementation Plan Files table is modified.
