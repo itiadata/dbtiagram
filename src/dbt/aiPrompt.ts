@@ -63,8 +63,7 @@ export function aiPromptBatch(model: ModelDefinition, request: AiPromptRequest):
     throw new Error(`Batch number must be between 1 and ${total}.`);
   }
   const configMeta = model.config?.meta;
-  const sourceTable = nonBlankString(configMeta !== undefined && typeof configMeta === 'object' ? (configMeta as Record<string, unknown>).source_name : undefined);
-  if (sourceTable === undefined) throw new Error(`Model "${model.name}" has no source provenance to export.`);
+  const sourceTable = nonBlankString(configMeta !== undefined && typeof configMeta === 'object' ? (configMeta as Record<string, unknown>).source_name : undefined) ?? model.name;
   return {
     model: model.name,
     sourceTable,

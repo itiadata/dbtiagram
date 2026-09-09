@@ -18,13 +18,13 @@ describe('copyAiRenameTypePrompt', () => {
     expect(testHost.clipboard.calls).toHaveLength(1);
     expect(testHost.clipboard.calls[0]).toContain('Batch 1 of 1');
   });
-  it('does not copy for missing model or missing provenance', async () => {
+  it('uses the model name when model provenance is absent', async () => {
     const missing = host(undefined);
     await expect(copyAiRenameTypePrompt(missing, { model: 'costs_from_source', batchSize: 25, batchNumber: 1 })).rejects.toThrow('Model "costs_from_source" is no longer available.');
     const unprovenanced = host({ ...imported, config: undefined });
-    await expect(copyAiRenameTypePrompt(unprovenanced, { model: 'costs_from_source', batchSize: 25, batchNumber: 1 })).rejects.toThrow('Model "costs_from_source" has no source provenance to export.');
+    await copyAiRenameTypePrompt(unprovenanced, { model: 'costs_from_source', batchSize: 25, batchNumber: 1 });
     expect(missing.clipboard.calls).toHaveLength(0);
-    expect(unprovenanced.clipboard.calls).toHaveLength(0);
+    expect(unprovenanced.clipboard.calls[0]).toContain('Source table: costs_from_source');
   });
   it('does not copy an invalid batch', async () => {
     const testHost = host({ ...imported, columns: Array.from({ length: 60 }, (_, index) => ({ name: `c${index}`, meta: { source_name: `c${index}`, source_datatype: 'text' } })) });

@@ -48,7 +48,7 @@ import { ImportReport } from './ImportReport';
 import { useSourceImport } from './hooks/useSourceImport';
 import { SIDEBAR_DEFAULT_WIDTH } from './sidebar-constants';
 import { diagramModeLabels, type DiagramMode } from '../src/shared/diagramMode';
-import { Settings, SavePlus, Save, SaveCheck, StickyNotePlus, Grid3x3, ChartNoAxesGantt, BetweenHorizontalStart, Trash2, Waypoints, FileCode2, Import, Clipboard } from './icons';
+import { Settings, SavePlus, Save, SaveCheck, StickyNotePlus, Grid3x3, ChartNoAxesGantt, BetweenHorizontalStart, Trash2, Waypoints, FileCode2, Import, ClipboardCopy, PencilSparkles } from './icons';
 import { AiPromptExport } from './AiPromptExport';
 
 export function App(): JSX.Element {
@@ -393,7 +393,6 @@ export function App(): JSX.Element {
       const currentMode = columnDisplay.effectiveMode(model);
       const related = graph === null ? [] : relatedModels(graph, model);
       const missingRelated = related.filter((name) => !filter.visibleModels.has(name));
-      const sourceName = graph?.nodes.find((node) => node.id === model)?.sourceName;
       return [
         { label: `Reveal in ${labels.sourceFile}`, icon: <ChartNoAxesGantt size={16} />, onSelect: () => onOpenModelSource(model, column) },
         ...(mode === 'model' ? [{
@@ -420,7 +419,7 @@ export function App(): JSX.Element {
           })),
         },
         ...(mode === 'model' ? [{ label: 'Edit fields matrix', icon: <Grid3x3 size={16} />, onSelect: () => fieldsMatrix.openForModel(model) }] : []),
-        ...(mode === 'model' ? [{ label: 'AI renaming', items: [{ label: 'Export prompt', icon: <Clipboard size={16} />, disabled: sourceName === undefined, title: sourceName === undefined ? 'This table has no source provenance to export.' : undefined, onSelect: () => setAiPromptModel(model) }] }] : []),
+        ...(mode === 'model' ? [{ label: 'AI renaming', icon: <PencilSparkles size={16} />, items: [{ label: 'Export prompt', icon: <ClipboardCopy size={16} />, onSelect: () => setAiPromptModel(model) }] }] : []),
         { label: 'Remove from diagram', icon: <Trash2 size={16} />, onSelect: () => onRemoveTable(model) },
       ];
     },
