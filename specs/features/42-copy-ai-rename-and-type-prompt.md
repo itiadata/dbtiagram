@@ -1,7 +1,7 @@
 ---
 id: 42
 title: Copy an AI column rename and type prompt
-status: implemented
+status: done
 priority: high
 created: 2026-09-08
 owner: unassigned
