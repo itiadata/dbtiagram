@@ -1,7 +1,7 @@
 ---
 id: 42
 title: Copy an AI column rename and type prompt
-status: implemented
+status: approved
 priority: high
 created: 2026-09-08
 owner: unassigned
@@ -32,13 +32,13 @@ feature will validate, preview, and apply the AI's clipboard JSON response.
 **In scope**
 
 - A model-mode table context-menu submenu named **AI renaming**, containing an
-  **Export prompt** action.
+  **Export prompt** action available for every model.
 - A webview batch dialog that lets the user select a batch number and choose
   25, 50, or 100 eligible columns per batch, or enter a custom positive integer
   batch size.
-- Generation of a compact JSON Lines (JSONL) prompt from imported-model source
-  provenance, copied through the VS Code clipboard and confirmed with a VS Code
-  information notification.
+- Generation of a compact JSON Lines (JSONL) prompt from column provenance and
+  a source-table label, copied through the VS Code clipboard and confirmed with
+  a VS Code information notification.
 - A bundled, plain Markdown rules/instructions file whose initial content
   requires uppercase names and the `ID_`, `DES_`, and `TYP_` prefixes only.
 - A strict JSON response contract intended for the later clipboard-import
@@ -117,13 +117,14 @@ And it requires exactly one result for every input column and no other columns, 
 And each result has only source_name, new_name, and data_type
 ```
 
-### Do not offer prompt export for source diagrams or unimported models
+### Export an unimported model using its model name as the source table
 
 ```
 Given a source-mode diagram is open
 Then table context menus do not show "AI renaming"
 Given a model-mode table has no non-blank config.meta.source_name
-Then its "Export prompt" context-menu action is disabled with title "This table has no source provenance to export."
+When the user copies an AI prompt for that model
+Then its prompt identifies the model name as its source table
 ```
 
 ## Implementation Plan
@@ -137,14 +138,13 @@ Then its "Export prompt" context-menu action is disabled with title "This table 
 | `webview-ui/vscode.d.ts` | modify | Declare Markdown imports as strings for strict TypeScript. |
 | `vitest.config.ts` | create | Load bundled Markdown rules as text in unit tests. |
 | `src/dbt/aiPrompt.ts` | create | Pure eligibility, batching, JSON-safe evidence normalization, and deterministic prompt construction. |
-| `src/diagram/graph.ts` | modify | Expose non-blank imported source-table provenance on model-mode table nodes for menu availability. |
 | `src/shared/protocol.ts` | modify | Add the typed webview-to-host prompt-copy request. |
 | `src/vscode/clipboard.ts` | create | Isolate VS Code clipboard writes and success information notification. |
 | `src/webview/aiPromptExport.ts` | create | Pure host orchestration and validation against a narrow clipboard port. |
 | `src/webview/panel.ts` | modify | Resolve a model from the panel store, generate the requested batch, and invoke the clipboard wrapper in model mode only. |
 | `webview-ui/AiPromptExport.tsx` | create | Render the batch-size/batch-number dialog and post valid copy requests. |
 | `webview-ui/App.tsx` | modify | Own prompt-dialog visibility, expose the model-mode table-menu action, and mount the dialog. |
-| `webview-ui/icons.ts` | modify | Re-export the clipboard icon used by the new table-menu action. |
+| `webview-ui/icons.ts` | modify | Re-export the `PencilSparkles` icon for the AI renaming submenu and the clipboard-copy icon for Export prompt. |
 | `webview-ui/styles.css` | modify | Style the AI prompt batch dialog. |
 | `test/unit/dbt/aiPrompt.test.ts` | create | Unit-test eligibility, batch selection, JSONL evidence, rules, and response contract. |
 | `test/unit/webview/aiPromptExport.test.ts` | create | Unit-test host-side model lookup, validation, clipboard call, and no-copy failure paths. |
@@ -228,11 +228,11 @@ export function AiPromptExport(props: AiPromptExportProps): JSX.Element;
 
 1. **Entry point and availability.** Add an `AI renaming` submenu to the
    existing table/column context menu in model mode only. Its sole child is
-   `Export prompt`, with a clipboard icon. It operates on the containing table
-   even when opened from a column row. `Export prompt` is enabled only when that
-   model's `config.meta.source_name` is a non-blank string; otherwise it remains
-   visible but disabled with the exact title `This table has no source provenance
-   to export.` Source-mode menus contain no `AI renaming` submenu. Do not render
+   `Export prompt`; `AI renaming` uses the `PencilSparkles` icon and `Export
+   prompt` uses the clipboard-copy icon. It operates on the containing table
+   even when opened from a column row. `Export prompt` is
+   enabled for every model. Source-mode menus contain no `AI renaming` submenu.
+   Do not render
    an `Import JSON prompt output` item or any other placeholder. Selecting an
    enabled `Export prompt` item opens the batch dialog; it does not copy
    immediately.
@@ -257,9 +257,8 @@ export function AiPromptExport(props: AiPromptExportProps): JSX.Element;
    throws `Model "<name>" is no longer available.` A non-integer or less-than-1
    batch size throws `Batch size must be a positive integer.` A non-integer,
    less-than-1, or greater-than-total batch number throws `Batch number must be
-   between 1 and <total>.` A model lacking table provenance throws `Model
-   "<name>" has no source provenance to export.` A model with no eligible
-   columns throws `Model "<name>" has no eligible columns to export.` Errors
+   between 1 and <total>.` A model with no eligible columns throws `Model
+   "<name>" has no eligible columns to export.` Errors
    travel through the existing `diagram:error` message and never write the
    clipboard.
 5. **Prompt form.** `aiPromptRules.md` is imported as bundled text, so editing
@@ -267,8 +266,9 @@ export function AiPromptExport(props: AiPromptExportProps): JSX.Element;
    extension builds. Its initial rules say exactly: proposed names must be
    uppercase; identifier columns use `ID_`; description/text columns use
    `DES_`; type/category columns use `TYP_`; and no other prefixes are allowed.
-   The generated prompt appends: model, source table, `Batch <number> of
-   <total>`, a one-time JSONL legend, one JSON object per eligible column in the
+   The generated prompt appends: model, source table (the non-blank
+   `config.meta.source_name` when present, otherwise the model name), `Batch
+   <number> of <total>`, a one-time JSONL legend, one JSON object per eligible column in the
    selected batch, and the strict response schema/instructions below. The rules
    file must also tell the AI to infer semantic category from names,
    descriptions, types, and samples, and not from row position.
@@ -317,10 +317,10 @@ export function AiPromptExport(props: AiPromptExportProps): JSX.Element;
 | `test/unit/dbt/aiPrompt.test.ts` | `normalizes non-JSON metadata without invalid JSONL` | samples `[{ code: 'A' }, Infinity]` and length `{ value: 10 }` | parsed JSONL has `v: ['{"code":"A"}', 'Infinity']` and `l: '{"value":10}'` |
 | `test/unit/dbt/aiPrompt.test.ts` | `rejects invalid batch requests` | 60 eligible columns with batch sizes `0`, `1.5`, or batch number `3` at size `30` | throws respectively `Batch size must be a positive integer.` and `Batch number must be between 1 and 2.` |
 | `test/unit/webview/aiPromptExport.test.ts` | `copies a generated prompt for a current model` | host finds provenance-backed `costs_from_source`; request `{ model: 'costs_from_source', batchSize: 25, batchNumber: 1 }` | clipboard `copy` is called once with a prompt containing `Batch 1 of 1` |
-| `test/unit/webview/aiPromptExport.test.ts` | `does not copy for missing model or missing provenance` | host has no named model; then model without table source name | rejects with `Model "costs_from_source" is no longer available.`; then `Model "costs_from_source" has no source provenance to export.`; copy calls `0` |
+| `test/unit/webview/aiPromptExport.test.ts` | `uses the model name when model provenance is absent` | model `costs_from_source` with eligible columns and no table source name | clipboard prompt contains `Source table: costs_from_source` |
 | `test/unit/webview/aiPromptExport.test.ts` | `does not copy an invalid batch` | 60 eligible columns; request batch size `30`, batch number `3` | rejects `Batch number must be between 1 and 2.` and copy calls `0` |
 
-The context-menu placement/disabled title, dialog interaction/dismissal, native
+The context-menu placement/icon, dialog interaction/dismissal, native
 clipboard behavior, and VS Code information notification are covered by Manual
 Verify because the project has no webview component harness and the clipboard is
 a VS Code API. The pure generator and host orchestration are unit-tested.
@@ -329,11 +329,12 @@ a VS Code API. The pure generator and host orchestration are unit-tested.
 
 - `npm run verify` — strict typecheck and all unit suites must pass.
 - `npm test` — unit and VS Code integration suites must pass before commit.
-- Manual Verify (F5): import a source table; open its table and column context
-  menus; copy batches using 25, 50, 100, and a custom size; paste each result
-  into a text editor and AI chat; confirm the copied prompt, notification,
-  final partial batch, disabled unimported-model state, source-mode absence, and
-  no YAML modifications.
+- Manual Verify (F5): open an imported and unimported model table and column
+  context menus; copy batches using 25, 50, 100, and a custom size; paste each
+  result into a text editor and AI chat; confirm the AI-renaming
+  `PencilSparkles` and export clipboard-copy icons, copied prompt,
+  source-table fallback, notification, final partial batch,
+  source-mode absence, and no YAML modifications.
 
 ### Do not touch
 
@@ -348,8 +349,8 @@ a VS Code API. The pure generator and host orchestration are unit-tested.
 
 ## Acceptance Criteria
 
-- [ ] Imported provenance-backed tables offer a batchable **AI renaming > Export
-      prompt** action only in model mode; no import-output placeholder is shown.
+- [ ] All models offer a batchable **AI renaming > Export prompt** action only
+      in model mode; no import-output placeholder is shown.
 - [ ] The copied prompt uses compact JSONL evidence, editable bundled Markdown
       rules, and the specified strict JSON response contract.
 - [ ] Columns without both required source name and source data type provenance
