@@ -21,6 +21,7 @@ import {
   setFkVirtualOnModel,
 } from './foreignKey';
 import type { ModelDefinition } from '../types';
+import { applyAiPromptImport } from './aiPromptImport';
 
 export { EditError };
 export type { ApplyEditResult, ModelEdit };
@@ -84,5 +85,7 @@ export function applyEdit(models: ModelDefinition[], edit: ModelEdit): ApplyEdit
       );
     case 'removeForeignKey':
       return mapModel(models, edit.model, (m) => removeFkFromModel(m, edit.fk));
+    case 'applyAiPromptImport':
+      return applyAiPromptImport(models, edit.model, edit.columns);
   }
 }

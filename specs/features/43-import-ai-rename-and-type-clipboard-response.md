@@ -1,7 +1,7 @@
 ---
 id: 43
 title: Import an AI rename and type clipboard response
-status: approved
+status: implemented
 priority: high
 created: 2026-09-09
 owner: unassigned

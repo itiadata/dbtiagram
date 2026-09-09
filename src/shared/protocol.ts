@@ -86,6 +86,7 @@ export type MessageToExtension =
   | { type: 'app:checkForUpdates' }
   | { type: 'sourceImport:start' }
   | { type: 'aiPrompt:copy'; model: string; batchSize: number; batchNumber: number }
+  | { type: 'aiPrompt:import'; model: string }
   /** Explicit "Save diagram" action; prompts for a path when none is active. */
   | { type: 'layout:save'; layout: DiagramLayout }
   /**

@@ -8,6 +8,7 @@
  * its own feature later.
  */
 import type { ForeignKeyDescriptor } from '../types';
+import type { AiPromptImportColumn } from '../aiPromptImport';
 
 export type ModelEdit =
   | { kind: 'setModelName'; model: string; name: string }
@@ -45,4 +46,5 @@ export type ModelEdit =
       toColumns: string[];
       virtual: boolean;
     }
-  | { kind: 'removeForeignKey'; model: string; fk: ForeignKeyDescriptor };
+  | { kind: 'removeForeignKey'; model: string; fk: ForeignKeyDescriptor }
+  | { kind: 'applyAiPromptImport'; model: string; columns: AiPromptImportColumn[] };

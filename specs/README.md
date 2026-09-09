@@ -60,7 +60,7 @@ up-to-date spec in `specs/features/`.
 | 40  | Add a source.yml diagram mode | Done |
 | 41  | Import source tables as models | Done |
 | 42  | Copy an AI column rename and type prompt | Done |
-| 43  | Import an AI rename and type clipboard response | Approved |
+| 43  | Import an AI rename and type clipboard response | Implemented |
 
 Status values: `draft` → `approved` → `implemented` → `done`.
 

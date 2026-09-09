@@ -43,6 +43,7 @@ lines** under `test/unit/` (see `specs/features/17-modular-source-layout.md`).
 | `src/dbt/sourceEdit.ts` | pure | Forced-virtual source table edits. | `applySourceEdit` |
 | `src/dbt/importSource.ts` | pure | Collision-safe source-table conversion, source provenance and universal column metadata prefixing, virtual-key promotion to real constraints/tests, FK rewriting, destination append, and broken-FK reporting (spec 41). | `nextImportedModelName`, `importSourceTables`, `SourceImportResult`, `BrokenImportedForeignKey` |
 | `src/dbt/aiPrompt.ts` | pure | Selects provenance-backed columns, validates batch requests, normalizes evidence, and builds deterministic AI rename/type JSONL prompts (spec 42). | `eligibleAiPromptColumns`, `aiPromptBatch`, `buildAiRenameTypePrompt`, `AiPromptRequest`, `AiPromptBatch` |
+| `src/dbt/aiPromptImport.ts` | pure | Decodes and validates AI rename/type clipboard responses against current provenance-backed columns and filters naming conflicts (spec 43). | `planAiRenameTypeImport`, `AiPromptImportColumn`, `AiPromptImportPlan` |
 | `src/dbt/modelStore.ts` | pure | In-memory set of loaded model.yml files: upsert, text change, delete, rename, and redistribution of edited models. | `createModelStore`, `ModelStore`, `upsertRecord`, `applyTextChange`, `applyFileDeleted`, `applyFileRenamed`, `distributeEditedModels`, `replaceModelStore`, `ModelFileRecord`, `LoadedModelFile`, `FailedModelFile` |
 | `src/dbt/edit/index.ts` | pure | Single entry point that dispatches a `ModelEdit` to the right handler. **All mutations go through here.** | `applyEdit` |
 | `src/dbt/edit/types.ts` | pure | The discriminated union of every supported edit. | `ModelEdit` |
@@ -54,7 +55,8 @@ lines** under `test/unit/` (see `specs/features/17-modular-source-layout.md`).
 `createForeignKey`, `applyForeignKeyTarget`, `applyForeignKeyColumns`, `setFkVirtualOnModel`, `removeFkFromModel` |
 | `src/dbt/edit/column.ts` | pure | Column-level edits: rename (with FK re-pointing), data type, description, and 
 one `config.meta` key at a time (spec 27). | `mapColumn`, `setColumnDataType`, `setColumnDescription`, 
-`setColumnMetaValue`, `renameColumn` |
+ `setColumnMetaValue`, `renameColumn` |
+| `src/dbt/edit/aiPromptImport.ts` | pure | Applies accepted bulk AI rename/type results through existing column mutation primitives (spec 43). | `applyAiPromptImport` |
 
 ## `src/diagram/` — graph and layout (pure)
 
@@ -112,7 +114,7 @@ via `ExtensionContext.workspaceState` (spec 27). | `readMatrixColumnPrefs`, `wri
 | `src/vscode/updateCli.ts` | vscode-facing | Executes the authenticated GitHub CLI release query/download and a silent VS Code CLI VSIX installation for private updates (spec 39). | `fetchLatestRelease`, `downloadRelease`, `installVsix` |
 | `src/vscode/updateCheck.ts` | vscode-facing | Adapts extension metadata, storage, prompts, reload, and update CLI calls to the pure update workflow; skips external checks in test hosts (spec 39). | `installedExtensionVersion`, `checkForUpdates`, `UpdateCheckOutcome` |
 | `src/vscode/sourceImportPicker.ts` | vscode-facing | Runs the source-file, source-table, and destination-file Quick Pick sequence (spec 41). | `pickSourceImport` |
-| `src/vscode/clipboard.ts` | vscode-facing | Writes AI rename/type prompts to the VS Code clipboard and shows the success notification (spec 42). | `vscodeAiPromptClipboard`, `showAiPromptCopied` |
+| `src/vscode/clipboard.ts` | vscode-facing | Reads/writes AI rename/type clipboard text and displays native import/export notifications (specs 42/43). | `vscodeAiPromptClipboard`, `showAiPromptCopied`, `vscodeAiPromptImportClipboard`, `vscodeAiPromptImportNotifier` |
 
 ## `src/webview/` — extension-host side of the panel
 
@@ -126,6 +128,7 @@ via `ExtensionContext.workspaceState` (spec 27). | `readMatrixColumnPrefs`, `wri
 | `src/webview/layoutMessages.ts` | pure | Layout-related message handling against a small `LayoutHost` port, so it stays testable. Manual save (spec 22): `cachePendingLayout` only caches the webview's latest layout in host memory, never writes to disk. | `publishActiveLayout`, `openLayout`, `sendActiveLayout`, `saveLayout`, `cachePendingLayout`, `ActiveLayout`, `LayoutHost` |
 | `src/webview/sourceImport.ts` | pure | Orchestrates source loading, selection, conversion, persistence, and reporting (spec 41). | `runSourceImport`, `SourceImportHost`, `SourceImportCandidate`, `SourceImportSelection` |
 | `src/webview/aiPromptExport.ts` | pure | Resolves a current model, builds an AI rename/type prompt, and copies it through a narrow clipboard port (spec 42). | `copyAiRenameTypePrompt`, `AiPromptExportHost`, `AiPromptClipboard` |
+| `src/webview/aiPromptImport.ts` | pure | Orchestrates clipboard response reading, validation, bulk persistence, and completion reports through narrow ports (spec 43). | `importAiRenameTypeClipboardResponse`, `AiPromptImportHost`, `AiPromptImportClipboard`, `AiPromptImportNotifier` |
 | `src/extension.ts` | vscode-facing | `activate` / `deactivate` only — command registration and disposal. | `activate`, `deactivate` |
 
 ## `webview-ui/` — React front-end (webview)
