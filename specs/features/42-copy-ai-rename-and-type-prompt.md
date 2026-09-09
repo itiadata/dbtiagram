@@ -1,7 +1,7 @@
 ---
 id: 42
 title: Copy an AI column rename and type prompt
-status: implemented
+status: approved
 priority: high
 created: 2026-09-08
 owner: unassigned
@@ -251,9 +251,10 @@ export function AiPromptExport(props: AiPromptExportProps): JSX.Element;
    the model name as context, plus visually emphasized `Eligible columns: <N>`
    and `Batches: <total>` count values whose labels remain visually secondary.
    Its batch-size and batch-number controls are visually grouped. When there
-   are no eligible columns, the exact message `No columns with source name and
-   data type provenance are available to export.` is shown in a visually
-   distinct explanatory callout; it is not styled as ordinary dialog text. Its
+   are no eligible columns, the exact message `No eligible columns. Export
+   requires each column to have both config.meta.source_name and
+   config.meta.source_datatype.` is shown in a visually distinct explanatory
+   callout; it is not styled as ordinary dialog text. Its
    batch-size control has choices `25`, `50`,
    `100`, and `Custom`; `25` is initial. Choosing Custom reveals an integer
    input initially set to `25`. A batch-number integer input starts at `1` and
