@@ -33,7 +33,7 @@ export function AiPromptExport({ model, eligibleColumnCount, onCopy, onClose }: 
       <p><span>Eligible columns</span><strong>{eligibleColumnCount}</strong></p>
       <p><span>Batches</span><strong>{total}</strong></p>
     </div>
-    {eligibleColumnCount === 0 && <p className="ai-prompt-dialog__empty">No columns with source name and data type provenance are available to export.</p>}
+    {eligibleColumnCount === 0 && <p className="ai-prompt-dialog__empty">No eligible columns. Export requires each column to have both config.meta.source_name and config.meta.source_datatype.</p>}
     <div className="ai-prompt-dialog__controls">
       <label><span>Columns per batch</span><select value={choice} onChange={(event) => setChoice(event.target.value)}><option value="25">25</option><option value="50">50</option><option value="100">100</option><option value="custom">Custom</option></select></label>
       {choice === 'custom' && <label><span>Custom batch size</span><input type="number" min="1" value={custom} onChange={(event) => setCustom(event.target.value)} /></label>}
