@@ -18,10 +18,10 @@ export interface ColumnDisplayOption {
 
 /** Ordered options for every UI surface (context menu, sidebar, toolbar). */
 export const COLUMN_DISPLAY_OPTIONS: readonly ColumnDisplayOption[] = [
-  { value: 'nameOnly', label: 'Table name only' },
-  { value: 'pkOnly', label: 'Primary keys only' },
-  { value: 'pkAndFk', label: 'Primary + foreign keys' },
   { value: 'all', label: 'All columns' },
+  { value: 'pkAndFk', label: 'Primary + foreign keys' },
+  { value: 'pkOnly', label: 'Primary keys only' },
+  { value: 'nameOnly', label: 'Table name only' },
 ];
 
 const VALID_MODES: ReadonlySet<string> = new Set(

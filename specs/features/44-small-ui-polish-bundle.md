@@ -1,7 +1,7 @@
 ---
 id: 44
 title: Polish diagram icons, source notes, toolbars, table names, and display ordering
-status: approved
+status: implemented
 priority: medium
 created: 2026-09-14
 owner: unassigned

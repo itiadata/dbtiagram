@@ -6,6 +6,7 @@
   "publisher": "your-publisher-name",
   "license": "UNLICENSED",
   "private": true,
+  "icon": "media/diagram-project.png",
   "engines": {
     "vscode": "^1.90.0"
   },
@@ -30,19 +31,28 @@
         "command": "dbtiagram.open",
         "title": "Open dbt Model Diagram",
         "category": "dbt Diagram",
-        "icon": "$(database)"
+        "icon": {
+          "light": "media/diagram-project.svg",
+          "dark": "media/diagram-project-dark.svg"
+        }
       },
       {
         "command": "dbtiagram.openSource",
         "title": "Open dbt Source Diagram",
         "category": "dbt Diagram",
-        "icon": "$(database)"
+        "icon": {
+          "light": "media/diagram-project.svg",
+          "dark": "media/diagram-project-dark.svg"
+        }
       },
       {
         "command": "dbtiagram.openLayout",
         "title": "Open dbt Diagram",
         "category": "dbt Diagram",
-        "icon": "$(database)"
+        "icon": {
+          "light": "media/diagram-project.svg",
+          "dark": "media/diagram-project-dark.svg"
+        }
       }
     ],
     "menus": {

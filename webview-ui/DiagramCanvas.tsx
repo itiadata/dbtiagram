@@ -531,22 +531,14 @@ export function DiagramCanvas({
       <Controls />
       <Panel position="top-left">
         <div className="canvas-toolbar">
-          {onOpenFieldsMatrix !== undefined && <button
+          <button
             type="button"
             className="panel-button panel-button--secondary"
             onClick={onAddNote}
             title="Add note"
           >
             <StickyNotePlus size={16} />
-          </button>}
-          {onImportSourceModels !== undefined && <button
-            type="button"
-            className="panel-button panel-button--secondary"
-            onClick={onImportSourceModels}
-            title="Import models from source yml"
-          >
-            <Import size={16} />
-          </button>}
+          </button>
           <button
             type="button"
             className="panel-button panel-button--secondary"
@@ -555,14 +547,26 @@ export function DiagramCanvas({
           >
             <Cable size={16} />
           </button>
-          <button
-            type="button"
-            className="panel-button panel-button--secondary"
-            onClick={onOpenFieldsMatrix}
-            title="Edit fields matrix"
-          >
-            <Grid3x3 size={16} />
-          </button>
+          {onOpenFieldsMatrix !== undefined && (
+            <button
+              type="button"
+              className="panel-button panel-button--secondary"
+              onClick={onOpenFieldsMatrix}
+              title="Edit fields matrix"
+            >
+              <Grid3x3 size={16} />
+            </button>
+          )}
+          {onImportSourceModels !== undefined && (
+            <button
+              type="button"
+              className="panel-button panel-button--secondary"
+              onClick={onImportSourceModels}
+              title="Import models from source yml"
+            >
+              <Import size={16} />
+            </button>
+          )}
         </div>
       </Panel>
       <Panel position="top-right">

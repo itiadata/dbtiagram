@@ -134,7 +134,7 @@ function TableNodeComponent({ id, data }: NodeProps<FlowNode>): JSX.Element {
       {renderHandle(HEADER_ANCHOR, 'right', 'source')}
       <div
         className={`table-node__title${selectedTable ? ' table-node__title--selected' : ''}`}
-        title={data.description}
+        title={data.description === undefined ? data.label : `${data.label}\n${data.description}`}
         onClick={() => interaction?.onTableSelect(id)}
         onDoubleClick={(event) => {
           event.stopPropagation();
@@ -154,7 +154,7 @@ function TableNodeComponent({ id, data }: NodeProps<FlowNode>): JSX.Element {
             onCancel={() => setEditing(null)}
           />
         ) : (
-          data.label
+          <span className="table-node__title-text">{data.label}</span>
         )}
       </div>
       {data.columns.map((column, index) => {

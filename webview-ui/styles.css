@@ -998,10 +998,18 @@ body {
   background: var(--card-header);
   border-bottom: 1px solid var(--border);
   overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
   padding: 0 8px;
   cursor: pointer;
+}
+
+.table-node__title-text {
+  min-width: 0;
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow-wrap: anywhere;
+  text-align: center;
 }
 
 .table-node__title--selected {
