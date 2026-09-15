@@ -175,6 +175,10 @@ function TableNodeComponent({ id, data }: NodeProps<FlowNode>): JSX.Element {
         const isPk = pkColumns.includes(column.name);
         const editingCell =
           editing?.kind === 'column' && editing.column === column.name ? editing.cell : null;
+        const insertionTarget = (clientY: number, row: HTMLDivElement) =>
+          index === data.columns.length - 1 && clientY >= row.getBoundingClientRect().top + ROW_HEIGHT / 2
+            ? { model: id }
+            : { model: id, before: column.name };
         return (
           <div
             key={column.name}
@@ -195,13 +199,13 @@ function TableNodeComponent({ id, data }: NodeProps<FlowNode>): JSX.Element {
             onDragOver={(event) => {
               event.preventDefault();
               event.stopPropagation();
-              interaction?.onColumnDragOver({ model: id, before: column.name });
+              interaction?.onColumnDragOver(insertionTarget(event.clientY, event.currentTarget));
             }}
             onDragLeave={() => interaction?.onColumnDragLeave()}
             onDrop={(event) => {
               event.preventDefault();
               event.stopPropagation();
-              interaction?.onColumnDrop({ model: id, before: column.name }, event.ctrlKey);
+              interaction?.onColumnDrop(insertionTarget(event.clientY, event.currentTarget), event.ctrlKey);
             }}
             onDragEnd={() => interaction?.onColumnDragEnd()}
             onContextMenu={(event) => {
@@ -299,7 +303,7 @@ function TableNodeComponent({ id, data }: NodeProps<FlowNode>): JSX.Element {
         );
       })}
       {interaction?.insertionTarget?.model === id && interaction.insertionTarget.before === undefined && (
-        <div className="table-node__insert-after" style={{ top: HEADER_HEIGHT + data.columns.length * ROW_HEIGHT }} />
+        <div className="table-node__insert-after" style={{ top: HEADER_HEIGHT + data.columns.length * ROW_HEIGHT - 2 }} />
       )}
     </div>
   );
