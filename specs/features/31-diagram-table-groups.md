@@ -36,7 +36,9 @@ group data model lands in a new sibling module rather than growing it.
 
 **In scope**
 
-- A `groups` section in the saved layout file: id, name, rectangle, member models.
+- A `groups` section in the saved layout file: id, name, rectangle, member table IDs.
+- Identical group behavior in model and source diagrams; source members retain
+  their qualified table IDs (for example, `finance.orders`).
 - A toolbar button (Lucide `Group`) next to "Add note" that starts a
   click-and-drag marquee; releasing creates a group containing the tables under
   the rectangle, then leaves the mode.
@@ -45,7 +47,7 @@ group data model lands in a new sibling module rather than growing it.
 - Membership by geometry: dragging a table into the box adds it, dragging it out
   removes it.
 - Moving and resizing the box.
-- Renaming a group and removing a group (models are never removed) via its
+- Renaming a group and removing a group (tables are never removed) via its
   right-click menu.
 - Groups participating in the dirty flag and the manual save (spec 22).
 
@@ -146,6 +148,7 @@ And it still contains "orders"
 | Path | Action | Responsibility |
 |------|--------|----------------|
 | `src/diagram/layoutGroups.ts` | create | The `DiagramGroup` record, its constants, id/name minting, parse/normalize validation, and the pure geometry that decides membership. |
+| `src/diagram/layoutFileNames.ts` | create | Filename/suffix helpers extracted from `layoutFile.ts` so group support stays within the small-module rule; re-exported by `layoutFile.ts`. |
 | `src/diagram/layoutFile.ts` | modify | Add `groups` to `DiagramLayout` and `AppliedLayout`; parse it via `parseGroups`; serialize it; accept it in `buildLayout`; pass it through `applyLayout`; re-export the group symbols so the module path stays the single import site. |
 | `webview-ui/group-create-state.ts` | create | Pure marquee state machine for the "Add group" gesture. |
 | `webview-ui/group-label.ts` | create | Pure label placement: keep the label inside the on-screen part of the box. |
@@ -159,18 +162,18 @@ And it still contains "orders"
 | `webview-ui/layout-dirty.ts` | modify | Add `groups` to `LayoutSnapshot` and to the comparison. |
 | `webview-ui/icons.ts` | modify | Re-export `Group` from `lucide-react`. |
 | `webview-ui/styles.css` | modify | `.group`, `.group__label`, `.group__grip`, `.group-marquee` styling. |
-| `specs/ARCHITECTURE.md` | modify | Rows for the six new modules; updated responsibilities for the five modified ones. |
+| `specs/ARCHITECTURE.md` | modify | Rows for all new modules and updated responsibilities for modified modules. |
 | `test/unit/diagram/layoutGroups.test.ts` | create | Unit tests for parsing, normalization, membership and name minting. |
 | `test/unit/diagram/layoutFile.test.ts` | modify | Round-trip and pass-through tests for the `groups` key. |
 | `test/unit/webview/groupCreateState.test.ts` | create | Unit tests for the marquee state machine. |
 | `test/unit/webview/groupLabel.test.ts` | create | Unit tests for label placement. |
 | `test/unit/webview/layout-dirty.test.ts` | modify | Groups affect the dirty flag. |
+| `test/unit/webview/layoutMessages.test.ts` | modify | Update typed layout fixtures and verify groups pass through existing model/source layout messages unchanged. |
 
 ### Signatures
 
 ```ts
 // src/diagram/layoutGroups.ts  (pure — must not import `vscode`)
-import type { DiagramLayoutTable } from './layoutFile';
 
 /** A named rectangle enclosing tables. Purely visual; never touches dbt files. */
 export interface DiagramGroup {
@@ -180,8 +183,14 @@ export interface DiagramGroup {
   y: number;
   width: number;
   height: number;
-  /** Member model names, ascending. Derived from geometry, persisted for filtered-out models. */
+  /** Member table IDs, ascending. Derived from geometry, persisted for filtered-out tables. */
   models: string[];
+}
+
+export interface GroupTablePosition {
+  name: string;
+  x: number;
+  y: number;
 }
 
 export const GROUP_MIN_WIDTH = 160;
@@ -205,7 +214,7 @@ export function createGroup(
   id: string,
   name: string,
   rect: GroupRect,
-  tables: readonly DiagramLayoutTable[],
+  tables: readonly GroupTablePosition[],
 ): DiagramGroup;
 
 /**
@@ -214,7 +223,7 @@ export function createGroup(
  */
 export function groupMembers(
   rect: GroupRect,
-  tables: readonly DiagramLayoutTable[],
+  tables: readonly GroupTablePosition[],
 ): string[];
 
 /**
@@ -224,7 +233,7 @@ export function groupMembers(
  */
 export function syncGroupModels(
   group: DiagramGroup,
-  tables: readonly DiagramLayoutTable[],
+  tables: readonly GroupTablePosition[],
 ): string[];
 
 /** Rounded coordinates, clamped sizes, ascending by id — the persisted form. */
@@ -238,6 +247,14 @@ export function parseGroups(
 ```
 
 ```ts
+// src/diagram/layoutFileNames.ts  (pure — must not import `vscode`)
+export const LAYOUT_FILE_SUFFIX = '.dbtiagram.yml';
+export function isLayoutFilePath(fsPath: string | undefined): boolean;
+export function defaultLayoutName(fsPath: string): string;
+export function stripLayoutSuffix(name: string): string;
+```
+
+```ts
 // src/diagram/layoutFile.ts  (pure)
 export type { DiagramGroup, GroupRect } from './layoutGroups';
 export {
@@ -247,6 +264,7 @@ export {
 
 export interface DiagramLayout {
   version: typeof LAYOUT_VERSION;
+  mode: DiagramMode;
   name: string;
   tables: DiagramLayoutTable[];
   notes: DiagramNote[];
@@ -268,6 +286,7 @@ export interface AppliedLayout {
 
 export function buildLayout(
   name: string,
+  mode: DiagramMode,
   visible: readonly { name: string; x: number; y: number }[],
   notes?: readonly DiagramNote[],
   columnDisplay?: { default: ColumnDisplayMode; overrides: ReadonlyMap<string, ColumnDisplayMode> },
@@ -327,7 +346,8 @@ export function groupLabelOffset(
 
 ```ts
 // webview-ui/hooks/useGroupCreateMode.ts  (webview)
-import type { GroupCreateState, GroupPoint, GroupRect } from '../group-create-state';
+import type { GroupCreateState, GroupPoint } from '../group-create-state';
+import type { GroupRect } from '../../src/diagram/layoutFile';
 
 export interface GroupCreateModeState {
   state: GroupCreateState;
@@ -354,18 +374,28 @@ import type { DiagramGroup, DiagramLayoutTable, GroupRect } from '../../src/diag
 
 export interface GroupsState {
   groups: DiagramGroup[];
-  groupNodes: Node[];
+  groupNodes: Node<GroupNodeData, 'group'>[];
   groupIds: ReadonlySet<string>;
-  applyGroupNodeChanges: (changes: NodeChange[]) => void;
+  /** Increments for user mutations, but not while seeding an opened layout. */
+  mutationRevision: number;
+  applyGroupNodeChanges: (
+    changes: NodeChange<Node<GroupNodeData, 'group'>>[],
+    tables: readonly DiagramLayoutTable[],
+  ) => void;
   /** Creates a group over `rect` and returns its new id. */
-  addGroup: (rect: GroupRect) => string;
+  addGroup: (rect: GroupRect, tables: readonly DiagramLayoutTable[]) => string;
   renameGroup: (id: string, name: string) => void;
   removeGroup: (id: string) => void;
-  resizeGroup: (id: string, width: number, height: number) => void;
+  resizeGroup: (
+    id: string,
+    width: number,
+    height: number,
+    tables: readonly DiagramLayoutTable[],
+  ) => void;
   /** Recomputes every group's members from the current table positions. */
   syncMembers: (tables: readonly DiagramLayoutTable[]) => void;
   /** Seeds from an opened layout. */
-  applyLayoutGroups: (groups: DiagramGroup[]) => void;
+  applyLayoutGroups: (groups: readonly DiagramGroup[]) => void;
   /** The group whose label is in inline-rename mode, or null. */
   renameTarget: string | null;
   beginRename: (id: string) => void;
@@ -379,6 +409,8 @@ export function useGroups(): GroupsState;
 // webview-ui/GroupNode.tsx  (webview)
 export interface GroupNodeData extends Record<string, unknown> {
   group: DiagramGroup;
+  viewport: GroupRect;
+  zoom: number;
   renaming: boolean;
   onRename: (id: string, name: string) => void;
   onBeginRename: (id: string) => void;
@@ -396,6 +428,35 @@ export function GroupMarquee({ rect }: GroupMarqueeProps): JSX.Element;
 ```
 
 ```ts
+// webview-ui/DiagramCanvas.tsx  (webview; additions to DiagramCanvasProps)
+groupNodes: Node<GroupNodeData, 'group'>[];
+groupIds: ReadonlySet<string>;
+onGroupNodeChanges: (changes: NodeChange<Node<GroupNodeData, 'group'>>[]) => void;
+groupCreateActive: boolean;
+groupMarquee: GroupRect | null;
+onStartGroupCreate: () => void;
+onGroupPointerDown: (point: GroupPoint) => void;
+onGroupPointerMove: (point: GroupPoint) => void;
+onGroupPointerUp: (point: GroupPoint) => void;
+```
+
+```ts
+// webview-ui/hooks/useLayoutPersistence.ts  (webview)
+export interface PersistedGroupsState {
+  groups: readonly DiagramGroup[];
+  /** User-mutation revision; arms pending sync even when no table is visible. */
+  mutationRevision: number;
+}
+
+export function useLayoutPersistence(
+  mode: DiagramMode,
+  notes?: readonly DiagramNote[],
+  groups?: PersistedGroupsState,
+  columnDisplay?: { defaultMode: ColumnDisplayMode; overrides: Map<string, ColumnDisplayMode> },
+): LayoutPersistenceState;
+```
+
+```ts
 // webview-ui/layout-dirty.ts  (webview — pure)
 export interface LayoutSnapshot {
   tables: DiagramLayoutTable[];
@@ -408,22 +469,26 @@ export interface LayoutSnapshot {
 
 ### Behavior notes
 
-1. **Layout file compatibility.** A missing or `null` `groups` key parses to `[]`,
+1. **Layout file compatibility.** Layout schema version remains `2`, with its
+   required `mode`; version-1 files still normalize to version 2/model exactly as
+   before. A missing or `null` `groups` key parses to `[]`,
    exactly like `notes`. A non-array raises
-   `Diagram file "groups" must be an array`. `LAYOUT_VERSION` stays `1` — the key
+   `Diagram file "groups" must be an array`. `LAYOUT_VERSION` stays `2` — the key
    is additive and older readers ignore it.
 2. **Per-entry validation** mirrors `parseNotes` message-for-message:
    - non-mapping entry → `Every entry in "groups" must be a mapping`
    - missing/empty `id` → `Every group entry needs an "id"`
-   - non-string `name` → `Group "<id>" needs a string "name"`
+   - present, non-null, non-string `name` → `Group "<id>" needs a string "name"`
    - non-numeric `x`/`y` → `Group "<id>" needs numeric "x" and "y"`
    - non-numeric `width`/`height` → `Group "<id>" needs numeric "width" and "height"`
-   - `models` present but not an array → `Group "<id>" needs a "models" array`
+   - `models` present (including `null`) but not an array → `Group "<id>" needs a "models" array`
    Non-string entries inside `models` are dropped silently (they cannot name a
    model). A duplicate `id` keeps the first entry and skips the rest, like notes.
-   A missing `name` becomes `''`; missing `width`/`height` fall back to the
+   A missing or `null` `name` becomes `''`; missing `models` becomes `[]`;
+   missing `width`/`height` fall back to the
    minimums; sizes are clamped to `GROUP_MIN_WIDTH`/`GROUP_MIN_HEIGHT` rather
-   than rejected.
+   than rejected. Every numeric field must be finite. Member IDs are
+   de-duplicated and sorted.
 3. **Serialization.** The `groups` key is omitted entirely when the list is empty,
    like `notes`. Key order per entry is `id, name, x, y, width, height, models`.
    Entries are sorted by `id` and coordinates rounded by `normalizeGroups`, so a
@@ -435,15 +500,19 @@ export interface LayoutSnapshot {
    the left/top and exclusive on the right/bottom. Using the header centre avoids
    depending on measured card heights, which vary with the column-display mode
    (spec 24). A table may belong to several overlapping groups; each lists it.
+   The identifier is the exact table node ID: a model name in model mode and a
+   qualified source-table ID in source mode. Group logic does not parse it.
 5. **Filtered-out models.** `syncGroupModels` is only ever handed the *currently
    visible* tables. Members that are not in that list are retained untouched, so
    filtering a model out of the diagram (spec 05) never silently drops it from a
    group.
-6. **Membership is recomputed, never edited by hand.** `App` calls
-   `groups.syncMembers(tables)` from the same `onPositionsChange` flow that feeds
-   layout persistence, so a table drag, a group drag, a group resize and an
-   auto-layout all converge on the same code path. There is no "add to group"
-   command.
+6. **Membership is recomputed, never edited by hand.** `App` retains the latest
+   table positions and calls `groups.syncMembers(tables)` from the same
+   `onPositionsChange` flow that feeds layout persistence. Group move/resize
+   handlers recompute against that same list because those operations do not
+   themselves move a table. Table drag, filter restoration, group drag, group
+   resize and auto-layout therefore converge on `syncGroupModels`. There is no
+   "add to group" command.
 7. **Z-order and hit-testing.** Group nodes carry `zIndex: -1` and are spread
    **first** into `renderedNodes`, before note nodes (`0`/`5`) and table nodes
    (forced `1`). The box body is `pointer-events: none` so clicks, pans and
@@ -457,8 +526,10 @@ export interface LayoutSnapshot {
    surprising rule given that membership is defined by geometry, and it is
    symmetric with dragging a table out.
 9. **Label placement** uses `groupLabelOffset` against the current viewport
-   rectangle in flow coordinates, derived from `useViewport()` and the canvas
-   container size, with the label's pixel size divided by the zoom. The clamp
+   rectangle in flow coordinates. `DiagramCanvas` observes its container with
+   `ResizeObserver`, combines that size with `useViewport()`, and supplies the
+   viewport rectangle plus zoom to each group node. `GroupNode` measures its
+   label in pixels and divides by zoom before calculating the offset. The clamp
    order is: intersect first, then clamp into the box; when the box is entirely
    off-screen the offset is `{ x: 0, y: 0 }` (the box is invisible anyway, so the
    value only matters for determinism). A box narrower or shorter than the label
@@ -469,7 +540,12 @@ export interface LayoutSnapshot {
     modifier, mirroring `--fk-create`. Pointer-down on the pane anchors the
     marquee, pointer-move updates it, pointer-up ends the mode. Panning is
     suppressed while armed (`panOnDrag={false}` on `<ReactFlow>` when
-    `groupCreateActive`), otherwise the drag would pan instead of drawing.
+    `groupCreateActive`), otherwise the drag would pan instead of drawing. A
+    marquee starts only from the actual empty `.react-flow__pane`, captures its
+    pointer through release, converts points through `screenToFlowPosition`, and
+    renders in a `ViewportPortal`. In both modes the toolbar begins Add note, Add
+    group, Add foreign key. Starting either group or FK mode cancels the other;
+    their state machines and Escape behavior remain otherwise unchanged.
 11. **Minimum size.** `endRect` returns no rectangle when the released width is
     below `GROUP_MIN_WIDTH` or the height below `GROUP_MIN_HEIGHT`; the state
     still returns to idle. This makes a stray click a harmless cancel rather than
@@ -486,15 +562,26 @@ export interface LayoutSnapshot {
 14. **Dirty flag.** `isLayoutDirty` compares `JSON.stringify(current.groups ?? [])`
     against `JSON.stringify(saved.groups ?? [])`, so a pre-feature saved snapshot
     (`groups === undefined`) does not report dirty against a diagram with no
-    groups.
-15. **`buildLayout`'s new parameter is fifth and optional**, so every existing
-    call site and unit test keeps compiling unchanged.
+    groups. A user-mutation revision also arms pending-layout cache sync when no
+    table is visible; applying an opened layout does not increment it, preserving
+    the existing first-render truncation guard.
+15. **`buildLayout`'s new parameter is sixth and optional**, after the required
+    diagram `mode`, so every existing call site and unit test keeps compiling
+    unchanged.
+16. **Both modes.** Creation, geometry, context menu, dirty state and persistence
+    are identical in model and source diagrams. Source members remain qualified
+    IDs. No group operation posts a `diagram:edit` message.
+17. **Fit behavior.** Auto-layout never moves a group. The subsequent React Flow
+    fit includes all rendered groups, notes and tables, matching the canvas's
+    existing all-node fit semantics.
+18. **React Flow interaction.** The group wrapper and body pass pointer events
+    through; its label and React Flow `NodeResizeControl` opt back in. The label
+    is the node `dragHandle`, and its rename input has the `nodrag` class.
 
 ### Tests
 
 | Test file | Test name | Input | Expected |
 |-----------|-----------|-------|----------|
-| `test/unit/diagram/layoutGroups.test.ts` | `normalizeRect handles a bottom-left drag` | `normalizeRect({x:100,y:100},{x:0,y:300})` | `{ x: 0, y: 100, width: 100, height: 200 }` |
 | `test/unit/diagram/layoutGroups.test.ts` | `groupMembers includes a table whose header centre is inside` | rect `{x:0,y:0,width:600,height:400}`, tables `[{name:'orders',x:10,y:10}]` | `['orders']` |
 | `test/unit/diagram/layoutGroups.test.ts` | `groupMembers excludes a table outside` | same rect, tables `[{name:'orders',x:1000,y:1000}]` | `[]` |
 | `test/unit/diagram/layoutGroups.test.ts` | `groupMembers sorts ascending` | rect covering both, tables `[{name:'orders',…},{name:'customers',…}]` | `['customers','orders']` |
@@ -506,10 +593,17 @@ export interface LayoutSnapshot {
 | `test/unit/diagram/layoutGroups.test.ts` | `parseGroups clamps a tiny size` | one entry `width: 4, height: 4` | `width: 160, height: 120` |
 | `test/unit/diagram/layoutGroups.test.ts` | `parseGroups keeps the first duplicate id` | two entries with `id: 'g-1'`, names `A` and `B` | one group named `'A'` |
 | `test/unit/diagram/layoutGroups.test.ts` | `normalizeGroups rounds and sorts` | `[{id:'g-2',x:1.4,…},{id:'g-1',…}]` | ids `['g-1','g-2']`, `x: 1` |
+| `test/unit/diagram/layoutGroups.test.ts` | `uses inclusive top-left and exclusive bottom-right boundaries` | header centres on each boundary | left/top IDs included; right/bottom IDs excluded |
+| `test/unit/diagram/layoutGroups.test.ts` | `preserves a qualified source table id` | inside table named `finance.orders` | `['finance.orders']` |
+| `test/unit/diagram/layoutGroups.test.ts` | `normalizes member ids` | duplicate strings plus a non-string | sorted unique strings; non-string dropped |
+| `test/unit/diagram/layoutGroups.test.ts` | `rejects non-finite geometry` | group with `x: Infinity` | throws the numeric-coordinate message |
 | `test/unit/diagram/layoutFile.test.ts` | `round-trips groups` | layout with one group, serialize then parse | deep-equals the original group |
 | `test/unit/diagram/layoutFile.test.ts` | `omits an empty groups key` | layout with `groups: []` | serialized text contains no `groups:` |
 | `test/unit/diagram/layoutFile.test.ts` | `parses a pre-feature file` | text with `tables` only | `layout.groups` is `[]` |
 | `test/unit/diagram/layoutFile.test.ts` | `applyLayout passes groups through` | layout with one group, `knownModels` empty | `applied.groups` deep-equals the layout's groups |
+| `test/unit/diagram/layoutFile.test.ts` | `round-trips a source group` | version-2 source layout with member `finance.orders` | mode and qualified member are unchanged |
+| `test/unit/diagram/layoutFile.test.ts` | `parses a version-1 group file` | version-1 layout containing `groups` | normalized version 2/model layout retains groups |
+| `test/unit/webview/groupCreateState.test.ts` | `normalizeRect handles a bottom-left drag` | `normalizeRect({x:100,y:100},{x:0,y:300})` | `{ x: 0, y: 100, width: 100, height: 200 }` |
 | `test/unit/webview/groupCreateState.test.ts` | `start arms the gesture` | `startGroupCreate()` | `{ active: true, anchor: null }` |
 | `test/unit/webview/groupCreateState.test.ts` | `beginRect anchors the marquee` | `beginRect({active:true,anchor:null},{x:5,y:5})` | `{ active: true, anchor: {x:5,y:5}, current: {x:5,y:5} }` |
 | `test/unit/webview/groupCreateState.test.ts` | `endRect returns the rectangle` | anchor `{0,0}`, up at `{400,300}` | `rect` `{x:0,y:0,width:400,height:300}`, `state` `{active:false}` |
@@ -522,14 +616,18 @@ export interface LayoutSnapshot {
 | `test/unit/webview/groupLabel.test.ts` | `clamps to zero for a box narrower than the label` | box `{0,0,40,300}`, viewport `{20,0,1000,1000}`, label `{80,20}` | `{ x: 0, y: 0 }` |
 | `test/unit/webview/layout-dirty.test.ts` | `a new group makes the layout dirty` | current with one group, saved with `groups: []` | `true` |
 | `test/unit/webview/layout-dirty.test.ts` | `a pre-feature snapshot is not dirty` | current `groups: []`, saved `groups: undefined` | `false` |
+| `test/unit/webview/layoutMessages.test.ts` | `passes model groups through existing layout messages` | model layout with one group | posted/opened layout retains the group |
+| `test/unit/webview/layoutMessages.test.ts` | `passes source groups through existing layout messages` | source layout with qualified member | posted/opened layout retains mode and member |
 
 ### Verification
 
 - `npm run verify` — typecheck + unit suites, must be green.
 - `npm test` — before the commit, must be green.
-- Manual: with `fixtures/sample-dbt/` open, draw a group around two models, rename
-  it, drag a third model in and out, pan until only a corner shows and confirm the
-  label follows, save, close and reopen the layout file.
+- Manual: with `fixtures/sample-dbt/` open, perform create/rename/move/resize,
+  membership, filtering, overlap, label-pan, save/reopen and unsaved-close checks
+  in both model and source modes. Confirm pane/table interactions pass through
+  group bodies, group/FK modes are mutually exclusive, and auto-layout leaves
+  boxes in place while fitting all rendered objects.
 
 ### Do not touch
 
@@ -538,7 +636,7 @@ export interface LayoutSnapshot {
 - `src/diagram/graph.ts`, `flow.ts`, `routing.ts`, `layout.ts` — nodes, edges,
   routing and auto-layout are unaware of groups. `layout.ts` is imported only for
   the `NODE_WIDTH` / `HEADER_HEIGHT` constants.
-- `LAYOUT_VERSION` — stays `1`.
+- `LAYOUT_VERSION` — stays `2`.
 - Note behavior: `useNotes`, `NoteNode`, note z-indices and the note context menu
   must be byte-identical apart from the `renderedNodes` spread order.
 - The FK-draw gesture and its Escape handling.
@@ -558,4 +656,6 @@ export interface LayoutSnapshot {
       removing a group leaves every model in place.
 - [ ] Groups survive save → close → reopen of the layout file, and a layout file
       written before this feature still opens.
+- [ ] All group behavior works in both model and source diagrams, preserving
+      qualified source-table IDs.
 - [ ] `npm run verify` is green.
