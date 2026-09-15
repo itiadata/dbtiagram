@@ -63,6 +63,7 @@ up-to-date spec in `specs/features/`.
 | 43  | Import an AI rename and type clipboard response | Done |
 | 44  | Polish diagram icons, source notes, toolbars, table names, and display ordering | Done |
 | 45  | Configure AI renaming rules per dbt project | Done |
+| 46  | Move, copy, paste, reorder, and add columns | Approved |
 
 Status values: `draft` → `approved` → `implemented` → `done`.
 
