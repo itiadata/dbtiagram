@@ -81,6 +81,7 @@ And customer_id through amount are selected
 When the user drags them to the insertion line after created_at
 Then orders has columns id, created_at, customer_id, and amount
 And their model.yml column sequence has that order
+And the final insertion line is visible inside the table card's bottom edge
 ```
 
 ### Move columns to an exact position
@@ -380,8 +381,11 @@ export interface DiagramInteractionContextValue {
    pointer starts on a selected row; starting on an unselected row first selects
    it alone. Every destination exposes a line immediately before each displayed
    row and after the final displayed row. Dropping on a table whose relevant
-   insertion rows are hidden is not offered. Ctrl is read on `drop`, not only on
-   drag start; it copies only for a cross-table drop.
+   insertion rows are hidden is not offered. The append drop zone occupies the
+   lower half of the final visible row (or the body below the header for an empty
+   table), and its insertion line renders inside the card immediately above the
+   bottom border so card overflow clipping cannot hide it. Ctrl is read on
+   `drop`, not only on drag start; it copies only for a cross-table drop.
 4. **Clipboard.** Clipboard state is webview-memory-local to one diagram tab and
    stores source model/column identities. Cut does not edit until Paste and is
    visually marked. Copy can paste repeatedly; successful Cut paste clears the
@@ -461,6 +465,8 @@ export interface DiagramInteractionContextValue {
 
 Manual interaction checks cover insertion-line positioning, Ctrl state at drop,
 context-menu enablement, cut styling, and the matrix's rightmost drag handle.
+They specifically verify that hovering the lower half of the final displayed
+row shows the append line and dropping there moves the selection to the end.
 
 ### Verification
 
