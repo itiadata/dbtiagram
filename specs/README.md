@@ -48,7 +48,7 @@ up-to-date spec in `specs/features/`.
 | 28  | Lucide icons for UI buttons | Approved |
 | 29  | Surgical model.yml write-back that only touches edited keys | Done |
 | 30  | Show a test-tube icon on columns that have a data test | Draft |
-| 31  | Group tables inside a named box on the diagram | Approved |
+| 31  | Group selected tables inside a named, coloured box | Approved |
 | 32  | Fit the view after auto-layout | Done |
 | 33  | Opt in or out of the model-level unique-combination test for a primary key | Draft |
 | 34  | Column primary-key toggle and a Reveal in model.yml button in the details sidebar | Implemented |

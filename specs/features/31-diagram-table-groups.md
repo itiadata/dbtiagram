@@ -1,144 +1,179 @@
 ---
 id: 31
-title: Group tables inside a named box on the diagram
+title: Group selected tables inside a named, coloured box
 status: approved
 priority: high
 created: 2026-08-31
 owner: unassigned
-depends_on: [13, 16, 22, 26, 28]
+depends_on: [13, 16, 22, 28, 40, 41]
 ---
 
-# Group tables inside a named box on the diagram
+# Group selected tables inside a named, coloured box
 
 ## Summary
 
-As a data modeller, I want to draw a named box around a set of tables on the
-diagram, so that related models read as one visual unit (a domain, a source
-system, a layer) without changing anything in the `model.yml` files.
+As a data modeller, I want to select tables into a named, coloured group whose
+box follows those tables, so that related models remain a clear visual unit as I
+rearrange the diagram without changing dbt YAML.
 
 ## Background
 
-Diagrams of a real dbt project quickly reach a size where the eye needs
-structure. Sticky notes (spec 16) annotate, but they do not enclose. A group is
-purely visual: it lives in the saved `.dbtiagram.yml` layout file next to
-`tables` and `notes`, and it never touches dbt sources.
-
-The layout file already has an established shape for this kind of data — the
-`DiagramNote` record with its `parseNotes` validation, `buildLayout`
-normalization and `applyLayout` pass-through — and the two-step FK gesture
-(spec 26) established the pattern of *pure state machine + thin React hook +
-hint banner*. Groups follow both precedents.
-
-`src/diagram/layoutFile.ts` is at 392 lines against a 400-line soft cap, so the
-group data model lands in a new sibling module rather than growing it.
+Sticky notes annotate a diagram but do not identify a set of related tables.
+Groups are layout-only records saved in `.dbtiagram.yml`. Creation and membership
+editing reuse the native searchable, multi-select VS Code Quick Pick interaction
+used when selecting source tables for import. Unlike the former geometry-driven
+proposal, membership is explicit and the rectangle is always derived from the
+current positions and measured sizes of its member tables.
 
 ## Scope
 
 **In scope**
 
-- A `groups` section in the saved layout file: id, name, rectangle, member table IDs.
-- Identical group behavior in model and source diagrams; source members retain
-  their qualified table IDs (for example, `finance.orders`).
-- A toolbar button (Lucide `Group`) next to "Add note" that starts a
-  click-and-drag marquee; releasing creates a group containing the tables under
-  the rectangle, then leaves the mode.
-- Rendering the group as a labelled rectangle painted **behind** notes and tables.
-- A label that stays visible while any part of the box is on screen.
-- Membership by geometry: dragging a table into the box adds it, dragging it out
-  removes it.
-- Moving and resizing the box.
-- Renaming a group and removing a group (tables are never removed) via its
-  right-click menu.
-- Groups participating in the dirty flag and the manual save (spec 22).
+- Create a group by selecting one or more currently displayed tables, then
+  entering a non-blank group name.
+- One group per table; grouped tables cannot be offered to another group.
+- Derive each group rectangle from its members, with padding for its label.
+- Keep the group name visible inside the on-screen portion of its rectangle.
+- Adapt the rectangle whenever a member table moves or changes measured size.
+- Edit membership, rename, recolour, or remove a group from its context menu.
+- Add or remove a table through its context menu.
+- Delete a group when membership editing is confirmed with no selected tables.
+- Persist only group identity, name, palette colour, and member table IDs.
+- Support model and source diagrams, preserving qualified source-table IDs.
+- Include groups in layout dirty-state, explicit save, and pending close-time save.
 
 **Out of scope**
 
-- Nesting groups inside groups.
-- Collapsing a group into a single placeholder node.
-- Any effect on dbt files, edges, routing, filtering or auto-layout — auto-layout
-  ignores groups and may move tables out of their boxes; membership simply
-  follows.
-- Per-group colours or styling options.
-- Splitting `webview-ui/App.tsx` or `webview-ui/DiagramCanvas.tsx`, both already
-  over the soft size cap. This spec adds the minimum to each and extracts its own
-  logic into new modules.
+- Persisting, moving, or resizing a group rectangle.
+- Membership inferred from rectangle overlap or table coordinates.
+- A table belonging to more than one group.
+- Nesting or collapsing groups.
+- Moving all members by dragging a group.
+- Any change to dbt model/source YAML, graph edges, routing, filtering, or
+  auto-layout.
+- Arbitrary colour input outside the fixed palette.
 
 ## Scenarios
 
-### Create a group by dragging a rectangle
+### Create a named group from selected tables
 
 ```
-Given a diagram with tables "orders" and "customers" side by side
-When I click the "Add group" toolbar button
-Then a hint banner reads "Drag a rectangle to group tables (Esc to cancel)"
-When I press the pointer on empty canvas and drag a rectangle over both tables and release
-Then a group box is created around that rectangle
-And it contains "orders" and "customers"
-And its label reads "Group 1" and is focused for renaming
-And the mode exits, the hint banner disappears
+Given ungrouped tables "orders" and "customers" are present in the diagram
+When I click the "Create group" toolbar button
+Then a searchable multi-select picker lists the ungrouped tables present in the diagram
+When I select "orders" and "customers" and confirm
+Then I am prompted for a group name
+When I enter "Sales" and confirm
+Then a group named "Sales" contains those two tables
+And its box encloses their current rectangles
+And it receives the next colour from the default palette cycle
 ```
 
-### A too-small rectangle creates nothing
+### Cancel creation without changing the layout
 
 ```
-Given the "Add group" mode is active
-When I press and release the pointer with almost no movement
+Given I started creating a group
+When I cancel either the table picker or name prompt
 Then no group is created
-And the mode exits
+And the diagram dirty state is unchanged
 ```
 
-### Escape cancels the mode
+### Require a selection and a name
 
 ```
-Given the "Add group" mode is active
-When I press Escape
-Then the marquee disappears and no group is created
-And the mode exits
+Given the create-group table picker is open
+When I confirm with no selected table
+Then the picker remains open
+Given the name prompt is open
+When I enter only whitespace and confirm
+Then validation says "Enter a group name"
 ```
 
-### The label follows the visible part of the box
+### Keep the box around moved members
 
 ```
-Given a group box larger than the viewport
-When I pan so that only the bottom-right corner of the box is on screen
-Then the group's label is drawn inside that visible corner
-And it is never drawn outside the box
+Given group "Sales" contains "orders" and "customers"
+When I move either member table
+Then the group rectangle immediately becomes the padded bounding rectangle of both tables
+And unrelated tables may remain visually inside that rectangle
 ```
 
-### Dragging a table into a group adds it
+### Keep the name visible
 
 ```
-Given a group "Sales" that contains "orders"
-When I drag "customers" so that its header centre lands inside the box
-Then the group's member list becomes ["customers", "orders"]
-And the diagram is marked as having unsaved layout changes
+Given part of a group rectangle is visible in the viewport
+When its natural top-left label position is off screen
+Then the name is drawn inside the visible portion of the group rectangle
 ```
 
-### Dragging a table out of a group removes it
+### Edit a group's tables
 
 ```
-Given a group "Sales" that contains "orders" and "customers"
-When I drag "customers" so that its header centre lands outside the box
-Then the group's member list becomes ["orders"]
-And no model.yml file is modified
+Given group "Sales" contains "orders"
+And ungrouped table "customers" is present in the diagram
+When I right-click the group and choose "Edit group tables"
+Then a searchable multi-select picker shows "orders" selected and "customers" unselected
+When I select both and confirm
+Then "Sales" contains both tables
+And its rectangle adapts to enclose both
 ```
 
-### Removing a group keeps its models
+### Emptying a group deletes it
 
 ```
-Given a group "Sales" that contains "orders"
-When I right-click the group's label and choose "Remove group"
-Then the box disappears
-And "orders" is still on the diagram, unmoved
+Given group "Sales" contains "orders"
+When I choose "Edit group tables", deselect every table, and confirm
+Then group "Sales" is deleted
+And "orders" remains present and unmoved
 ```
 
-### Groups round-trip through the layout file
+### Add an ungrouped table from its menu
 
 ```
-Given a diagram with a group "Sales" containing "orders"
-When I save the diagram and reopen the layout file
-Then the group "Sales" is drawn at the same rectangle
-And it still contains "orders"
+Given table "orders" belongs to no group
+And groups "Sales" and "Finance" exist
+When I right-click "orders" and choose "Add to group" then "Sales"
+Then "orders" becomes a member of "Sales"
+And the group rectangle adapts to enclose it
+```
+
+### Remove a grouped table from its menu
+
+```
+Given table "orders" belongs to group "Sales"
+When I right-click "orders" and choose "Remove from group"
+Then "orders" no longer belongs to a group
+And because "Sales" has no remaining members, "Sales" is deleted
+```
+
+### Rename and recolour a group
+
+```
+Given group "Sales" uses the blue palette colour
+When I right-click its rectangle and choose "Rename group"
+And I enter "Commercial" and confirm
+Then its displayed and persisted name is "Commercial"
+When I choose "Change color" and then "Purple"
+Then the rectangle uses the theme-compatible purple palette colour
+```
+
+### Remove a group without removing tables
+
+```
+Given group "Sales" contains "orders"
+When I right-click its rectangle and choose "Remove group"
+Then the group disappears
+And "orders" remains present and unmoved
+```
+
+### Groups round-trip without rectangle coordinates
+
+```
+Given a blue group "Sales" contains "orders"
+When I save and reopen the diagram
+Then "Sales", blue, and member "orders" are restored
+And the saved group entry has no x, y, width, or height keys
+And its rectangle is derived from the restored table position
 ```
 
 ## Implementation Plan
@@ -147,107 +182,64 @@ And it still contains "orders"
 
 | Path | Action | Responsibility |
 |------|--------|----------------|
-| `src/diagram/layoutGroups.ts` | create | The `DiagramGroup` record, its constants, id/name minting, parse/normalize validation, and the pure geometry that decides membership. |
-| `src/diagram/layoutFileNames.ts` | create | Filename/suffix helpers extracted from `layoutFile.ts` so group support stays within the small-module rule; re-exported by `layoutFile.ts`. |
-| `src/diagram/layoutFile.ts` | modify | Add `groups` to `DiagramLayout` and `AppliedLayout`; parse it via `parseGroups`; serialize it; accept it in `buildLayout`; pass it through `applyLayout`; re-export the group symbols so the module path stays the single import site. |
-| `webview-ui/group-create-state.ts` | create | Pure marquee state machine for the "Add group" gesture. |
-| `webview-ui/group-label.ts` | create | Pure label placement: keep the label inside the on-screen part of the box. |
-| `webview-ui/hooks/useGroupCreateMode.ts` | create | React wrapper over `group-create-state.ts`: Escape cancellation, hint text, pointer handlers. |
-| `webview-ui/hooks/useGroups.ts` | create | Group state: persisted groups, node projection, membership sync, add/rename/remove/move/resize. |
-| `webview-ui/GroupNode.tsx` | create | The React Flow node rendering the box, its label chip and its resize grip. |
-| `webview-ui/GroupMarquee.tsx` | create | The in-viewport rectangle drawn while the create gesture is dragging. |
-| `webview-ui/DiagramCanvas.tsx` | modify | Register the `group` node type, render group nodes first, add the toolbar button, wire the marquee pointer handlers, partition group node changes. |
-| `webview-ui/App.tsx` | modify | Instantiate `useGroups`/`useGroupCreateMode`, feed table positions in, render the hint banner, add the group right-click menu, thread props to the canvas and to layout persistence. |
-| `webview-ui/hooks/useLayoutPersistence.ts` | modify | Include groups in every `buildLayout` call, in the saved snapshot and in the pending sync. |
-| `webview-ui/layout-dirty.ts` | modify | Add `groups` to `LayoutSnapshot` and to the comparison. |
-| `webview-ui/icons.ts` | modify | Re-export `Group` from `lucide-react`. |
-| `webview-ui/styles.css` | modify | `.group`, `.group__label`, `.group__grip`, `.group-marquee` styling. |
-| `specs/ARCHITECTURE.md` | modify | Rows for all new modules and updated responsibilities for modified modules. |
-| `test/unit/diagram/layoutGroups.test.ts` | create | Unit tests for parsing, normalization, membership and name minting. |
-| `test/unit/diagram/layoutFile.test.ts` | modify | Round-trip and pass-through tests for the `groups` key. |
-| `test/unit/webview/groupCreateState.test.ts` | create | Unit tests for the marquee state machine. |
-| `test/unit/webview/groupLabel.test.ts` | create | Unit tests for label placement. |
-| `test/unit/webview/layout-dirty.test.ts` | modify | Groups affect the dirty flag. |
-| `test/unit/webview/layoutMessages.test.ts` | modify | Update typed layout fixtures and verify groups pass through existing model/source layout messages unchanged. |
+| `src/diagram/layoutGroups.ts` | create | Pure group model, palette, validation, normalization, membership mutations, default colour selection, and derived bounding rectangles. |
+| `src/diagram/layoutFileNames.ts` | create | Extract layout suffix/name helpers to keep `layoutFile.ts` within the size cap. |
+| `src/diagram/layoutFile.ts` | modify | Parse, serialize, build, apply, and re-export layout groups. |
+| `src/shared/protocol.ts` | modify | Typed requests/results for create, membership edit, and rename native pickers. |
+| `src/vscode/groupPicker.ts` | create | Native searchable multi-select table picker and group-name input prompt. |
+| `src/webview/panel.ts` | modify | Handle group picker requests and return cancelled or confirmed results. |
+| `webview-ui/group-label.ts` | create | Pure visible-viewport label placement. |
+| `webview-ui/group-state.ts` | create | Pure transitions for picker results and direct table/group menu mutations. |
+| `webview-ui/hooks/useGroups.ts` | create | Own group state, picker requests/results, membership rules, colour, derived nodes, and layout seeding. |
+| `webview-ui/GroupNode.tsx` | create | Render the non-movable group rectangle and visible name label. |
+| `webview-ui/DiagramCanvas.tsx` | modify | Register and render group nodes behind notes/tables and expose Create group. |
+| `webview-ui/App.tsx` | modify | Compose groups, handle picker results, and add group/table context-menu actions. |
+| `webview-ui/hooks/useHostMessages.ts` | modify | Dispatch group picker result messages. |
+| `webview-ui/hooks/useLayoutPersistence.ts` | modify | Include groups in save, dirty snapshots, pending sync, and opened-layout seeding. |
+| `webview-ui/layout-dirty.ts` | modify | Compare groups as part of layout dirty state. |
+| `webview-ui/icons.ts` | modify | Re-export icons used by group actions. |
+| `webview-ui/styles.css` | modify | Theme-compatible group fills, borders, labels, and palette swatches. |
+| `specs/ARCHITECTURE.md` | modify | Record new modules and revised responsibilities. |
+| `test/unit/diagram/layoutGroups.test.ts` | create | Pure group persistence, membership, palette, and rectangle tests. |
+| `test/unit/diagram/layoutFile.test.ts` | modify | Group compatibility and round-trip tests. |
+| `test/unit/webview/groupLabel.test.ts` | create | Visible label placement tests. |
+| `test/unit/webview/groupState.test.ts` | create | Creation cancellation, picker result, rename, membership, colour, and deletion transitions. |
+| `test/unit/webview/layout-dirty.test.ts` | modify | Group dirty-state tests. |
+| `test/unit/webview/layoutMessages.test.ts` | modify | Group pass-through in model/source layout messages. |
 
 ### Signatures
 
 ```ts
-// src/diagram/layoutGroups.ts  (pure — must not import `vscode`)
+// src/diagram/layoutGroups.ts (pure — must not import `vscode`)
+export type GroupColor = 'blue' | 'green' | 'amber' | 'purple' | 'rose' | 'cyan';
+export const GROUP_COLORS: readonly GroupColor[];
+export const GROUP_PADDING = 32;
+export const GROUP_LABEL_HEIGHT = 28;
 
-/** A named rectangle enclosing tables. Purely visual; never touches dbt files. */
 export interface DiagramGroup {
   id: string;
   name: string;
-  x: number;
-  y: number;
-  width: number;
-  height: number;
-  /** Member table IDs, ascending. Derived from geometry, persisted for filtered-out tables. */
+  color: GroupColor;
   models: string[];
 }
+export interface GroupRect { x: number; y: number; width: number; height: number }
+export interface GroupTableRect extends GroupRect { name: string }
 
-export interface GroupTablePosition {
-  name: string;
-  x: number;
-  y: number;
-}
-
-export const GROUP_MIN_WIDTH = 160;
-export const GROUP_MIN_HEIGHT = 120;
-
-export interface GroupRect {
-  x: number;
-  y: number;
-  width: number;
-  height: number;
-}
-
-/** `g-` plus six lowercase hex characters, mirroring note ids. */
+export function isGroupColor(value: unknown): value is GroupColor;
+export function normalizeGroupName(value: string): string | undefined;
 export function newGroupId(random: () => number): string;
-
-/** `Group N` with the smallest N >= 1 not already used as a name. */
-export function nextGroupName(existing: readonly DiagramGroup[]): string;
-
-/** A new group over `rect`, with `models` taken from `tables` by geometry. */
-export function createGroup(
-  id: string,
-  name: string,
-  rect: GroupRect,
-  tables: readonly GroupTablePosition[],
-): DiagramGroup;
-
-/**
- * The visible tables whose header centre — `(x + NODE_WIDTH / 2, y + HEADER_HEIGHT / 2)` —
- * falls inside `rect`, ascending by name.
- */
-export function groupMembers(
-  rect: GroupRect,
-  tables: readonly GroupTablePosition[],
-): string[];
-
-/**
- * Membership after a move: the geometry hits from `tables`, unioned with the
- * group's previous members that are absent from `tables` (filtered out of the
- * diagram, therefore not up for reassignment), ascending, de-duplicated.
- */
-export function syncGroupModels(
-  group: DiagramGroup,
-  tables: readonly GroupTablePosition[],
-): string[];
-
-/** Rounded coordinates, clamped sizes, ascending by id — the persisted form. */
+export function nextGroupColor(groups: readonly DiagramGroup[]): GroupColor;
 export function normalizeGroups(groups: readonly DiagramGroup[]): DiagramGroup[];
-
-/** Validates the layout file's `groups` key. Throws the caller's error factory. */
-export function parseGroups(
-  raw: unknown,
-  fail: (message: string) => never,
-): DiagramGroup[];
+export function parseGroups(raw: unknown, fail: (message: string) => never): DiagramGroup[];
+export function groupForModel(groups: readonly DiagramGroup[], model: string): DiagramGroup | undefined;
+export function replaceGroupModels(groups: readonly DiagramGroup[], id: string, models: readonly string[]): DiagramGroup[];
+export function addModelToGroup(groups: readonly DiagramGroup[], id: string, model: string): DiagramGroup[];
+export function removeModelFromGroup(groups: readonly DiagramGroup[], model: string): DiagramGroup[];
+export function groupRect(group: DiagramGroup, tables: readonly GroupTableRect[]): GroupRect | null;
 ```
 
 ```ts
-// src/diagram/layoutFileNames.ts  (pure — must not import `vscode`)
+// src/diagram/layoutFileNames.ts (pure — must not import `vscode`)
 export const LAYOUT_FILE_SUFFIX = '.dbtiagram.yml';
 export function isLayoutFilePath(fsPath: string | undefined): boolean;
 export function defaultLayoutName(fsPath: string): string;
@@ -255,35 +247,11 @@ export function stripLayoutSuffix(name: string): string;
 ```
 
 ```ts
-// src/diagram/layoutFile.ts  (pure)
-export type { DiagramGroup, GroupRect } from './layoutGroups';
-export {
-  createGroup, groupMembers, syncGroupModels, newGroupId, nextGroupName,
-  GROUP_MIN_WIDTH, GROUP_MIN_HEIGHT,
-} from './layoutGroups';
+// src/diagram/layoutFile.ts (pure — must not import `vscode`)
+export type { DiagramGroup, GroupColor, GroupRect, GroupTableRect } from './layoutGroups';
+export { GROUP_COLORS, GROUP_PADDING, GROUP_LABEL_HEIGHT, groupRect } from './layoutGroups';
 
-export interface DiagramLayout {
-  version: typeof LAYOUT_VERSION;
-  mode: DiagramMode;
-  name: string;
-  tables: DiagramLayoutTable[];
-  notes: DiagramNote[];
-  /** Always present in memory; `[]` when the file has no groups (spec 31). */
-  groups: DiagramGroup[];
-  defaultColumnDisplay?: ColumnDisplayMode;
-}
-
-export interface AppliedLayout {
-  visible: Set<string>;
-  positions: Map<string, NodePosition>;
-  missing: string[];
-  notes: DiagramNote[];
-  /** Passed through untouched, like notes (spec 31). */
-  groups: DiagramGroup[];
-  defaultColumnDisplay: ColumnDisplayMode;
-  columnDisplay: Map<string, ColumnDisplayMode>;
-}
-
+// Add `groups: DiagramGroup[]` to DiagramLayout and AppliedLayout.
 export function buildLayout(
   name: string,
   mode: DiagramMode,
@@ -295,48 +263,29 @@ export function buildLayout(
 ```
 
 ```ts
-// webview-ui/group-create-state.ts  (webview — pure, no DOM)
-import type { GroupRect } from '../src/diagram/layoutFile';
-
-export interface GroupPoint { x: number; y: number }
-
-/** idle | armed (waiting for pointer-down) | dragging the marquee. */
-export type GroupCreateState =
-  | { active: false }
-  | { active: true; anchor: null }
-  | { active: true; anchor: GroupPoint; current: GroupPoint };
-
-export const GROUP_CREATE_IDLE: GroupCreateState;
-export function startGroupCreate(): GroupCreateState;
-export function cancelGroupCreate(): GroupCreateState;
-export function beginRect(state: GroupCreateState, point: GroupPoint): GroupCreateState;
-export function dragRect(state: GroupCreateState, point: GroupPoint): GroupCreateState;
-
-export interface GroupCreateOutcome {
-  state: GroupCreateState;
-  /** Present only when the released rectangle met the minimum size. */
-  rect?: GroupRect;
-}
-
-export function endRect(state: GroupCreateState, point: GroupPoint): GroupCreateOutcome;
-
-/** The positive-extent rectangle spanned by two points, in any drag direction. */
-export function normalizeRect(a: GroupPoint, b: GroupPoint): GroupRect;
-
-/** The marquee to draw right now, or null. */
-export function marqueeRect(state: GroupCreateState): GroupRect | null;
+// src/shared/protocol.ts (shared — must not import `vscode`)
+export interface GroupPickerCandidate { id: string; label: string }
+// Add to MessageToExtension:
+// { type: 'group:create'; candidates: GroupPickerCandidate[] }
+// { type: 'group:editTables'; groupId: string; candidates: GroupPickerCandidate[]; selected: string[] }
+// { type: 'group:rename'; groupId: string; currentName: string }
+// Add to MessageToWebview:
+// { type: 'group:createResult'; result: { name: string; models: string[] } | null }
+// { type: 'group:editTablesResult'; groupId: string; models: string[] | null }
+// { type: 'group:renameResult'; groupId: string; name: string | null }
 ```
 
 ```ts
-// webview-ui/group-label.ts  (webview — pure)
-import type { GroupRect } from '../src/diagram/layoutFile';
+// src/vscode/groupPicker.ts (vscode-facing)
+export function pickGroupTables(
+  candidates: readonly GroupPickerCandidate[],
+  selected?: ReadonlySet<string>,
+): Promise<string[] | undefined>;
+export function promptGroupName(currentName?: string): Promise<string | undefined>;
+```
 
-/**
- * The label's offset from the box's top-left, in flow units, so the label sits
- * inside the on-screen part of the box and never leaves the box.
- * `viewport` and `label` are in flow units. Returns `{ x: 0, y: 0 }` when the
- * box and the viewport do not intersect.
- */
+```ts
+// webview-ui/group-label.ts (webview — pure)
 export function groupLabelOffset(
   box: GroupRect,
   viewport: GroupRect,
@@ -345,109 +294,68 @@ export function groupLabelOffset(
 ```
 
 ```ts
-// webview-ui/hooks/useGroupCreateMode.ts  (webview)
-import type { GroupCreateState, GroupPoint } from '../group-create-state';
-import type { GroupRect } from '../../src/diagram/layoutFile';
-
-export interface GroupCreateModeState {
-  state: GroupCreateState;
-  active: boolean;
-  /** Hint banner text, or null while idle. */
-  hint: string | null;
-  start: () => void;
-  cancel: () => void;
-  /** Marquee rectangle in flow coordinates, or null. */
-  marquee: GroupRect | null;
-  onPointerDown: (point: GroupPoint) => void;
-  onPointerMove: (point: GroupPoint) => void;
-  /** Returns the finished rectangle when one was completed. */
-  onPointerUp: (point: GroupPoint) => GroupRect | null;
-}
-
-export function useGroupCreateMode(): GroupCreateModeState;
+// webview-ui/group-state.ts (webview — pure)
+export function createGroupFromPicker(
+  groups: readonly DiagramGroup[],
+  id: string,
+  result: { name: string; models: string[] } | null,
+): DiagramGroup[];
+export function applyGroupTablePicker(
+  groups: readonly DiagramGroup[],
+  id: string,
+  models: readonly string[] | null,
+): DiagramGroup[];
+export function applyGroupRename(
+  groups: readonly DiagramGroup[],
+  id: string,
+  name: string | null,
+): DiagramGroup[];
+export function changeGroupColor(
+  groups: readonly DiagramGroup[],
+  id: string,
+  color: GroupColor,
+): DiagramGroup[];
 ```
 
 ```ts
-// webview-ui/hooks/useGroups.ts  (webview)
-import type { Node, NodeChange } from '@xyflow/react';
-import type { DiagramGroup, DiagramLayoutTable, GroupRect } from '../../src/diagram/layoutFile';
-
-export interface GroupsState {
-  groups: DiagramGroup[];
-  groupNodes: Node<GroupNodeData, 'group'>[];
-  groupIds: ReadonlySet<string>;
-  /** Increments for user mutations, but not while seeding an opened layout. */
-  mutationRevision: number;
-  applyGroupNodeChanges: (
-    changes: NodeChange<Node<GroupNodeData, 'group'>>[],
-    tables: readonly DiagramLayoutTable[],
-  ) => void;
-  /** Creates a group over `rect` and returns its new id. */
-  addGroup: (rect: GroupRect, tables: readonly DiagramLayoutTable[]) => string;
-  renameGroup: (id: string, name: string) => void;
-  removeGroup: (id: string) => void;
-  resizeGroup: (
-    id: string,
-    width: number,
-    height: number,
-    tables: readonly DiagramLayoutTable[],
-  ) => void;
-  /** Recomputes every group's members from the current table positions. */
-  syncMembers: (tables: readonly DiagramLayoutTable[]) => void;
-  /** Seeds from an opened layout. */
-  applyLayoutGroups: (groups: readonly DiagramGroup[]) => void;
-  /** The group whose label is in inline-rename mode, or null. */
-  renameTarget: string | null;
-  beginRename: (id: string) => void;
-  endRename: () => void;
-}
-
-export function useGroups(): GroupsState;
-```
-
-```ts
-// webview-ui/GroupNode.tsx  (webview)
+// webview-ui/hooks/useGroups.ts (webview)
 export interface GroupNodeData extends Record<string, unknown> {
   group: DiagramGroup;
   viewport: GroupRect;
   zoom: number;
-  renaming: boolean;
-  onRename: (id: string, name: string) => void;
-  onBeginRename: (id: string) => void;
-  onEndRename: () => void;
-  onResize: (id: string, width: number, height: number) => void;
 }
-
-export function GroupNode(props: NodeProps): JSX.Element;
+export interface GroupsState {
+  groups: DiagramGroup[];
+  groupNodes: Node<GroupNodeData, 'group'>[];
+  groupIds: ReadonlySet<string>;
+  mutationRevision: number;
+  startCreate: (candidates: readonly GroupPickerCandidate[]) => void;
+  startEditTables: (id: string, candidates: readonly GroupPickerCandidate[]) => void;
+  startRename: (id: string) => void;
+  applyCreateResult: (result: { name: string; models: string[] } | null) => void;
+  applyEditTablesResult: (id: string, models: string[] | null) => void;
+  applyRenameResult: (id: string, name: string | null) => void;
+  addModel: (id: string, model: string) => void;
+  removeModel: (model: string) => void;
+  setColor: (id: string, color: GroupColor) => void;
+  removeGroup: (id: string) => void;
+  applyLayoutGroups: (groups: readonly DiagramGroup[]) => void;
+  setTableRects: (tables: readonly GroupTableRect[]) => void;
+}
+export function useGroups(): GroupsState;
 ```
 
 ```ts
-// webview-ui/GroupMarquee.tsx  (webview)
-export interface GroupMarqueeProps { rect: GroupRect }
-export function GroupMarquee({ rect }: GroupMarqueeProps): JSX.Element;
+// webview-ui/GroupNode.tsx (webview)
+export function GroupNode(props: NodeProps<Node<GroupNodeData, 'group'>>): JSX.Element;
 ```
 
 ```ts
-// webview-ui/DiagramCanvas.tsx  (webview; additions to DiagramCanvasProps)
-groupNodes: Node<GroupNodeData, 'group'>[];
-groupIds: ReadonlySet<string>;
-onGroupNodeChanges: (changes: NodeChange<Node<GroupNodeData, 'group'>>[]) => void;
-groupCreateActive: boolean;
-groupMarquee: GroupRect | null;
-onStartGroupCreate: () => void;
-onGroupPointerDown: (point: GroupPoint) => void;
-onGroupPointerMove: (point: GroupPoint) => void;
-onGroupPointerUp: (point: GroupPoint) => void;
-```
-
-```ts
-// webview-ui/hooks/useLayoutPersistence.ts  (webview)
+// webview-ui/hooks/useLayoutPersistence.ts (webview)
 export interface PersistedGroupsState {
   groups: readonly DiagramGroup[];
-  /** User-mutation revision; arms pending sync even when no table is visible. */
   mutationRevision: number;
 }
-
 export function useLayoutPersistence(
   mode: DiagramMode,
   notes?: readonly DiagramNote[],
@@ -457,205 +365,127 @@ export function useLayoutPersistence(
 ```
 
 ```ts
-// webview-ui/layout-dirty.ts  (webview — pure)
-export interface LayoutSnapshot {
-  tables: DiagramLayoutTable[];
-  notes: DiagramNote[];
-  /** Spec 31; undefined means a pre-feature snapshot. */
-  groups?: DiagramGroup[];
-  defaultColumnDisplay?: ColumnDisplayMode;
-}
+// webview-ui/layout-dirty.ts (webview — pure)
+// Add `groups?: DiagramGroup[]` to LayoutSnapshot.
 ```
 
 ### Behavior notes
 
-1. **Layout file compatibility.** Layout schema version remains `2`, with its
-   required `mode`; version-1 files still normalize to version 2/model exactly as
-   before. A missing or `null` `groups` key parses to `[]`,
-   exactly like `notes`. A non-array raises
-   `Diagram file "groups" must be an array`. `LAYOUT_VERSION` stays `2` — the key
-   is additive and older readers ignore it.
-2. **Per-entry validation** mirrors `parseNotes` message-for-message:
-   - non-mapping entry → `Every entry in "groups" must be a mapping`
-   - missing/empty `id` → `Every group entry needs an "id"`
-   - present, non-null, non-string `name` → `Group "<id>" needs a string "name"`
-   - non-numeric `x`/`y` → `Group "<id>" needs numeric "x" and "y"`
-   - non-numeric `width`/`height` → `Group "<id>" needs numeric "width" and "height"`
-   - `models` present (including `null`) but not an array → `Group "<id>" needs a "models" array`
-   Non-string entries inside `models` are dropped silently (they cannot name a
-   model). A duplicate `id` keeps the first entry and skips the rest, like notes.
-   A missing or `null` `name` becomes `''`; missing `models` becomes `[]`;
-   missing `width`/`height` fall back to the
-   minimums; sizes are clamped to `GROUP_MIN_WIDTH`/`GROUP_MIN_HEIGHT` rather
-   than rejected. Every numeric field must be finite. Member IDs are
-   de-duplicated and sorted.
-3. **Serialization.** The `groups` key is omitted entirely when the list is empty,
-   like `notes`. Key order per entry is `id, name, x, y, width, height, models`.
-   Entries are sorted by `id` and coordinates rounded by `normalizeGroups`, so a
-   save is byte-stable and the dirty comparison (a `JSON.stringify` equality) does
-   not flap.
-4. **Membership rule.** A table is in a group when its **header centre** —
-   `(x + NODE_WIDTH / 2, y + HEADER_HEIGHT / 2)`, using the constants exported by
-   `src/diagram/layout.ts` — lies inside the rectangle, boundaries inclusive on
-   the left/top and exclusive on the right/bottom. Using the header centre avoids
-   depending on measured card heights, which vary with the column-display mode
-   (spec 24). A table may belong to several overlapping groups; each lists it.
-   The identifier is the exact table node ID: a model name in model mode and a
-   qualified source-table ID in source mode. Group logic does not parse it.
-5. **Filtered-out models.** `syncGroupModels` is only ever handed the *currently
-   visible* tables. Members that are not in that list are retained untouched, so
-   filtering a model out of the diagram (spec 05) never silently drops it from a
-   group.
-6. **Membership is recomputed, never edited by hand.** `App` retains the latest
-   table positions and calls `groups.syncMembers(tables)` from the same
-   `onPositionsChange` flow that feeds layout persistence. Group move/resize
-   handlers recompute against that same list because those operations do not
-   themselves move a table. Table drag, filter restoration, group drag, group
-   resize and auto-layout therefore converge on `syncGroupModels`. There is no
-   "add to group" command.
-7. **Z-order and hit-testing.** Group nodes carry `zIndex: -1` and are spread
-   **first** into `renderedNodes`, before note nodes (`0`/`5`) and table nodes
-   (forced `1`). The box body is `pointer-events: none` so clicks, pans and
-   rubber-band selection inside a group reach the pane and the tables exactly as
-   before; only `.group__label` and `.group__grip` re-enable pointer events. The
-   group node is therefore dragged **by its label** and resized **by its grip**.
-   Group nodes are `selectable: false`; the Delete key must not delete a group
-   (removal is menu-only, so it can never be confused with deleting a model).
-8. **Moving a group moves only the box**, not its members. Membership is then
-   recomputed, so sliding a box off its tables empties it. This is the least
-   surprising rule given that membership is defined by geometry, and it is
-   symmetric with dragging a table out.
-9. **Label placement** uses `groupLabelOffset` against the current viewport
-   rectangle in flow coordinates. `DiagramCanvas` observes its container with
-   `ResizeObserver`, combines that size with `useViewport()`, and supplies the
-   viewport rectangle plus zoom to each group node. `GroupNode` measures its
-   label in pixels and divides by zoom before calculating the offset. The clamp
-   order is: intersect first, then clamp into the box; when the box is entirely
-   off-screen the offset is `{ x: 0, y: 0 }` (the box is invisible anyway, so the
-   value only matters for determinism). A box narrower or shorter than the label
-   clamps to `0` on that axis rather than producing a negative offset.
-10. **Create gesture.** Clicking the toolbar button enters `armed`. The hint reads
-    exactly `Drag a rectangle to group tables (Esc to cancel)`. While armed, the
-    canvas surface shows the crosshair cursor via a `canvas__surface--group-create`
-    modifier, mirroring `--fk-create`. Pointer-down on the pane anchors the
-    marquee, pointer-move updates it, pointer-up ends the mode. Panning is
-    suppressed while armed (`panOnDrag={false}` on `<ReactFlow>` when
-    `groupCreateActive`), otherwise the drag would pan instead of drawing. A
-    marquee starts only from the actual empty `.react-flow__pane`, captures its
-    pointer through release, converts points through `screenToFlowPosition`, and
-    renders in a `ViewportPortal`. In both modes the toolbar begins Add note, Add
-    group, Add foreign key. Starting either group or FK mode cancels the other;
-    their state machines and Escape behavior remain otherwise unchanged.
-11. **Minimum size.** `endRect` returns no rectangle when the released width is
-    below `GROUP_MIN_WIDTH` or the height below `GROUP_MIN_HEIGHT`; the state
-    still returns to idle. This makes a stray click a harmless cancel rather than
-    a one-pixel group.
-12. **Naming.** `nextGroupName` returns `Group 1`, `Group 2`, … picking the
-    smallest positive integer whose `Group N` name is unused, so deleting
-    `Group 1` frees the name. After creation the new group's label enters inline
-    rename with its text selected, mirroring how a new note focuses its textarea.
-    An empty name committed by the user is kept as an empty string; the label chip
-    still renders (as an empty chip) so the group remains renameable.
-13. **Removal** deletes only the `DiagramGroup` record. No `ModelEdit` is posted,
-    no table node is touched, no `model.yml` is written. The right-click menu on a
-    group's label has exactly two items: `Rename` and `Remove group`.
-14. **Dirty flag.** `isLayoutDirty` compares `JSON.stringify(current.groups ?? [])`
-    against `JSON.stringify(saved.groups ?? [])`, so a pre-feature saved snapshot
-    (`groups === undefined`) does not report dirty against a diagram with no
-    groups. A user-mutation revision also arms pending-layout cache sync when no
-    table is visible; applying an opened layout does not increment it, preserving
-    the existing first-render truncation guard.
-15. **`buildLayout`'s new parameter is sixth and optional**, after the required
-    diagram `mode`, so every existing call site and unit test keeps compiling
-    unchanged.
-16. **Both modes.** Creation, geometry, context menu, dirty state and persistence
-    are identical in model and source diagrams. Source members remain qualified
-    IDs. No group operation posts a `diagram:edit` message.
-17. **Fit behavior.** Auto-layout never moves a group. The subsequent React Flow
-    fit includes all rendered groups, notes and tables, matching the canvas's
-    existing all-node fit semantics.
-18. **React Flow interaction.** The group wrapper and body pass pointer events
-    through; its label and React Flow `NodeResizeControl` opt back in. The label
-    is the node `dragHandle`, and its rename input has the `nodrag` class.
+1. Layout schema version stays `2`. Missing or `null` `groups` parses as `[]`;
+   malformed groups produce the same strict, contextual errors used for notes.
+   Entries persist in key order `id, name, color, models`; no geometry key is
+   accepted into the in-memory record or emitted. Duplicate IDs keep the first.
+2. Group names are trimmed, must be non-empty, and need not be unique. The input
+   validation message is exactly `Enter a group name`. Cancelling a picker or
+   name input produces a `null` result and changes nothing.
+3. `pickGroupTables` uses `createQuickPick`, `canSelectMany = true`, and labels
+   matching the diagram's displayed table labels. Create keeps the picker open
+   on empty acceptance. Edit allows empty acceptance because it deletes the group.
+4. Create candidates are all currently displayed, ungrouped tables. Edit
+   candidates are the group's current members plus currently displayed,
+   ungrouped tables. A table cannot belong to multiple groups.
+5. A table menu shows `Add to group` only when ungrouped; its submenu lists every
+   group. It shows `Remove from group` only when grouped. Removing the final
+   member deletes the group. If there are no groups, `Add to group` is disabled
+   with title `No groups available`.
+6. The group menu has exactly `Edit group tables`, `Rename group`, `Change color`
+   (palette submenu), and `Remove group`. Right-clicking any visible part of the
+   rectangle, including the label, opens it.
+7. Palette order is blue, green, amber, purple, rose, cyan. Creation chooses the
+   least-used colour, breaking ties by this order, so each newly proposed colour
+   differs until the palette is exhausted. Light-theme borders are respectively
+   `#2563eb`, `#16a34a`, `#d97706`, `#9333ea`, `#e11d48`, `#0891b2`; dark-theme
+   borders are `#60a5fa`, `#4ade80`, `#fbbf24`, `#c084fc`, `#fb7185`, `#22d3ee`.
+   Fills use the matching border at 10% opacity and labels at 18% opacity.
+   `color` is persisted as the palette name, not raw CSS.
+8. A rectangle is the union of current measured member-table rectangles, expanded
+   left/right/bottom by `GROUP_PADDING`, and expanded on top by
+   `GROUP_PADDING + GROUP_LABEL_HEIGHT`. Non-member tables may overlap or sit
+   inside it. Moving/removing a member or changing its measured card size
+   re-derives the rectangle; moving unrelated tables does not change membership.
+9. A group with members hidden by filters remains persisted. It renders around
+   its currently visible members; if none are visible, it has no React Flow node.
+10. Group nodes render before notes and tables with `zIndex: -1`, are not draggable,
+    resizable, selectable, or keyboard-deletable, and do not participate in edge
+    routing. Their body accepts context-menu pointer events but ordinary primary
+    clicks and drags pass through to normal pane/table behavior.
+11. The label uses `groupLabelOffset` and remains within the intersection of the
+    group rectangle and viewport whenever that intersection can contain it.
+12. Auto-layout moves tables normally, then groups re-derive around them. Fit View
+    and post-auto-layout fit include rendered groups. No group action posts
+    `diagram:edit` or writes dbt YAML.
+13. Groups are normalized by ID; member IDs are de-duplicated and sorted. Group
+    changes increment `mutationRevision`, arming pending-layout sync even when no
+    table is visible. Applying an opened layout does not increment it.
+14. Both model and source modes behave identically. Source IDs remain qualified.
 
 ### Tests
 
 | Test file | Test name | Input | Expected |
 |-----------|-----------|-------|----------|
-| `test/unit/diagram/layoutGroups.test.ts` | `groupMembers includes a table whose header centre is inside` | rect `{x:0,y:0,width:600,height:400}`, tables `[{name:'orders',x:10,y:10}]` | `['orders']` |
-| `test/unit/diagram/layoutGroups.test.ts` | `groupMembers excludes a table outside` | same rect, tables `[{name:'orders',x:1000,y:1000}]` | `[]` |
-| `test/unit/diagram/layoutGroups.test.ts` | `groupMembers sorts ascending` | rect covering both, tables `[{name:'orders',…},{name:'customers',…}]` | `['customers','orders']` |
-| `test/unit/diagram/layoutGroups.test.ts` | `syncGroupModels keeps filtered-out members` | group `models: ['hidden','orders']`, tables `[{name:'orders', inside}]` | `['hidden','orders']` |
-| `test/unit/diagram/layoutGroups.test.ts` | `syncGroupModels drops a table dragged out` | group `models: ['orders']`, tables `[{name:'orders', outside}]` | `[]` |
-| `test/unit/diagram/layoutGroups.test.ts` | `nextGroupName picks the first free integer` | `[{name:'Group 1'},{name:'Group 3'}]` | `'Group 2'` |
-| `test/unit/diagram/layoutGroups.test.ts` | `parseGroups accepts a missing key` | `parseGroups(undefined, fail)` | `[]` |
-| `test/unit/diagram/layoutGroups.test.ts` | `parseGroups rejects a non-array` | `parseGroups('x', fail)` | throws `Diagram file "groups" must be an array` |
-| `test/unit/diagram/layoutGroups.test.ts` | `parseGroups clamps a tiny size` | one entry `width: 4, height: 4` | `width: 160, height: 120` |
-| `test/unit/diagram/layoutGroups.test.ts` | `parseGroups keeps the first duplicate id` | two entries with `id: 'g-1'`, names `A` and `B` | one group named `'A'` |
-| `test/unit/diagram/layoutGroups.test.ts` | `normalizeGroups rounds and sorts` | `[{id:'g-2',x:1.4,…},{id:'g-1',…}]` | ids `['g-1','g-2']`, `x: 1` |
-| `test/unit/diagram/layoutGroups.test.ts` | `uses inclusive top-left and exclusive bottom-right boundaries` | header centres on each boundary | left/top IDs included; right/bottom IDs excluded |
-| `test/unit/diagram/layoutGroups.test.ts` | `preserves a qualified source table id` | inside table named `finance.orders` | `['finance.orders']` |
-| `test/unit/diagram/layoutGroups.test.ts` | `normalizes member ids` | duplicate strings plus a non-string | sorted unique strings; non-string dropped |
-| `test/unit/diagram/layoutGroups.test.ts` | `rejects non-finite geometry` | group with `x: Infinity` | throws the numeric-coordinate message |
-| `test/unit/diagram/layoutFile.test.ts` | `round-trips groups` | layout with one group, serialize then parse | deep-equals the original group |
-| `test/unit/diagram/layoutFile.test.ts` | `omits an empty groups key` | layout with `groups: []` | serialized text contains no `groups:` |
-| `test/unit/diagram/layoutFile.test.ts` | `parses a pre-feature file` | text with `tables` only | `layout.groups` is `[]` |
-| `test/unit/diagram/layoutFile.test.ts` | `applyLayout passes groups through` | layout with one group, `knownModels` empty | `applied.groups` deep-equals the layout's groups |
-| `test/unit/diagram/layoutFile.test.ts` | `round-trips a source group` | version-2 source layout with member `finance.orders` | mode and qualified member are unchanged |
-| `test/unit/diagram/layoutFile.test.ts` | `parses a version-1 group file` | version-1 layout containing `groups` | normalized version 2/model layout retains groups |
-| `test/unit/webview/groupCreateState.test.ts` | `normalizeRect handles a bottom-left drag` | `normalizeRect({x:100,y:100},{x:0,y:300})` | `{ x: 0, y: 100, width: 100, height: 200 }` |
-| `test/unit/webview/groupCreateState.test.ts` | `start arms the gesture` | `startGroupCreate()` | `{ active: true, anchor: null }` |
-| `test/unit/webview/groupCreateState.test.ts` | `beginRect anchors the marquee` | `beginRect({active:true,anchor:null},{x:5,y:5})` | `{ active: true, anchor: {x:5,y:5}, current: {x:5,y:5} }` |
-| `test/unit/webview/groupCreateState.test.ts` | `endRect returns the rectangle` | anchor `{0,0}`, up at `{400,300}` | `rect` `{x:0,y:0,width:400,height:300}`, `state` `{active:false}` |
-| `test/unit/webview/groupCreateState.test.ts` | `endRect rejects a too-small rectangle` | anchor `{0,0}`, up at `{5,5}` | `rect` `undefined`, `state` `{active:false}` |
-| `test/unit/webview/groupCreateState.test.ts` | `beginRect is a no-op while idle` | `beginRect({active:false},{x:1,y:1})` | `{ active: false }` |
-| `test/unit/webview/groupLabel.test.ts` | `keeps the label at the top-left when fully visible` | box `{0,0,400,300}`, viewport `{-100,-100,1000,1000}`, label `{80,20}` | `{ x: 0, y: 0 }` |
-| `test/unit/webview/groupLabel.test.ts` | `pushes the label into the visible corner` | box `{0,0,400,300}`, viewport `{200,150,1000,1000}`, label `{80,20}` | `{ x: 200, y: 150 }` |
-| `test/unit/webview/groupLabel.test.ts` | `never leaves the box` | box `{0,0,400,300}`, viewport `{380,290,1000,1000}`, label `{80,20}` | `{ x: 320, y: 280 }` |
-| `test/unit/webview/groupLabel.test.ts` | `returns the origin when off-screen` | box `{0,0,400,300}`, viewport `{5000,5000,100,100}` | `{ x: 0, y: 0 }` |
-| `test/unit/webview/groupLabel.test.ts` | `clamps to zero for a box narrower than the label` | box `{0,0,40,300}`, viewport `{20,0,1000,1000}`, label `{80,20}` | `{ x: 0, y: 0 }` |
-| `test/unit/webview/layout-dirty.test.ts` | `a new group makes the layout dirty` | current with one group, saved with `groups: []` | `true` |
-| `test/unit/webview/layout-dirty.test.ts` | `a pre-feature snapshot is not dirty` | current `groups: []`, saved `groups: undefined` | `false` |
-| `test/unit/webview/layoutMessages.test.ts` | `passes model groups through existing layout messages` | model layout with one group | posted/opened layout retains the group |
-| `test/unit/webview/layoutMessages.test.ts` | `passes source groups through existing layout messages` | source layout with qualified member | posted/opened layout retains mode and member |
+| `test/unit/diagram/layoutGroups.test.ts` | `cycles through least-used palette colours` | six colours used once, blue used twice | `'green'` |
+| `test/unit/diagram/layoutGroups.test.ts` | `trims and validates a group name` | `'  Sales  '` and `'   '` | `'Sales'` and `undefined` |
+| `test/unit/diagram/layoutGroups.test.ts` | `finds a table's only group` | Sales contains orders | Sales |
+| `test/unit/diagram/layoutGroups.test.ts` | `adding a model removes it from any former group` | orders in A; add orders to B | A deleted; B contains orders |
+| `test/unit/diagram/layoutGroups.test.ts` | `removing the last model deletes its group` | Sales contains only orders | `[]` |
+| `test/unit/diagram/layoutGroups.test.ts` | `replacing membership with empty deletes the group` | Sales plus `[]` | `[]` |
+| `test/unit/diagram/layoutGroups.test.ts` | `derives a padded bounding rectangle` | two member rects plus one non-member rect | exact union expanded by 32 and top label height 28 |
+| `test/unit/diagram/layoutGroups.test.ts` | `ignores non-members when deriving a rectangle` | central non-member extends outside member bounds | same rectangle as members alone |
+| `test/unit/diagram/layoutGroups.test.ts` | `returns null with no visible members` | members absent from table rects | `null` |
+| `test/unit/diagram/layoutGroups.test.ts` | `normalizes ids and qualified source members` | duplicates and `finance.orders` | sorted unique strings preserved |
+| `test/unit/diagram/layoutGroups.test.ts` | `rejects an unknown colour` | `color: 'orange'` | throws `Group "g-1" has an invalid "color"` |
+| `test/unit/diagram/layoutGroups.test.ts` | `rejects persisted geometry by ignoring it` | valid group plus x/y/width/height | normalized group has only id/name/color/models |
+| `test/unit/diagram/layoutFile.test.ts` | `round-trips groups without geometry` | one blue Sales group | emitted group is `{id,name,color,models}` and parses equal |
+| `test/unit/diagram/layoutFile.test.ts` | `parses a pre-group file` | tables with no groups key | `groups: []` |
+| `test/unit/diagram/layoutFile.test.ts` | `omits empty groups` | `groups: []` | no `groups:` key |
+| `test/unit/diagram/layoutFile.test.ts` | `passes source groups through applyLayout` | member `finance.orders` | qualified member unchanged |
+| `test/unit/webview/groupLabel.test.ts` | `keeps a fully visible label at group top-left` | fully visible box | `{x:0,y:0}` |
+| `test/unit/webview/groupLabel.test.ts` | `moves the label into the visible intersection` | only bottom-right visible | offset clamped inside box |
+| `test/unit/webview/groupState.test.ts` | `creates from a confirmed picker result` | empty groups, id `g-1`, Sales with orders/customers | one normalized group using blue |
+| `test/unit/webview/groupState.test.ts` | `cancelled creation changes nothing` | one existing group and `null` | same array reference |
+| `test/unit/webview/groupState.test.ts` | `edits membership and deletes on empty confirmation` | Sales with orders; then customers; then `[]` | Sales contains customers; then `[]` |
+| `test/unit/webview/groupState.test.ts` | `cancelled membership edit changes nothing` | Sales and `null` | same array reference |
+| `test/unit/webview/groupState.test.ts` | `renames only on a confirmed nonblank name` | Sales with `Commercial`, `null`, and whitespace | Commercial; then unchanged; then unchanged |
+| `test/unit/webview/groupState.test.ts` | `changes a group's colour` | blue Sales changed to purple | colour `'purple'` |
+| `test/unit/webview/layout-dirty.test.ts` | `a membership change is dirty` | saved orders, current customers | `true` |
+| `test/unit/webview/layout-dirty.test.ts` | `a colour change is dirty` | saved blue, current purple | `true` |
+| `test/unit/webview/layout-dirty.test.ts` | `pre-group empty layouts are not dirty` | saved groups undefined, current `[]` | `false` |
+| `test/unit/webview/layoutMessages.test.ts` | `passes model and source groups through layout messages` | both modes | names, colours, and exact IDs unchanged |
+
+Native Quick Pick and input-box behavior is covered by manual verification; the
+pure membership, validation, geometry, persistence, and message payload behavior
+carry automated coverage without a VS Code Electron launch.
 
 ### Verification
 
-- `npm run verify` — typecheck + unit suites, must be green.
-- `npm test` — before the commit, must be green.
-- Manual: with `fixtures/sample-dbt/` open, perform create/rename/move/resize,
-  membership, filtering, overlap, label-pan, save/reopen and unsaved-close checks
-  in both model and source modes. Confirm pane/table interactions pass through
-  group bodies, group/FK modes are mutually exclusive, and auto-layout leaves
-  boxes in place while fitting all rendered objects.
+- `npm run verify` — typecheck and unit suites must be green.
+- `npm test` — unit and integration suites must be green.
+- `npm run typecheck` — must be green immediately before commit.
+- Manual: in model and source modes, create/cancel/edit/empty-delete a group;
+  add/remove a table from its menu; rename, recolour, and remove a group; move and
+  resize member cards through ordinary diagram changes; filter all members;
+  overlap an unrelated table; pan the label off its natural position; auto-layout;
+  save, close, and reopen; inspect YAML to confirm no group geometry is stored.
 
 ### Do not touch
 
-- `src/dbt/**` — a group is layout-only; no dbt file may be read or written by
-  this feature.
-- `src/diagram/graph.ts`, `flow.ts`, `routing.ts`, `layout.ts` — nodes, edges,
-  routing and auto-layout are unaware of groups. `layout.ts` is imported only for
-  the `NODE_WIDTH` / `HEADER_HEIGHT` constants.
-- `LAYOUT_VERSION` — stays `2`.
-- Note behavior: `useNotes`, `NoteNode`, note z-indices and the note context menu
-  must be byte-identical apart from the `renderedNodes` spread order.
-- The FK-draw gesture and its Escape handling.
-- `src/shared/protocol.ts` — groups travel inside the existing `DiagramLayout`
-  payload of `layout:save` / `layout:pending`; no new message type.
+- `src/dbt/**` — groups cannot alter dbt YAML.
+- `src/diagram/graph.ts`, `routing.ts`, `flow.ts`, or `layout.ts` — graph, edge,
+  routing, and automatic table placement remain group-unaware.
+- `LAYOUT_VERSION` — remains `2`.
+- Sticky-note behavior and FK-create behavior.
+- Existing source-import picker behavior; the group picker may mirror its UX but
+  does not modify `src/vscode/sourceImportPicker.ts`.
 
 ## Acceptance Criteria
 
-- [ ] A `Group` toolbar button sits next to "Add note" and starts the marquee mode.
-- [ ] Dragging a rectangle creates a named group containing the tables under it,
-      then exits the mode.
-- [ ] Escape, and a below-minimum rectangle, both cancel without creating a group.
-- [ ] The group label stays inside the on-screen part of the box.
-- [ ] Dragging a table in or out of the box updates the member list; no
-      `model.yml` is written.
-- [ ] The group's right-click menu offers `Rename` and `Remove group`, and
-      removing a group leaves every model in place.
-- [ ] Groups survive save → close → reopen of the layout file, and a layout file
-      written before this feature still opens.
-- [ ] All group behavior works in both model and source diagrams, preserving
-      qualified source-table IDs.
-- [ ] `npm run verify` is green.
+- [ ] Create group uses a searchable multi-select table picker followed by a name prompt.
+- [ ] A table belongs to at most one group.
+- [ ] Group and table context menus provide all specified membership, rename, colour, and removal actions.
+- [ ] Emptying a group deletes it without deleting or moving tables.
+- [ ] The derived box always encloses visible member tables and may overlap non-members.
+- [ ] The group name remains visible inside the on-screen part of its rectangle.
+- [ ] The six-colour theme-compatible palette cycles by least use and persists by name.
+- [ ] Saved groups contain no rectangle coordinates and reopen correctly in both modes.
+- [ ] No group action writes dbt YAML.
+- [ ] `npm test` and `npm run typecheck` are green.
