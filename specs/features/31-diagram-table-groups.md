@@ -1,7 +1,7 @@
 ---
 id: 31
 title: Group selected tables inside a named, coloured box
-status: implemented
+status: approved
 priority: high
 created: 2026-08-31
 owner: unassigned
@@ -31,6 +31,8 @@ current positions and measured sizes of its member tables.
 
 - Create a group by selecting one or more currently displayed tables, then
   entering a non-blank group name.
+- Create and edit groups before the diagram has ever been saved; saving is not a
+  prerequisite for any group action.
 - One group per table; grouped tables cannot be offered to another group.
 - Derive each group rectangle from its members, with padding for its label.
 - Keep the group name visible inside the on-screen portion of its rectangle.
@@ -67,6 +69,16 @@ When I enter "Sales" and confirm
 Then a group named "Sales" contains those two tables
 And its box encloses their current rectangles
 And it receives the next colour from the default palette cycle
+```
+
+### Create a group in an unsaved diagram
+
+```
+Given a diagram opened from a dbt YAML file or the command palette
+And it has not yet been saved as a `.dbtiagram.yml` file
+When I create a named group from one or more displayed tables
+Then the group is created and rendered immediately
+And clicking "Save as new diagram" later persists that group
 ```
 
 ### Cancel creation without changing the layout
@@ -172,6 +184,7 @@ And "orders" remains present and unmoved
 Given a blue group "Sales" contains "orders"
 When I save and reopen the diagram
 Then "Sales", blue, and member "orders" are restored
+And its member IDs are stored under the key `tables`
 And the saved group entry has no x, y, width, or height keys
 And its rectangle is derived from the restored table position
 ```
@@ -182,7 +195,7 @@ And its rectangle is derived from the restored table position
 
 | Path | Action | Responsibility |
 |------|--------|----------------|
-| `src/diagram/layoutGroups.ts` | create | Pure group model, palette, validation, normalization, membership mutations, default colour selection, and derived bounding rectangles. |
+| `src/diagram/layoutGroups.ts` | modify | Pure group model, palette, validation, normalization, membership mutations, default colour selection, derived bounding rectangles, and `tables` persistence parsing. |
 | `src/diagram/layoutFileNames.ts` | create | Extract layout suffix/name helpers to keep `layoutFile.ts` within the size cap. |
 | `src/diagram/layoutFile.ts` | modify | Parse, serialize, build, apply, and re-export layout groups. |
 | `src/shared/protocol.ts` | modify | Typed requests/results for create, membership edit, and rename native pickers. |
@@ -190,7 +203,7 @@ And its rectangle is derived from the restored table position
 | `src/webview/panel.ts` | modify | Handle group picker requests and return cancelled or confirmed results. |
 | `webview-ui/group-label.ts` | create | Pure visible-viewport label placement. |
 | `webview-ui/group-state.ts` | create | Pure transitions for picker results and direct table/group menu mutations. |
-| `webview-ui/hooks/useGroups.ts` | create | Own group state, picker requests/results, membership rules, colour, derived nodes, and layout seeding. |
+| `webview-ui/hooks/useGroups.ts` | modify | Own group state, picker requests/results, membership rules, colour, derived nodes, layout seeding, and unsaved-diagram creation. |
 | `webview-ui/GroupNode.tsx` | create | Render the non-movable group rectangle and visible name label. |
 | `webview-ui/DiagramCanvas.tsx` | modify | Register and render group nodes behind notes/tables and expose Create group. |
 | `webview-ui/App.tsx` | modify | Compose groups, handle picker results, and add group/table context-menu actions. |
@@ -200,10 +213,10 @@ And its rectangle is derived from the restored table position
 | `webview-ui/icons.ts` | modify | Re-export icons used by group actions. |
 | `webview-ui/styles.css` | modify | Theme-compatible group fills, borders, labels, and palette swatches. |
 | `specs/ARCHITECTURE.md` | modify | Record new modules and revised responsibilities. |
-| `test/unit/diagram/layoutGroups.test.ts` | create | Pure group persistence, membership, palette, and rectangle tests. |
-| `test/unit/diagram/layoutFile.test.ts` | modify | Group compatibility and round-trip tests. |
+| `test/unit/diagram/layoutGroups.test.ts` | modify | Pure group persistence, membership, palette, and rectangle tests. |
+| `test/unit/diagram/layoutFile.test.ts` | modify | Group `tables` key compatibility and round-trip tests. |
 | `test/unit/webview/groupLabel.test.ts` | create | Visible label placement tests. |
-| `test/unit/webview/groupState.test.ts` | create | Creation cancellation, picker result, rename, membership, colour, and deletion transitions. |
+| `test/unit/webview/groupState.test.ts` | modify | Creation cancellation, unsaved creation, picker result, rename, membership, colour, and deletion transitions. |
 | `test/unit/webview/layout-dirty.test.ts` | modify | Group dirty-state tests. |
 | `test/unit/webview/layoutMessages.test.ts` | modify | Group pass-through in model/source layout messages. |
 
@@ -373,8 +386,10 @@ export function useLayoutPersistence(
 
 1. Layout schema version stays `2`. Missing or `null` `groups` parses as `[]`;
    malformed groups produce the same strict, contextual errors used for notes.
-   Entries persist in key order `id, name, color, models`; no geometry key is
+   Entries persist in key order `id, name, color, tables`; no geometry key is
    accepted into the in-memory record or emitted. Duplicate IDs keep the first.
+   The internal `DiagramGroup.models` property remains an implementation detail;
+   the YAML representation uses only `tables`.
 2. Group names are trimmed, must be non-empty, and need not be unique. The input
    validation message is exactly `Enter a group name`. Cancelling a picker or
    name input produces a `null` result and changes nothing.
@@ -418,6 +433,9 @@ export function useLayoutPersistence(
     changes increment `mutationRevision`, arming pending-layout sync even when no
     table is visible. Applying an opened layout does not increment it.
 14. Both model and source modes behave identically. Source IDs remain qualified.
+15. Group creation and every local group mutation are independent of
+    `activeLayout`. An unsaved diagram keeps groups in webview state and includes
+    them when the existing Save-as-new action builds its first layout payload.
 
 ### Tests
 
@@ -435,13 +453,15 @@ export function useLayoutPersistence(
 | `test/unit/diagram/layoutGroups.test.ts` | `normalizes ids and qualified source members` | duplicates and `finance.orders` | sorted unique strings preserved |
 | `test/unit/diagram/layoutGroups.test.ts` | `rejects an unknown colour` | `color: 'orange'` | throws `Group "g-1" has an invalid "color"` |
 | `test/unit/diagram/layoutGroups.test.ts` | `rejects persisted geometry by ignoring it` | valid group plus x/y/width/height | normalized group has only id/name/color/models |
-| `test/unit/diagram/layoutFile.test.ts` | `round-trips groups without geometry` | one blue Sales group | emitted group is `{id,name,color,models}` and parses equal |
+| `test/unit/diagram/layoutFile.test.ts` | `round-trips groups without geometry` | one blue Sales group | YAML group is `{id,name,color,tables}` and parses to the internal group |
+| `test/unit/diagram/layoutFile.test.ts` | `does not write the internal models key` | one group | serialized YAML contains `tables:` and no group-level `models:` |
 | `test/unit/diagram/layoutFile.test.ts` | `parses a pre-group file` | tables with no groups key | `groups: []` |
 | `test/unit/diagram/layoutFile.test.ts` | `omits empty groups` | `groups: []` | no `groups:` key |
 | `test/unit/diagram/layoutFile.test.ts` | `passes source groups through applyLayout` | member `finance.orders` | qualified member unchanged |
 | `test/unit/webview/groupLabel.test.ts` | `keeps a fully visible label at group top-left` | fully visible box | `{x:0,y:0}` |
 | `test/unit/webview/groupLabel.test.ts` | `moves the label into the visible intersection` | only bottom-right visible | offset clamped inside box |
 | `test/unit/webview/groupState.test.ts` | `creates from a confirmed picker result` | empty groups, id `g-1`, Sales with orders/customers | one normalized group using blue |
+| `test/unit/webview/groupState.test.ts` | `creates without an active saved layout` | empty groups and confirmed picker result, with no layout path | one group; no layout path dependency |
 | `test/unit/webview/groupState.test.ts` | `cancelled creation changes nothing` | one existing group and `null` | same array reference |
 | `test/unit/webview/groupState.test.ts` | `edits membership and deletes on empty confirmation` | Sales with orders; then customers; then `[]` | Sales contains customers; then `[]` |
 | `test/unit/webview/groupState.test.ts` | `cancelled membership edit changes nothing` | Sales and `null` | same array reference |
@@ -487,5 +507,7 @@ carry automated coverage without a VS Code Electron launch.
 - [ ] The group name remains visible inside the on-screen part of its rectangle.
 - [ ] The six-colour theme-compatible palette cycles by least use and persists by name.
 - [ ] Saved groups contain no rectangle coordinates and reopen correctly in both modes.
+- [ ] Saved group members use the YAML key `tables`, never `models`.
+- [ ] Group creation works before the diagram has been saved.
 - [ ] No group action writes dbt YAML.
 - [ ] `npm test` and `npm run typecheck` are green.
