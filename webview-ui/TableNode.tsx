@@ -60,9 +60,10 @@ function TableNodeComponent({ id, data }: NodeProps<FlowNode>): JSX.Element {
   const pkUniqueTestOff = !pkVirtual && data.primaryKey !== undefined && !data.primaryKey.uniqueTest;
 
   const isSelectedColumn = (column: string): boolean =>
-    selectedColumnRef !== null &&
-    selectedColumnRef.model === id &&
-    selectedColumnRef.column === column;
+    interaction?.selectedColumns.get(id)?.has(column) ?? (
+      selectedColumnRef !== null && selectedColumnRef.model === id && selectedColumnRef.column === column
+    );
+  const orderedColumns = data.columns.map((column) => column.name);
 
   // Spec 09 merged: the handles this node's edges actually use (id -> side).
   // Spec 12 (Manual Verify iteration): ALL four handles per column are always
@@ -123,7 +124,11 @@ function TableNodeComponent({ id, data }: NodeProps<FlowNode>): JSX.Element {
   };
 
   return (
-    <div className={`table-node${selectedTable ? ' table-node--selected' : ''}`}>
+    <div
+      className={`table-node${selectedTable ? ' table-node--selected' : ''}`}
+      onDragOver={(event) => { event.preventDefault(); interaction?.onColumnDragOver({ model: id }); }}
+      onDrop={(event) => { event.preventDefault(); interaction?.onColumnDrop({ model: id }, event.ctrlKey); }}
+    >
       {renderHandle(CARD_ANCHOR, 'left', 'target')}
       {renderHandle(CARD_ANCHOR, 'right', 'target')}
       {renderHandle(CARD_ANCHOR, 'left', 'source')}
@@ -136,6 +141,11 @@ function TableNodeComponent({ id, data }: NodeProps<FlowNode>): JSX.Element {
         className={`table-node__title${selectedTable ? ' table-node__title--selected' : ''}`}
         title={data.description === undefined ? data.label : `${data.label}\n${data.description}`}
         onClick={() => interaction?.onTableSelect(id)}
+        onContextMenu={(event) => {
+          event.preventDefault();
+          event.stopPropagation();
+          interaction?.onColumnContextMenu(id, '', event);
+        }}
         onDoubleClick={(event) => {
           event.stopPropagation();
           setEditing({ kind: 'title' });
@@ -160,6 +170,8 @@ function TableNodeComponent({ id, data }: NodeProps<FlowNode>): JSX.Element {
       {data.columns.map((column, index) => {
         const isHighlighted = highlighted.has(column.name);
         const isSelected = isSelectedColumn(column.name);
+        const isCut = interaction?.cutColumns.get(id)?.has(column.name) ?? false;
+        const insertBefore = interaction?.insertionTarget?.model === id && interaction.insertionTarget.before === column.name;
         const isPk = pkColumns.includes(column.name);
         const editingCell =
           editing?.kind === 'column' && editing.column === column.name ? editing.cell : null;
@@ -168,12 +180,30 @@ function TableNodeComponent({ id, data }: NodeProps<FlowNode>): JSX.Element {
             key={column.name}
             className={`table-node__row${isHighlighted ? ' table-node__row--highlighted' : ''}${
               isSelected ? ' table-node__row--selected' : ''
-            }`}
+            }${isCut ? ' table-node__row--cut' : ''}${insertBefore ? ' table-node__row--insert-before' : ''}`}
             style={{ top: HEADER_HEIGHT + index * ROW_HEIGHT, height: ROW_HEIGHT }}
             title={column.description}
             onMouseEnter={() => interaction?.onColumnHover(id, column.name)}
             onMouseLeave={() => interaction?.onColumnLeave(id, column.name)}
-            onClick={() => interaction?.onColumnSelect(id, column.name)}
+            draggable={editingCell === null}
+            onClick={(event) => interaction?.onColumnSelect(id, column.name, event)}
+            onDragStart={(event) => {
+              event.stopPropagation();
+              interaction?.onColumnDragStart(id, column.name, orderedColumns);
+              event.dataTransfer.effectAllowed = 'copyMove';
+            }}
+            onDragOver={(event) => {
+              event.preventDefault();
+              event.stopPropagation();
+              interaction?.onColumnDragOver({ model: id, before: column.name });
+            }}
+            onDragLeave={() => interaction?.onColumnDragLeave()}
+            onDrop={(event) => {
+              event.preventDefault();
+              event.stopPropagation();
+              interaction?.onColumnDrop({ model: id, before: column.name }, event.ctrlKey);
+            }}
+            onDragEnd={() => interaction?.onColumnDragEnd()}
             onContextMenu={(event) => {
               event.preventDefault();
               event.stopPropagation();
@@ -268,6 +298,9 @@ function TableNodeComponent({ id, data }: NodeProps<FlowNode>): JSX.Element {
           </div>
         );
       })}
+      {interaction?.insertionTarget?.model === id && interaction.insertionTarget.before === undefined && (
+        <div className="table-node__insert-after" style={{ top: HEADER_HEIGHT + data.columns.length * ROW_HEIGHT }} />
+      )}
     </div>
   );
 }

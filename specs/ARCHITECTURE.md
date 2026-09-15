@@ -57,6 +57,7 @@ lines** under `test/unit/` (see `specs/features/17-modular-source-layout.md`).
 one `config.meta` key at a time (spec 27). | `mapColumn`, `setColumnDataType`, `setColumnDescription`, 
  `setColumnMetaValue`, `renameColumn` |
 | `src/dbt/edit/aiPromptImport.ts` | pure | Applies accepted bulk AI rename/type results through existing column mutation primitives (spec 43). | `applyAiPromptImport` |
+| `src/dbt/edit/columnTransfer.ts` | pure | Atomic column add/reorder/move/copy, collision-safe names, PK synchronization, and pair-wise FK redirection/splitting (spec 46). | `transferColumns`, `addColumn`, `transferredColumnName` |
 
 ## `src/diagram/` — graph and layout (pure)
 
@@ -166,6 +167,8 @@ via `ExtensionContext.workspaceState` (spec 27). | `readMatrixColumnPrefs`, `wri
 | `webview-ui/FilterSidebar.tsx` | webview | Left sidebar: file/model filtering, search, locate, and the model row's "Open SQL file" item (spec 38). | `FilterSidebar` |
 | `webview-ui/DetailsSidebar.tsx` | webview | Right sidebar: edit the selected model or column; renders the "Columns shown" section between Description and Primary key for a table (spec 24); Column section has a "Primary key" checkbox and both sections have a "Reveal in model.yml" button (spec 34). | `DetailsSidebar`, `SelectedEntity` |
 | `webview-ui/columnPrimaryKey.ts` | webview (pure) | Derives whether a column is part of its table's displayed primary key, and the `setPrimaryKey` edit toggling its membership (spec 34). | `isPrimaryKeyColumn`, `toggleColumnPrimaryKey` |
+| `webview-ui/column-transfer-state.ts` | webview (pure) | Contiguous diagram-column selection, insertion targets, and internal cut/copy clipboard transitions (spec 46). | `selectColumn`, `selectionContains`, `copySelection`, `cutSelection`, `clipboardEdit`, `afterPaste` |
+| `webview-ui/matrix-row-order.ts` | webview (pure) | Model-matrix filter gating and reorder/add edit construction (spec 46). | `hasActiveMatrixFilter`, `matrixReorderEdit`, `addColumnEdit` |
 | `webview-ui/PrimaryKeySection.tsx` | webview | Primary key editing UI inside the details sidebar. | `PrimaryKeySection` |
 | `webview-ui/ColumnDisplaySection.tsx` | webview | "Columns shown" radio section of the details pane (spec 24). | `ColumnDisplaySection`, `ColumnDisplaySectionProps` |
 | `webview-ui/ForeignKeySection.tsx` | webview | Foreign key editing UI, including draft (incomplete) FKs. | `ForeignKeySection`, `DraftForeignKey`, `sameFkContent` |
@@ -197,9 +200,12 @@ columnIndex)` grid (spec 27). | `CellRef`, `MatrixSelection`, `startSelection`, 
 | `webview-ui/FieldsMatrix.tsx` | webview | The "fields matrix" modal (spec 27): grid over one model's columns or 
 every model's, with filter, column show/hide + reorder, editable cells, and batch-apply. | `FieldsMatrix`, 
 `FieldsMatrixProps` |
+| `webview-ui/FieldsMatrixRow.tsx` | webview | Existing matrix row rendering and model-scope row drag handle (spec 46). | `FieldsMatrixRow`, `FieldsMatrixRowProps` |
+| `webview-ui/FieldsMatrixCreateRow.tsx` | webview | Model-scope final Name/Data type creation row (spec 46). | `FieldsMatrixCreateRow`, `FieldsMatrixCreateRowProps` |
 | `webview-ui/hooks/useFieldsMatrix.ts` | webview | Open/close state, column-prefs round trip, and the always-reset 
 filter text for the fields matrix (spec 27). | `useFieldsMatrix`, `FieldsMatrixState`, `MatrixTarget` |
 | `webview-ui/hooks/useSourceImport.ts` | webview | Owns source-import request/report state and reveals successful imports through the filter (spec 41). | `useSourceImport`, `SourceImportState` |
+| `webview-ui/hooks/useColumnTransfer.ts` | webview | React state/ref wrapper for diagram column selection, drag/drop, and the internal clipboard (spec 46). | `useColumnTransfer`, `ColumnTransferState` |
 
 ## Tests
 

@@ -51,6 +51,7 @@ import { diagramModeLabels, type DiagramMode } from '../src/shared/diagramMode';
 import { Settings, SavePlus, Save, SaveCheck, StickyNotePlus, Grid3x3, ChartNoAxesGantt, BetweenHorizontalStart, Trash2, Waypoints, FileCode2, Import, ClipboardCopy, ClipboardPaste, PencilSparkles, Group } from './icons';
 import { AiPromptExport } from './AiPromptExport';
 import { useGroups } from './hooks/useGroups';
+import { useColumnTransfer } from './hooks/useColumnTransfer';
 import { GROUP_COLORS, groupForModel, type GroupColor } from '../src/diagram/layoutGroups';
 import { AI_RENAMING_UNAVAILABLE_REASON } from '../src/shared/aiRenaming';
 
@@ -92,6 +93,7 @@ export function App(): JSX.Element {
   });
   const settings = useSettings();
   const fieldsMatrix = useFieldsMatrix(postToHost);
+  const columnTransfer = useColumnTransfer();
   // Stable callbacks pulled out of the hook results: memo dependency lists must
   // reference these, never the freshly-built hook result objects, or every
   // render would invalidate `interaction` and re-render every TableNode.
@@ -122,6 +124,7 @@ export function App(): JSX.Element {
       setMode(message.mode);
       filter.applyModelFiles(message.files);
       selection.reconcileToGraph(message.diagram);
+      columnTransfer.reconcile(message.diagram);
     },
     onDiagramError: (message) => {
       setError(message);
@@ -218,10 +221,14 @@ export function App(): JSX.Element {
   // mode is inactive `handleColumnClick` returns null and the click falls
   // through to ordinary selection, byte-identical to before this feature.
   const onColumnSelectOrDraw = useCallback(
-    (model: string, column: string): void => {
+    (model: string, column: string, event: ReactMouseEvent): void => {
       const outcome = fkCreate.handleColumnClick(model, column);
       if (outcome === null) {
         onColumnSelect(model, column);
+        if (mode === 'model') {
+          const ordered = graph?.nodes.find((node) => node.id === model)?.columns.map((item) => item.name) ?? [];
+          columnTransfer.select(model, column, ordered, event.shiftKey);
+        }
         return;
       }
       if (outcome.completed !== undefined) {
@@ -244,7 +251,7 @@ export function App(): JSX.Element {
         });
       }
     },
-    [fkCreate, onColumnSelect, onEdit, onTableSelect, setFocusedFk, mode],
+    [fkCreate, onColumnSelect, onEdit, onTableSelect, setFocusedFk, mode, graph, columnTransfer.select],
   );
 
   // Feature 07: a defined onEdgeClick is what keeps React Flow from tagging
@@ -443,7 +450,7 @@ export function App(): JSX.Element {
             onSelect: () => columnDisplay.setTableMode(model, option.value),
           })),
         },
-        ...(mode === 'model' ? [{ label: 'Edit fields matrix', icon: <Grid3x3 size={16} />, onSelect: () => fieldsMatrix.openForModel(model) }] : []),
+        ...(mode === 'model' ? [{ label: 'Edit columns', icon: <Grid3x3 size={16} />, onSelect: () => fieldsMatrix.openForModel(model) }] : []),
         ...(mode === 'model' ? [{
           label: 'AI renaming',
           icon: <PencilSparkles size={16} />,
@@ -466,9 +473,23 @@ export function App(): JSX.Element {
 
   const onColumnContextMenu = useCallback(
     (model: string, column: string, event: ReactMouseEvent): void => {
-      openMenu(event.clientX, event.clientY, buildTableMenuItems(model, column));
+      const ordered = graph?.nodes.find((node) => node.id === model)?.columns.map((item) => item.name) ?? [];
+      if (column.length > 0) columnTransfer.selectForContextMenu(model, column, ordered);
+      const target = column.length > 0 ? { model, before: column } : { model };
+      const pasteDisabled = mode !== 'model' || columnTransfer.clipboard === null || columnTransfer.clipboard.sourceModel === model;
+      openMenu(event.clientX, event.clientY, [
+        ...(mode === 'model' && column.length > 0 ? [
+          { label: 'Copy', onSelect: columnTransfer.copy },
+          { label: 'Cut', onSelect: columnTransfer.cut },
+        ] : []),
+        ...(mode === 'model' ? [{
+          label: 'Paste', disabled: pasteDisabled,
+          onSelect: () => { const edit = columnTransfer.paste(target); if (edit !== null) onEdit(edit); },
+        }] : []),
+        ...buildTableMenuItems(model, column.length > 0 ? column : undefined),
+      ]);
     },
-    [openMenu, buildTableMenuItems],
+    [openMenu, buildTableMenuItems, graph, mode, columnTransfer, onEdit],
   );
 
   // Spec 15: only table cards carry a menu; other node types (notes) are
@@ -543,10 +564,25 @@ export function App(): JSX.Element {
         (current !== null && current.kind === 'column'
           ? { model: current.model, column: current.column }
           : null),
+      selectedColumns: columnTransfer.selection === null
+        ? new Map()
+        : new Map([[columnTransfer.selection.model, new Set(columnTransfer.selection.columns)]]),
+      cutColumns: columnTransfer.clipboard?.operation !== 'cut'
+        ? new Map()
+        : new Map([[columnTransfer.clipboard.sourceModel, new Set(columnTransfer.clipboard.columns)]]),
+      insertionTarget: columnTransfer.insertionTarget,
       onTableSelect,
       onColumnSelect: onColumnSelectOrDraw,
       onEdit,
       onColumnContextMenu,
+      onColumnDragStart: columnTransfer.beginDrag,
+      onColumnDragOver: columnTransfer.hoverInsertion,
+      onColumnDragLeave: () => columnTransfer.hoverInsertion(null),
+      onColumnDrop: (target, ctrlKey) => {
+        const edit = columnTransfer.drop(target, ctrlKey);
+        if (edit !== null) onEdit(edit);
+      },
+      onColumnDragEnd: () => columnTransfer.hoverInsertion(null),
     }),
     [
       highlighting.highlightedColumns,
@@ -558,6 +594,12 @@ export function App(): JSX.Element {
       onColumnSelectOrDraw,
       onEdit,
       onColumnContextMenu,
+      columnTransfer.selection,
+      columnTransfer.clipboard,
+      columnTransfer.insertionTarget,
+      columnTransfer.beginDrag,
+      columnTransfer.hoverInsertion,
+      columnTransfer.drop,
     ],
   );
 

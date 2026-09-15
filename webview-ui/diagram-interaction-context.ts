@@ -9,6 +9,7 @@
 import { createContext } from 'react';
 import type { MouseEvent as ReactMouseEvent } from 'react';
 import type { ModelEdit } from '../src/dbt/edit';
+import type { ColumnInsertTarget, ColumnRef } from './column-transfer-state';
 
 export interface DiagramInteractionContextValue {
   /** Column names to highlight, keyed by model (node id). */
@@ -18,15 +19,23 @@ export interface DiagramInteractionContextValue {
   /** Node id of the selected table, or null when a table is not selected. */
   selectedTableId: string | null;
   /** Model + column of the selected column, or null when a column is not selected. */
-  selectedColumnRef: { model: string; column: string } | null;
+  selectedColumnRef: ColumnRef | null;
+  selectedColumns: ReadonlyMap<string, ReadonlySet<string>>;
+  cutColumns: ReadonlyMap<string, ReadonlySet<string>>;
+  insertionTarget: ColumnInsertTarget | null;
   /** Selects the table with the given model name (clicking its header). */
   onTableSelect: (model: string) => void;
   /** Selects the column (clicking its row). */
-  onColumnSelect: (model: string, column: string) => void;
+  onColumnSelect: (model: string, column: string, event: ReactMouseEvent) => void;
   /** Posts a `diagram:edit` message (inline editing and the details sidebar). */
   onEdit: (edit: ModelEdit) => void;
   /** Opens the table's context menu from a column row (spec 25). */
   onColumnContextMenu: (model: string, column: string, event: ReactMouseEvent) => void;
+  onColumnDragStart: (model: string, column: string, orderedColumns: readonly string[]) => void;
+  onColumnDragOver: (target: ColumnInsertTarget) => void;
+  onColumnDragLeave: () => void;
+  onColumnDrop: (target: ColumnInsertTarget, ctrlKey: boolean) => void;
+  onColumnDragEnd: () => void;
 }
 
 export const DiagramInteractionContext = createContext<DiagramInteractionContextValue | null>(

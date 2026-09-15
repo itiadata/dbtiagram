@@ -1,13 +1,3 @@
-/**
- * The "fields matrix" modal (spec 27): a spreadsheet-like grid over one
- * model's columns or every column of every model in the diagram. Renders a
- * "Columns…" popover for show/hide + drag-to-reorder, a per-column filter row
- * under the headers, editable cells, and a batch-apply affordance for
- * multi-cell selections.
- *
- * Modal chrome follows `SettingsPanel.tsx`'s conventions: Escape and outside
- * pointerdown close it.
- */
 import { useEffect, useMemo, useRef, useState, type DragEvent } from 'react';
 import type { ModelEdit } from '../src/dbt/edit';
 import type { DiagramGraph, TableNode } from '../src/diagram/graph';
@@ -29,21 +19,19 @@ import {
   type MatrixSelection,
 } from './matrix-selection';
 import type { MatrixColumnFilters } from './hooks/useFieldsMatrix';
+import { FieldsMatrixRow } from './FieldsMatrixRow';
+import { FieldsMatrixCreateRow } from './FieldsMatrixCreateRow';
+import { addColumnEdit, hasActiveMatrixFilter, matrixReorderEdit } from './matrix-row-order';
 
 export interface FieldsMatrixProps {
   target: { scope: 'model'; model: string } | { scope: 'global' };
   graph: DiagramGraph;
   onEdit: (edit: ModelEdit) => void;
   onClose: () => void;
-  /** Current column defs for this scope; seeded once when the modal opens. */
   columns: MatrixColumnDef[];
-  /** Seeds the initial column defs (no host round trip). */
   seedColumns: (columns: MatrixColumnDef[]) => void;
-  /** Applies a visibility/order change; posts it to the host. */
   onColumnsChange: (columns: MatrixColumnDef[]) => void;
-  /** The stored preferences last received from the host, for this scope. */
   storedPrefs: StoredMatrixColumnPref[] | undefined;
-  /** One filter text per column, keyed by column id; always reset on open. */
   columnFilters: MatrixColumnFilters;
   onColumnFilterChange: (columnId: MatrixColumnId, text: string) => void;
 }
@@ -79,9 +67,8 @@ export function FieldsMatrix({
   const [selecting, setSelecting] = useState(false);
   const [batchValue, setBatchValue] = useState('');
   const [columnsMenuOpen, setColumnsMenuOpen] = useState(false);
+  const [draggedRow, setDraggedRow] = useState<string | null>(null);
 
-  // Nodes in scope, and the meta keys discovered once at open time (spec 27,
-  // Behavior note 6: a snapshot, not live).
   const nodes: TableNode[] = useMemo(() => {
     if (target.scope === 'global') return graph.nodes;
     const node = graph.nodes.find((n) => n.id === target.model);
@@ -90,7 +77,6 @@ export function FieldsMatrix({
 
   const metaKeysRef = useRef<string[]>([]);
   if (columns.length === 0) {
-    // First render for a freshly opened scope: compute the snapshot once.
     metaKeysRef.current = discoverMetaKeys(nodes);
   }
 
@@ -98,7 +84,6 @@ export function FieldsMatrix({
     if (columns.length > 0) return;
     const metaKeys = discoverMetaKeys(nodes);
     seedColumns(applyStoredPrefs(defaultMatrixColumns(metaKeys, target.scope), storedPrefs));
-    // Only seed once per open (columns.length === 0 guards re-seeding).
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [columns.length]);
 
@@ -109,9 +94,6 @@ export function FieldsMatrix({
 
   const visibleColumns = columns.filter((c) => c.visible);
 
-  // A row is kept when it matches every column's non-empty filter (spreadsheet
-  // AND semantics): each active filter is checked against that column's own
-  // cell, not any cell in the row.
   const filteredRowIndexes = useMemo(() => {
     const activeFilters = visibleColumns
       .map((column) => ({ column, needle: (columnFilters[columnIdKey(column.id)] ?? '').trim().toLowerCase() }))
@@ -191,9 +173,6 @@ export function FieldsMatrix({
     const next = row.isPrimaryKey
       ? pkColumns.filter((c) => c !== row.column)
       : [...pkColumns, row.column];
-    // `uniqueTest` is intentionally omitted: the matrix updates an existing
-    // unique-combination test but never creates one (spec 33) — the details
-    // sidebar checkbox is the only place it can be brought into existence.
     onEdit({ kind: 'setPrimaryKey', model: row.model, columns: next, virtual });
   }
 
@@ -201,7 +180,6 @@ export function FieldsMatrix({
     const node = graph.nodes.find((n) => n.id === row.model);
     const pkColumns = node?.primaryKey?.columns ?? [];
     const virtual = node?.primaryKey?.virtual ?? false;
-    // See the note above: `uniqueTest` is omitted so this never creates the test.
     onEdit({ kind: 'setPrimaryKey', model: row.model, columns: pkColumns, virtual: !virtual });
   }
 
@@ -227,11 +205,8 @@ export function FieldsMatrix({
 
   const selectedCells = selection === null ? [] : cellsInSelection(selection);
   const selectedSet = new Set(selectedCells.map((c) => `${c.row}:${c.columnIndex}`));
-  const isSelected = (rowIndex: number, columnIndex: number): boolean =>
-    selectedSet.has(`${rowIndex}:${columnIndex}`);
+  const reorderEnabled = target.scope === 'model' && !hasActiveMatrixFilter(columnFilters);
 
-  // The single batch-editable column kind spanned by the current selection,
-  // when 2+ cells of that (compatible) kind are selected.
   const batchColumn: MatrixColumnDef | undefined = useMemo(() => {
     if (selectedCells.length < 2) return undefined;
     const columnIndexes = new Set(selectedCells.map((c) => c.columnIndex));
@@ -278,7 +253,7 @@ export function FieldsMatrix({
     onColumnsChange(reorderColumn(columns, fromIndex, index));
   }
 
-  const scopeLabel = target.scope === 'global' ? 'Edit fields matrix (all models)' : `Edit fields matrix — ${target.model}`;
+  const scopeLabel = target.scope === 'global' ? 'Edit fields matrix (all models)' : `Edit columns — ${target.model}`;
 
   return (
     <div className="fields-matrix-overlay">
@@ -338,6 +313,7 @@ export function FieldsMatrix({
                     {column.label}
                   </th>
                 ))}
+                {target.scope === 'model' && <th className="fields-matrix__row-handle-cell">Order</th>}
               </tr>
               <tr className="fields-matrix__filter-row">
                 {visibleColumns.map((column) => (
@@ -353,57 +329,38 @@ export function FieldsMatrix({
                     )}
                   </th>
                 ))}
+                {target.scope === 'model' && <th className="fields-matrix__row-handle-cell" />}
               </tr>
             </thead>
-            <tbody>
+            <tbody
+              onDragOver={(event) => { if (reorderEnabled) event.preventDefault(); }}
+              onDrop={(event) => {
+                if (event.target instanceof Element && event.target.closest('tr')?.classList.contains('fields-matrix__create-row')) {
+                  event.preventDefault();
+                  if (target.scope === 'model' && draggedRow !== null && reorderEnabled) {
+                    onEdit(matrixReorderEdit(target.model, rows, draggedRow, undefined));
+                    setDraggedRow(null);
+                  }
+                }
+              }}
+            >
               {filteredRowIndexes.map((rowIndex, visibleRowIndex) => {
                 const row = rows[rowIndex];
                 if (row === undefined) return null;
-                return (
-                  <tr key={`${row.model}.${row.column}`}>
-                    {visibleColumns.map((column, columnIndex) => {
-                      const selected = isSelected(visibleRowIndex, columnIndex);
-                      if (isCheckboxColumn(column.id)) {
-                        const checked =
-                          column.id === 'primaryKey' ? row.isPrimaryKey : row.virtualPrimaryKey;
-                        const disabled = column.id === 'virtualPrimaryKey' && !row.isPrimaryKey;
-                        return (
-                          <td
-                            key={columnIdKey(column.id)}
-                            className={selected ? 'fields-matrix__cell--selected' : undefined}
-                            onPointerDown={() => onCellPointerDown(visibleRowIndex, columnIndex)}
-                            onPointerEnter={() => onCellPointerEnter(visibleRowIndex, columnIndex)}
-                          >
-                            <input
-                              type="checkbox"
-                              checked={checked}
-                              disabled={disabled}
-                              onChange={() =>
-                                column.id === 'primaryKey'
-                                  ? togglePrimaryKey(row)
-                                  : toggleVirtualPrimaryKey(row)
-                              }
-                            />
-                          </td>
-                        );
-                      }
-                      if (column.id === 'model') {
-                        return <td key="model">{row.model}</td>;
-                      }
-                      return (
-                        <EditableCell
-                          key={columnIdKey(column.id)}
-                          value={cellText(row, column.id)}
-                          selected={selected}
-                          onPointerDown={() => onCellPointerDown(visibleRowIndex, columnIndex)}
-                          onPointerEnter={() => onCellPointerEnter(visibleRowIndex, columnIndex)}
-                          onCommit={(value) => editRow(row, column.id, value)}
-                        />
-                      );
-                    })}
-                  </tr>
-                );
+                return <FieldsMatrixRow key={`${row.model}.${row.column}`} row={row} visibleRowIndex={visibleRowIndex}
+                  visibleColumns={visibleColumns} selectedCells={selectedSet} reorderEnabled={reorderEnabled}
+                  onCellPointerDown={onCellPointerDown} onCellPointerEnter={onCellPointerEnter}
+                  onTextCommit={editRow} onPrimaryKeyToggle={togglePrimaryKey} onVirtualPrimaryKeyToggle={toggleVirtualPrimaryKey}
+                  onReorderDragStart={target.scope === 'model' ? setDraggedRow : undefined}
+                  onReorderDropBefore={target.scope === 'model' ? (before) => {
+                    if (draggedRow !== null) onEdit(matrixReorderEdit(target.model, rows, draggedRow, before));
+                    setDraggedRow(null);
+                  } : undefined} />;
               })}
+              {target.scope === 'model' && <FieldsMatrixCreateRow visibleColumns={visibleColumns} onCreate={(name, dataType) => {
+                const edit = addColumnEdit(target.model, name, dataType);
+                if (edit !== null) onEdit(edit);
+              }} />}
             </tbody>
           </table>
         </div>
@@ -436,43 +393,5 @@ export function FieldsMatrix({
         )}
       </div>
     </div>
-  );
-}
-
-function EditableCell({
-  value,
-  selected,
-  onPointerDown,
-  onPointerEnter,
-  onCommit,
-}: {
-  value: string;
-  selected: boolean;
-  onPointerDown: () => void;
-  onPointerEnter: () => void;
-  onCommit: (value: string) => void;
-}): JSX.Element {
-  const [draft, setDraft] = useState(value);
-
-  useEffect(() => setDraft(value), [value]);
-
-  return (
-    <td
-      className={selected ? 'fields-matrix__cell--selected' : undefined}
-      onPointerDown={onPointerDown}
-      onPointerEnter={onPointerEnter}
-    >
-      <input
-        type="text"
-        value={draft}
-        onChange={(event) => setDraft(event.target.value)}
-        onBlur={() => onCommit(draft)}
-        onKeyDown={(event) => {
-          if (event.key === 'Enter') {
-            (event.target as HTMLInputElement).blur();
-          }
-        }}
-      />
-    </td>
   );
 }

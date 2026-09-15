@@ -22,6 +22,7 @@ import {
 } from './foreignKey';
 import type { ModelDefinition } from '../types';
 import { applyAiPromptImport } from './aiPromptImport';
+import { addColumn, transferColumns } from './columnTransfer';
 
 export { EditError };
 export type { ApplyEditResult, ModelEdit };
@@ -85,6 +86,17 @@ export function applyEdit(models: ModelDefinition[], edit: ModelEdit): ApplyEdit
       );
     case 'removeForeignKey':
       return mapModel(models, edit.model, (m) => removeFkFromModel(m, edit.fk));
+    case 'transferColumns':
+      return transferColumns(
+        models,
+        edit.sourceModel,
+        edit.destinationModel,
+        edit.columns,
+        edit.before,
+        edit.copy,
+      );
+    case 'addColumn':
+      return addColumn(models, edit.model, edit.name, edit.dataType);
     case 'applyAiPromptImport':
       return applyAiPromptImport(models, edit.model, edit.columns);
   }

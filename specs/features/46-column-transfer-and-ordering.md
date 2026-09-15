@@ -1,7 +1,7 @@
 ---
 id: 46
 title: Move, copy, paste, reorder, and add columns
-status: approved
+status: implemented
 priority: high
 created: 2026-09-15
 owner: unassigned

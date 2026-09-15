@@ -47,4 +47,13 @@ export type ModelEdit =
       virtual: boolean;
     }
   | { kind: 'removeForeignKey'; model: string; fk: ForeignKeyDescriptor }
+  | {
+      kind: 'transferColumns';
+      sourceModel: string;
+      destinationModel: string;
+      columns: string[];
+      before?: string;
+      copy: boolean;
+    }
+  | { kind: 'addColumn'; model: string; name: string; dataType: string }
   | { kind: 'applyAiPromptImport'; model: string; columns: AiPromptImportColumn[] };
