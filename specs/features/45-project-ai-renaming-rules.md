@@ -34,6 +34,9 @@ contract.
   `dbt_project.yml`, bounded by that model's VS Code workspace folder.
 - Read that project's `.dbtiagram/ai_renaming_rules.md` as the naming/type rules
   used by prompt export.
+- Always include dbtiagram-owned task context explaining that columns are being
+  renamed and typed from current model and source metadata; the project file
+  supplies only the rules for choosing new names and data types.
 - Keep the model-mode **AI renaming** submenu visible but grey it out when the
   file is missing, blank, unreadable, or no dbt project root can be resolved.
 - Explain the disabled state with a tooltip and refresh availability after
@@ -61,8 +64,9 @@ contract.
 Given model orders is declared below a dbt project root containing dbt_project.yml
 And that root contains a non-blank .dbtiagram/ai_renaming_rules.md with "Use ACME vocabulary."
 When the user exports an AI rename prompt for orders
-Then the copied prompt starts with "Use ACME vocabulary."
-And dbtiagram appends its model context, JSONL evidence, and strict JSON response contract
+Then the copied prompt starts with "Rename each input column and choose its data type. The JSONL input describes the current dbt model columns and their source metadata. Apply the project-specific naming and data-type rules below."
+And "Use ACME vocabulary." follows that task context
+And dbtiagram appends the model context, JSONL evidence, and strict JSON response contract
 And the former bundled uppercase and prefix rules are absent unless the project file contains them
 ```
 
@@ -237,9 +241,15 @@ export async function availableAiRenamingModels(
    Preserve the file text as authored except that prompt construction trims
    leading/trailing whitespace before concatenation.
 3. **Prompt ownership.** The project Markdown replaces only the former contents
-   of `src/dbt/aiPromptRules.md`. `buildAiRenameTypePrompt` still appends the
-   model/source/batch headers, JSONL legend and evidence, and exact strict
-   response instructions defined by feature 42. There is no bundled fallback.
+   of `src/dbt/aiPromptRules.md`. Every prompt starts with the dbtiagram-owned
+   text `Rename each input column and choose its data type. The JSONL input
+   describes the current dbt model columns and their source metadata. Apply the
+   project-specific naming and data-type rules below.`, followed by the trimmed
+   project rules. `buildAiRenameTypePrompt` then appends the model/source/batch
+   headers, JSONL legend and evidence, and exact strict response instructions
+   defined by feature 42. There is no bundled fallback. The project Markdown is
+   responsible only for rules governing new names and data types; it cannot
+   remove or replace dbtiagram's task context, evidence, or response contract.
 4. **Availability protocol and UI.** In model mode, the host publishes
    `aiPrompt:availability` with unique model names having non-blank readable
    rules. It publishes on `webview:ready`, after model refreshes that can change
@@ -276,7 +286,7 @@ export async function availableAiRenamingModels(
 | `test/unit/webview/aiPromptProjectRules.test.ts` | `uses rules from the nearest dbt project root` | model `/workspace/outer/nested/models/orders.yml`; marker/rules under both `/workspace/outer` and `/workspace/outer/nested` | returns the nested rules text and never reads outer rules |
 | `test/unit/webview/aiPromptProjectRules.test.ts` | `stops after inspecting the workspace root` | model `/workspace/models/orders.yml`, workspace `/workspace`, no marker | returns `undefined` and never calls `parent('/workspace')` or checks `/dbt_project.yml` |
 | `test/unit/webview/aiPromptProjectRules.test.ts` | `treats missing blank and unreadable rules as unavailable` | nearest project marker exists; rules respectively missing, `' \n '`, and read returns `undefined` | returns `undefined` for all three |
-| `test/unit/dbt/aiPrompt.test.ts` | `uses caller-provided project rules and retains the generated contract` | one-column batch plus rules `Use ACME vocabulary.` | prompt starts with `Use ACME vocabulary.`, contains JSONL evidence and `Respond with exactly one valid JSON object`, and does not contain the former `ID_`, `DES_`, or `TYP_` rules |
+| `test/unit/dbt/aiPrompt.test.ts` | `uses caller-provided project rules and retains the generated contract` | one-column batch plus rules `Use ACME vocabulary.` | prompt starts with the exact dbtiagram task context, places `Use ACME vocabulary.` immediately after it, contains JSONL evidence and `Respond with exactly one valid JSON object`, and does not contain the former `ID_`, `DES_`, or `TYP_` rules |
 | `test/unit/webview/aiPromptExport.test.ts` | `loads project rules and returns the copied batch` | current model, loader resolves `Use ACME vocabulary.`, batch 1 of 1 | loader receives the current model once; clipboard receives one prompt starting with those rules; result matches `{ model: 'costs_from_source', number: 1, total: 1 }` |
 | `test/unit/webview/aiPromptExport.test.ts` | `rejects missing or blank project rules before copying` | loader resolves `undefined`, then whitespace | each call rejects exact unavailable reason and clipboard call count remains `0` |
 | `test/unit/webview/aiPromptExport.test.ts` | `does not load rules for a stale model` | model lookup returns `undefined` | rejects `Model "costs_from_source" is no longer available.`, loader and clipboard are not called |
@@ -317,7 +327,7 @@ because they depend on VS Code workspace/file-system APIs or the webview DOM.
 - [ ] Every model resolves rules from its nearest ancestor dbt project, bounded
       by its containing VS Code workspace folder.
 - [ ] A non-blank project rules file replaces the bundled naming rules while
-      dbtiagram retains evidence and the strict response contract.
+      dbtiagram retains its task context, evidence, and strict response contract.
 - [ ] Missing, blank, or unreadable rules keep **AI renaming** visible but greyed
       out with the exact explanatory tooltip.
 - [ ] Saved project/rules changes update open-panel availability without restart.
