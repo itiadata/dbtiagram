@@ -1,7 +1,7 @@
 ---
 id: 45
 title: Configure AI renaming rules per dbt project
-status: implemented
+status: done
 priority: high
 created: 2026-09-15
 owner: unassigned
