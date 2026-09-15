@@ -52,6 +52,7 @@ import { Settings, SavePlus, Save, SaveCheck, StickyNotePlus, Grid3x3, ChartNoAx
 import { AiPromptExport } from './AiPromptExport';
 import { useGroups } from './hooks/useGroups';
 import { GROUP_COLORS, groupForModel, type GroupColor } from '../src/diagram/layoutGroups';
+import { AI_RENAMING_UNAVAILABLE_REASON } from '../src/shared/aiRenaming';
 
 export function App(): JSX.Element {
   const [graph, setGraph] = useState<DiagramGraph | null>(null);
@@ -72,6 +73,7 @@ export function App(): JSX.Element {
   const [updateStatus, setUpdateStatus] = useState<'unknown' | 'upToDate' | 'updateAvailable'>('unknown');
   const [mode, setMode] = useState<DiagramMode>('model');
   const [aiPromptModel, setAiPromptModel] = useState<string | null>(null);
+  const [aiPromptAvailableModels, setAiPromptAvailableModels] = useState<Set<string>>(new Set());
   const labels = diagramModeLabels(mode);
 
   const selection = useSelection();
@@ -146,6 +148,7 @@ export function App(): JSX.Element {
     onSettingsCurrent: (openBehavior) => settings.applyCurrent(openBehavior),
     onMatrixColumnPrefs: (scope, columns) => fieldsMatrix.applyColumnPrefs(scope, columns),
     onSqlFiles: (models) => setSqlModels(new Set(models)),
+    onAiPromptAvailability: (models) => setAiPromptAvailableModels(new Set(models)),
     onAppVersion: setAppVersion,
     onAppUpdateStatus: setUpdateStatus,
     onSourceImportResult: sourceImport.applyResult,
@@ -441,7 +444,13 @@ export function App(): JSX.Element {
           })),
         },
         ...(mode === 'model' ? [{ label: 'Edit fields matrix', icon: <Grid3x3 size={16} />, onSelect: () => fieldsMatrix.openForModel(model) }] : []),
-        ...(mode === 'model' ? [{ label: 'AI renaming', icon: <PencilSparkles size={16} />, items: [{ label: 'Export prompt', icon: <ClipboardCopy size={16} />, onSelect: () => setAiPromptModel(model) }, { label: 'Import clipboard response', icon: <ClipboardPaste size={16} />, onSelect: () => postToHost({ type: 'aiPrompt:import', model }) }] }] : []),
+        ...(mode === 'model' ? [{
+          label: 'AI renaming',
+          icon: <PencilSparkles size={16} />,
+          disabled: !aiPromptAvailableModels.has(model),
+          title: aiPromptAvailableModels.has(model) ? undefined : AI_RENAMING_UNAVAILABLE_REASON,
+          items: aiPromptAvailableModels.has(model) ? [{ label: 'Export prompt', icon: <ClipboardCopy size={16} />, onSelect: () => setAiPromptModel(model) }, { label: 'Import clipboard response', icon: <ClipboardPaste size={16} />, onSelect: () => postToHost({ type: 'aiPrompt:import', model }) }] : undefined,
+        }] : []),
         ...(tableGroup === undefined ? [{
           label: 'Add to group',
           icon: <Group size={16} />,
@@ -452,7 +461,7 @@ export function App(): JSX.Element {
         { label: 'Remove from diagram', icon: <Trash2 size={16} />, onSelect: () => onRemoveTable(model) },
       ];
     },
-    [columnDisplay, onOpenModelSource, onOpenModelSql, sqlModels, fieldsMatrix, onRemoveTable, graph, filter, mode, labels.sourceFile, groups],
+    [columnDisplay, onOpenModelSource, onOpenModelSql, sqlModels, aiPromptAvailableModels, fieldsMatrix, onRemoveTable, graph, filter, mode, labels.sourceFile, groups],
   );
 
   const onColumnContextMenu = useCallback(

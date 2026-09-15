@@ -42,7 +42,7 @@ lines** under `test/unit/` (see `specs/features/17-modular-source-layout.md`).
 | `src/dbt/sourceStore.ts` | pure | Source-file last-good store and redistribution. | `createSourceStore`, `applySourceTextChange`, `distributeEditedSources` |
 | `src/dbt/sourceEdit.ts` | pure | Forced-virtual source table edits. | `applySourceEdit` |
 | `src/dbt/importSource.ts` | pure | Collision-safe source-table conversion, source provenance and universal column metadata prefixing, virtual-key promotion to real constraints/tests, FK rewriting, destination append, and broken-FK reporting (spec 41). | `nextImportedModelName`, `importSourceTables`, `SourceImportResult`, `BrokenImportedForeignKey` |
-| `src/dbt/aiPrompt.ts` | pure | Selects provenance-backed columns, validates batch requests, normalizes evidence, and builds deterministic AI rename/type JSONL prompts (spec 42). | `eligibleAiPromptColumns`, `aiPromptBatch`, `buildAiRenameTypePrompt`, `AiPromptRequest`, `AiPromptBatch` |
+| `src/dbt/aiPrompt.ts` | pure | Selects provenance-backed columns, validates batch requests, normalizes evidence, and builds deterministic AI rename/type JSONL prompts from caller-provided project rules (specs 42/45). | `eligibleAiPromptColumns`, `aiPromptBatch`, `buildAiRenameTypePrompt`, `AiPromptRequest`, `AiPromptBatch` |
 | `src/dbt/aiPromptImport.ts` | pure | Decodes and validates AI rename/type clipboard responses against current provenance-backed columns and filters naming conflicts (spec 43). | `planAiRenameTypeImport`, `AiPromptImportColumn`, `AiPromptImportPlan` |
 | `src/dbt/modelStore.ts` | pure | In-memory set of loaded model.yml files: upsert, text change, delete, rename, and redistribution of edited models. | `createModelStore`, `ModelStore`, `upsertRecord`, `applyTextChange`, `applyFileDeleted`, `applyFileRenamed`, `distributeEditedModels`, `replaceModelStore`, `ModelFileRecord`, `LoadedModelFile`, `FailedModelFile` |
 | `src/dbt/edit/index.ts` | pure | Single entry point that dispatches a `ModelEdit` to the right handler. **All mutations go through here.** | `applyEdit` |
@@ -99,6 +99,7 @@ show/hide, reorder, and merging with stored preferences. Used by both the webvie
 `toggleColumnVisible`, `reorderColumn`, `applyStoredPrefs`, `toStoredPrefs`, `mergeStoredPrefs` |
 | `src/shared/sqlFiles.ts` | shared | Pure derivation of the `.sql` discovery glob from the model glob, the model name of a `.sql` path, and the name -> path index (spec 38). | `DEFAULT_SQL_GLOB`, `sqlGlobForModelGlob`, `modelNameFromSqlPath`, `indexSqlPaths` |
 | `src/shared/update.ts` | shared | Pure validation of the designated private GitHub Release, stable version comparison, user-facing messages, and update workflow/result against a host port (spec 39). | `UPDATE_REPOSITORY`, `LatestRelease`, `UpdateHost`, `UpdateCheckOutcome`, `decodeLatestRelease`, `isNewerVersion`, `updateAvailableMessage`, `updateInstalledMessage`, `runUpdateCheck` |
+| `src/shared/aiRenaming.ts` | shared | Project rules path, exact unavailable reason, and non-blank rules predicate (spec 45). | `AI_RENAMING_RULES_RELATIVE_PATH`, `AI_RENAMING_UNAVAILABLE_REASON`, `hasAiRenamingRules` |
 
 ## `src/vscode/` — VS Code API wrappers
 
@@ -118,20 +119,23 @@ via `ExtensionContext.workspaceState` (spec 27). | `readMatrixColumnPrefs`, `wri
 | `src/vscode/sourceImportPicker.ts` | vscode-facing | Runs the source-file, source-table, and destination-file Quick Pick sequence (spec 41). | `pickSourceImport` |
 | `src/vscode/groupPicker.ts` | vscode-facing | Native searchable multi-table picker and validated group-name input (spec 31). | `pickGroupTables`, `promptGroupName` |
 | `src/vscode/clipboard.ts` | vscode-facing | Reads/writes AI rename/type clipboard text and displays native import/export notifications (specs 42/43). | `vscodeAiPromptClipboard`, `showAiPromptCopied`, `vscodeAiPromptImportClipboard`, `vscodeAiPromptImportNotifier` |
+| `src/vscode/aiRenamingRules.ts` | vscode-facing | Reads AI rules from the nearest workspace-bounded dbt project and watches saved marker/rules changes (spec 45). | `readAiRenamingRules`, `registerAiRenamingRulesWatcher` |
 
 ## `src/webview/` — extension-host side of the panel
 
 | Path | Layer | Responsibility | Key exports |
 |------|-------|----------------|-------------|
-| `src/webview/panel.ts` | vscode-facing | The diagram panel: lifecycle, message pump, model/source store wiring, write-back, source-import wiring (spec 41), in-memory pending-layout cache and close-time save prompt (spec 22); also holds the model → `.sql` path map and republishes it on ready/refresh/rescan (spec 38), and coordinates running extension version/update status and manual checks (spec 39). | `DiagramPanel`, `DiagramPanel.setUpdateStatus`, `DiagramPanel.setUpdateCheckHandler` |
+| `src/webview/panel.ts` | vscode-facing | The diagram panel: lifecycle, message pump, stores, write-back, source import, layout cache, SQL paths, update status, and project AI-rules availability/guards (spec 45). | `DiagramPanel`, `DiagramPanel.setUpdateStatus`, `DiagramPanel.setUpdateCheckHandler` |
 | `src/webview/html.ts` | vscode-facing | Build the webview HTML shell (CSP, nonce, asset URIs). | `buildWebviewHtml` |
 | `src/webview/panelKey.ts` | pure | One panel per source file: key and title derivation. | `diagramPanelKey`, `diagramPanelTitle`, `DiagramSource`, `defaultCaseInsensitive` |
 | `src/webview/openSource.ts` | pure | Orchestrates "Reveal in model.yml" against a host port: resolve, read, locate (model or a specific column, falling back to the model), reveal or report (spec 15, extended by spec 25). | `openModelSource`, `OpenSourceHost` |
 | `src/webview/openSql.ts` | pure | Orchestrates "Open SQL file" against a host port: lookup, rescan-on-miss (or on a stale cached path), republish, open or report (spec 38). | `openModelSql`, `OpenSqlHost` |
 | `src/webview/layoutMessages.ts` | pure | Layout-related message handling against a small `LayoutHost` port, so it stays testable. Manual save (spec 22): `cachePendingLayout` only caches the webview's latest layout in host memory, never writes to disk. | `publishActiveLayout`, `openLayout`, `sendActiveLayout`, `saveLayout`, `cachePendingLayout`, `ActiveLayout`, `LayoutHost` |
 | `src/webview/sourceImport.ts` | pure | Orchestrates source loading, selection, conversion, persistence, and reporting (spec 41). | `runSourceImport`, `SourceImportHost`, `SourceImportCandidate`, `SourceImportSelection` |
-| `src/webview/aiPromptExport.ts` | pure | Resolves a current model, builds an AI rename/type prompt, and copies it through a narrow clipboard port (spec 42). | `copyAiRenameTypePrompt`, `AiPromptExportHost`, `AiPromptClipboard` |
-| `src/webview/aiPromptImport.ts` | pure | Orchestrates clipboard response reading, validation, bulk persistence, and completion reports through narrow ports (spec 43). | `importAiRenameTypeClipboardResponse`, `AiPromptImportHost`, `AiPromptImportClipboard`, `AiPromptImportNotifier` |
+| `src/webview/aiPromptExport.ts` | pure | Requires freshly loaded project rules, builds an AI rename/type prompt, copies it, and returns batch metadata (spec 45). | `copyAiRenameTypePrompt`, `AiPromptExportHost`, `AiPromptClipboard` |
+| `src/webview/aiPromptImport.ts` | pure | Requires fresh project rules before clipboard response validation, bulk persistence, and completion reporting (spec 45). | `importAiRenameTypeClipboardResponse`, `AiPromptImportHost`, `AiPromptImportClipboard`, `AiPromptImportNotifier` |
+| `src/webview/aiPromptProjectRules.ts` | pure | Traverses URI ancestors to load non-blank rules from the nearest workspace-bounded dbt project (spec 45). | `loadAiRenamingRulesFromProject`, `AiPromptProjectRulesHost` |
+| `src/webview/aiPromptAvailability.ts` | pure | Derives unique available model names from model files through an asynchronous rules loader (spec 45). | `availableAiRenamingModels`, `AiPromptModelFile`, `AiPromptRulesLoader` |
 | `src/extension.ts` | vscode-facing | `activate` / `deactivate` only — command registration and disposal. | `activate`, `deactivate` |
 
 ## `webview-ui/` — React front-end (webview)

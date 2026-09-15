@@ -53,11 +53,12 @@ import { applySourceFileDeleted, applySourceFileRenamed, applySourceTextChange, 
 import type { SourceDefinition } from '../dbt/sourceTypes';
 import { pickSourceImport } from '../vscode/sourceImportPicker';
 import { runSourceImport, type SourceImportHost } from './sourceImport';
-import { aiPromptBatch } from '../dbt/aiPrompt';
 import { copyAiRenameTypePrompt, type AiPromptExportHost } from './aiPromptExport';
 import { importAiRenameTypeClipboardResponse, type AiPromptImportHost } from './aiPromptImport';
 import { showAiPromptCopied, vscodeAiPromptClipboard, vscodeAiPromptImportClipboard, vscodeAiPromptImportNotifier } from '../vscode/clipboard';
 import { pickGroupTables, promptGroupName } from '../vscode/groupPicker';
+import { readAiRenamingRules, registerAiRenamingRulesWatcher } from '../vscode/aiRenamingRules';
+import { availableAiRenamingModels } from './aiPromptAvailability';
 
 /** Ignore text-change echoes of our own disk writes within this window. */
 const SELF_WRITE_IGNORE_MS = 250;
@@ -131,6 +132,9 @@ export class DiagramPanel {
         onConfigurationChanged: () => void this.refresh(),
       }),
     );
+    if (this.mode === 'model') {
+      this.disposables.push(...registerAiRenamingRulesWatcher(() => void this.publishAiPromptAvailability()));
+    }
 
     panel.webview.onDidReceiveMessage(
       (message: MessageToExtension) => {
@@ -351,6 +355,7 @@ export class DiagramPanel {
       result.failures.map((failure) => ({ uri: failure.uri.fsPath, error: failure.message })),
     );
     this.publish();
+    void this.publishAiPromptAvailability();
     this.sqlPaths = await findSqlFiles(sqlGlobForModelGlob(this.modelGlob));
     this.postMessage({ type: 'model:sqlFiles', models: [...this.sqlPaths.keys()] });
   }
@@ -361,6 +366,7 @@ export class DiagramPanel {
     if (this.mode === 'source') this.sourceStore = applySourceTextChange(this.sourceStore, fsPath, content);
     else this.store = applyTextChange(this.store, fsPath, content);
     this.publish();
+    void this.publishAiPromptAvailability();
   }
 
   private async onFilesCreated(uris: vscode.Uri[]): Promise<void> {
@@ -377,6 +383,7 @@ export class DiagramPanel {
       }
     }
     this.publish();
+    void this.publishAiPromptAvailability();
   }
 
   private onFilesDeleted(uris: vscode.Uri[]): void {
@@ -385,6 +392,7 @@ export class DiagramPanel {
       else this.store = applyFileDeleted(this.store, uri.fsPath);
     }
     this.publish();
+    void this.publishAiPromptAvailability();
   }
 
   private async onFilesRenamed(oldUri: vscode.Uri, newUri: vscode.Uri): Promise<void> {
@@ -393,6 +401,7 @@ export class DiagramPanel {
     if (!matchesGlob(newPath, this.modelGlob) || isLayoutFilePath(newPath)) {
       if (this.mode === 'source') this.sourceStore = applySourceFileDeleted(this.sourceStore, oldPath); else this.store = applyFileDeleted(this.store, oldPath);
       this.publish();
+      void this.publishAiPromptAvailability();
       return;
     }
     try {
@@ -402,6 +411,7 @@ export class DiagramPanel {
       if (this.mode === 'source') this.sourceStore = applySourceFileDeleted(this.sourceStore, oldPath); else this.store = applyFileDeleted(this.store, oldPath);
     }
     this.publish();
+    void this.publishAiPromptAvailability();
   }
 
   /** True when a change event is the echo of one of our own disk writes. */
@@ -433,6 +443,7 @@ export class DiagramPanel {
         this.publishMatrixColumnPrefs('global');
         this.sqlPaths = await findSqlFiles(sqlGlobForModelGlob(this.modelGlob));
         this.postMessage({ type: 'model:sqlFiles', models: [...this.sqlPaths.keys()] });
+        await this.publishAiPromptAvailability();
         return;
       case 'app:checkForUpdates':
         DiagramPanel.updateCheckHandler?.();
@@ -472,10 +483,7 @@ export class DiagramPanel {
       case 'aiPrompt:copy':
         if (this.mode !== 'model') return;
         try {
-          const model = this.aiPromptExportHost.findModel(message.model);
-          if (model === undefined) throw new Error(`Model "${message.model}" is no longer available.`);
-          const batch = aiPromptBatch(model, message);
-          await copyAiRenameTypePrompt(this.aiPromptExportHost, message);
+          const batch = await copyAiRenameTypePrompt(this.aiPromptExportHost, message);
           await showAiPromptCopied(batch.model, batch.number, batch.total);
         } catch (error) {
           this.postMessage({ type: 'diagram:error', message: error instanceof Error ? error.message : String(error) });
@@ -589,6 +597,7 @@ export class DiagramPanel {
   private get aiPromptExportHost(): AiPromptExportHost {
     return {
       findModel: (name) => this.store.records.flatMap((record) => record.file.models).find((model) => model.name === name),
+      loadRules: (model) => this.loadAiPromptRules(model),
       clipboard: vscodeAiPromptClipboard,
     };
   }
@@ -596,10 +605,25 @@ export class DiagramPanel {
   private get aiPromptImportHost(): AiPromptImportHost {
     return {
       findModel: (name) => this.store.records.flatMap((record) => record.file.models).find((model) => model.name === name),
+      loadRules: (model) => this.loadAiPromptRules(model),
       clipboard: vscodeAiPromptImportClipboard,
       notifier: vscodeAiPromptImportNotifier,
       applyAndPersist: async (edit) => this.applyEditAndPersist(edit),
     };
+  }
+
+  private async loadAiPromptRules(model: string): Promise<string | undefined> {
+    const record = this.store.records.find((candidate) => candidate.file.models.some((item) => item.name === model));
+    return record === undefined ? undefined : readAiRenamingRules(vscode.Uri.file(record.uri));
+  }
+
+  private async publishAiPromptAvailability(): Promise<void> {
+    if (this.mode !== 'model') return;
+    const models = await availableAiRenamingModels(
+      this.store.records.map((record) => ({ uri: record.uri, models: record.file.models.map((model) => model.name) })),
+      { load: (uri) => readAiRenamingRules(vscode.Uri.file(uri)) },
+    );
+    this.postMessage({ type: 'aiPrompt:availability', models });
   }
 
   /**

@@ -11,7 +11,7 @@ describe('AI rename/type prompt', () => {
     expect(eligibleAiPromptColumns(model([{ name: 'id', meta: { source_name: 'id', source_datatype: 'integer' } }, { name: 'notes' }]))).toEqual([{ sourceName: 'id', currentName: 'id', sourceDataType: 'integer', currentDataType: undefined, description: undefined, sampleValues: undefined, sourceLength: undefined, sourceMaxLength: undefined }]);
   });
   it('builds compact JSONL evidence and strict response instructions', () => {
-    const prompt = buildAiRenameTypePrompt(aiPromptBatch(model([{ name: 'id', dataType: 'integer', description: 'Raw cost identifier', meta: { source_name: 'id', source_datatype: 'integer', source_sample_values: [1, 2, 3], source_length: 10, source_max_length: 3 } }]), { model: 'costs_from_source', batchSize: 25, batchNumber: 1 }));
+    const prompt = buildAiRenameTypePrompt(aiPromptBatch(model([{ name: 'id', dataType: 'integer', description: 'Raw cost identifier', meta: { source_name: 'id', source_datatype: 'integer', source_sample_values: [1, 2, 3], source_length: 10, source_max_length: 3 } }]), { model: 'costs_from_source', batchSize: 25, batchNumber: 1 }), 'Use ACME vocabulary.');
     expect(prompt).toContain('{"s":"id","n":"id","t":"integer","d":"Raw cost identifier","st":"integer","v":[1,2,3],"l":10,"m":3}');
     expect(prompt).toContain('source_name, new_name, and data_type');
   });
@@ -20,9 +20,18 @@ describe('AI rename/type prompt', () => {
     expect(aiPromptBatch(model(columns), { model: 'costs_from_source', batchSize: 50, batchNumber: 3 })).toMatchObject({ number: 3, total: 3, columns: [{ sourceName: 'c101' }] });
   });
   it('normalizes non-JSON metadata without invalid JSONL', () => {
-    const prompt = buildAiRenameTypePrompt(aiPromptBatch(model([{ name: 'id', meta: { source_name: 'id', source_datatype: 'integer', source_sample_values: [{ code: 'A' }, Infinity], source_length: { value: 10 } } }]), { model: 'costs_from_source', batchSize: 25, batchNumber: 1 }));
+    const prompt = buildAiRenameTypePrompt(aiPromptBatch(model([{ name: 'id', meta: { source_name: 'id', source_datatype: 'integer', source_sample_values: [{ code: 'A' }, Infinity], source_length: { value: 10 } } }]), { model: 'costs_from_source', batchSize: 25, batchNumber: 1 }), 'Use ACME vocabulary.');
     const line = JSON.parse(prompt.split('\n').find((value) => value.startsWith('{"s"')) ?? '');
     expect(line).toMatchObject({ v: ['{"code":"A"}', 'Infinity'], l: '{"value":10}' });
+  });
+  it('uses caller-provided project rules and retains the generated contract', () => {
+    const prompt = buildAiRenameTypePrompt(aiPromptBatch(model([{ name: 'id', meta: { source_name: 'id', source_datatype: 'integer' } }]), { model: 'costs_from_source', batchSize: 25, batchNumber: 1 }), 'Use ACME vocabulary.');
+    expect(prompt.startsWith('Use ACME vocabulary.')).toBe(true);
+    expect(prompt).toContain('{"s":"id"');
+    expect(prompt).toContain('Respond with exactly one valid JSON object');
+    expect(prompt).not.toContain('Identifier columns use `ID_`');
+    expect(prompt).not.toContain('description/text columns use `DES_`');
+    expect(prompt).not.toContain('type/category columns use `TYP_`');
   });
   it('rejects invalid batch requests', () => {
     const columns = Array.from({ length: 60 }, (_, index) => ({ name: `c${index}`, meta: { source_name: `c${index}`, source_datatype: 'text' } }));

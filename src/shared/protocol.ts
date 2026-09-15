@@ -77,6 +77,7 @@ export type MessageToWebview =
    * 38). The webview only needs existence, so the paths stay on the host.
    */
   | { type: 'model:sqlFiles'; models: string[] }
+  | { type: 'aiPrompt:availability'; models: string[] }
   /** Version of the currently running extension, shown in the diagram header. */
   | { type: 'app:version'; version: string }
   /** Latest displayable result of the process-wide automatic/manual update check. */

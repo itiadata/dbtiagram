@@ -1,14 +1,17 @@
 import { planAiRenameTypeImport } from '../dbt/aiPromptImport';
 import type { ModelEdit } from '../dbt/edit';
 import type { ModelDefinition } from '../dbt/types';
+import { AI_RENAMING_UNAVAILABLE_REASON, hasAiRenamingRules } from '../shared/aiRenaming';
 
 export interface AiPromptImportClipboard { paste(): Promise<string>; }
 export interface AiPromptImportNotifier { completed(updated: number, rejected: number): Promise<void>; failed(message: string): Promise<void>; }
-export interface AiPromptImportHost { findModel(name: string): ModelDefinition | undefined; clipboard: AiPromptImportClipboard; notifier: AiPromptImportNotifier; applyAndPersist(edit: ModelEdit): Promise<void>; }
+export interface AiPromptImportHost { findModel(name: string): ModelDefinition | undefined; loadRules(model: string): Promise<string | undefined>; clipboard: AiPromptImportClipboard; notifier: AiPromptImportNotifier; applyAndPersist(edit: ModelEdit): Promise<void>; }
 
 export async function importAiRenameTypeClipboardResponse(host: AiPromptImportHost, model: string): Promise<void> {
   const current = host.findModel(model);
   if (current === undefined) throw new Error(`Model "${model}" is no longer available.`);
+  const rules = await host.loadRules(model);
+  if (!hasAiRenamingRules(rules)) throw new Error(AI_RENAMING_UNAVAILABLE_REASON);
   const clipboardText = await host.clipboard.paste();
   let plan;
   try { plan = planAiRenameTypeImport(current, clipboardText); } catch (error) { await host.notifier.failed(error instanceof Error ? error.message : String(error)); return; }

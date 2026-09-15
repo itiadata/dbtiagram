@@ -1,4 +1,3 @@
-import rules from './aiPromptRules.md';
 import type { ModelColumn, ModelDefinition } from './types';
 
 export interface AiPromptColumn {
@@ -94,7 +93,7 @@ function evidence(column: AiPromptColumn): Record<string, unknown> {
   return line;
 }
 
-export function buildAiRenameTypePrompt(batch: AiPromptBatch): string {
+export function buildAiRenameTypePrompt(batch: AiPromptBatch, rules: string): string {
   const example = { model: batch.model, batch: { number: batch.number, total: batch.total }, columns: batch.columns.map((column) => ({ source_name: column.sourceName, new_name: 'ID_EXAMPLE', data_type: 'INTEGER' })) };
   return `${rules.trim()}\n\nModel: ${batch.model}\nSource table: ${batch.sourceTable}\nBatch ${batch.number} of ${batch.total}\n\nJSONL legend: s=source name, n=current model name, t=current model data type, d=description, st=source data type, v=source sample values, l=source length, m=source maximum observed length.\n${batch.columns.map((column) => JSON.stringify(evidence(column))).join('\n')}\n\nRespond with exactly one valid JSON object, with no Markdown fence, prose, or extra keys. It must have model "${batch.model}" and batch number ${batch.number} of ${batch.total}. Return exactly one result for every input column and no other columns. Preserve source_name byte-for-byte. Each result may contain only source_name, new_name, and data_type.\n${JSON.stringify(example)}`;
 }
