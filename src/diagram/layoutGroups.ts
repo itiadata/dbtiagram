@@ -54,14 +54,14 @@ export function parseGroups(raw: unknown, fail: (message: string) => never): Dia
   const claimed = new Set<string>();
   for (const entry of raw) {
     if (!isRecord(entry)) fail('Every entry in "groups" must be a mapping');
-    const { id, name, color, models } = entry;
+    const { id, name, color, tables } = entry;
     if (typeof id !== 'string' || id === '') fail('Every group entry needs an "id"');
     if (typeof name !== 'string' || normalizeGroupName(name) === undefined) fail(`Group "${id}" needs a non-empty string "name"`);
     if (!isGroupColor(color)) fail(`Group "${id}" has an invalid "color"`);
-    if (!Array.isArray(models)) fail(`Group "${id}" needs a "models" array`);
+    if (!Array.isArray(tables)) fail(`Group "${id}" needs a "tables" array`);
     if (seen.has(id)) continue;
     seen.add(id);
-    const unique = normalizedModels(models).filter((model) => !claimed.has(model));
+    const unique = normalizedModels(tables).filter((model) => !claimed.has(model));
     unique.forEach((model) => claimed.add(model));
     if (unique.length > 0) groups.push({ id, name: name.trim(), color, models: unique });
   }

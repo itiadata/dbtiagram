@@ -161,7 +161,12 @@ export function serializeDiagramLayout(layout: DiagramLayout): string {
     }));
   }
   if (layout.groups.length > 0) {
-    root.groups = normalizeGroups(layout.groups).map(({ id, name, color, models }) => ({ id, name, color, models }));
+    root.groups = normalizeGroups(layout.groups).map(({ id, name, color, models }) => ({
+      id,
+      name,
+      color,
+      tables: models,
+    }));
   }
   if (layout.defaultColumnDisplay !== undefined && layout.defaultColumnDisplay !== DEFAULT_COLUMN_DISPLAY) {
     root.defaultColumnDisplay = layout.defaultColumnDisplay;

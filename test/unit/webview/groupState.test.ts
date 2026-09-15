@@ -11,6 +11,12 @@ describe('group state', () => {
     ]);
   });
 
+  it('creates without an active saved layout', () => {
+    // The pure transition deliberately has no layout path argument: creation is
+    // valid for an ad-hoc panel before its first Save as new diagram action.
+    expect(createGroupFromPicker([], 'g-1', { name: 'Sales', models: ['orders'] })).toEqual([sales]);
+  });
+
   it('cancelled creation changes nothing', () => {
     const groups = [sales];
     expect(createGroupFromPicker(groups, 'g-2', null)).toBe(groups);

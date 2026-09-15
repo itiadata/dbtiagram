@@ -394,7 +394,17 @@ describe('groups (spec 31)', () => {
     const text = serializeDiagramLayout(layout);
     const groupYaml = text.slice(text.indexOf('groups:'));
     expect(groupYaml).not.toMatch(/^\s+(x|y|width|height):/m);
+    expect(groupYaml).toContain('tables:');
+    expect(groupYaml).not.toContain('models:');
     expect(parseDiagramLayout(text, 'd').groups).toEqual([sales]);
+  });
+
+  it('parses group members from the tables key', () => {
+    const parsed = parseDiagramLayout(
+      'version: 2\nmode: model\nname: d\ntables: []\ngroups:\n  - id: g-1\n    name: Sales\n    color: blue\n    tables:\n      - orders\n',
+      'd',
+    );
+    expect(parsed.groups).toEqual([sales]);
   });
 
   it('parses a pre-group file', () => {

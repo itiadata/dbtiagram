@@ -44,6 +44,9 @@ export function useGroups(): GroupsState {
   const [groups, setGroups] = useState<DiagramGroup[]>([]);
   const [tableRects, setRects] = useState<readonly GroupTableRect[]>([]);
   const [mutationRevision, setMutationRevision] = useState(0);
+  const setTableRects = useCallback((tables: readonly GroupTableRect[]): void => {
+    setRects((current) => JSON.stringify(current) === JSON.stringify(tables) ? current : [...tables]);
+  }, []);
   const mutate = useCallback((fn: (current: DiagramGroup[]) => DiagramGroup[]): void => {
     setGroups((current) => {
       const next = fn(current);
@@ -89,6 +92,6 @@ export function useGroups(): GroupsState {
     setColor: (id, color) => mutate((current) => changeGroupColor(current, id, color)),
     removeGroup: (id) => mutate((current) => current.filter((group) => group.id !== id)),
     applyLayoutGroups: (next) => setGroups(normalizeGroups(next)),
-    setTableRects: (tables) => setRects((current) => JSON.stringify(current) === JSON.stringify(tables) ? current : [...tables]),
+    setTableRects,
   };
 }

@@ -65,12 +65,12 @@ describe('layout groups', () => {
   });
 
   it('rejects an unknown colour', () => {
-    expect(() => parseGroups([{ id: 'g-1', name: 'Sales', color: 'orange', models: ['orders'] }], fail))
+    expect(() => parseGroups([{ id: 'g-1', name: 'Sales', color: 'orange', tables: ['orders'] }], fail))
       .toThrow('Group "g-1" has an invalid "color"');
   });
 
   it('ignores persisted geometry', () => {
-    expect(parseGroups([{ id: 'g-1', name: 'Sales', color: 'blue', models: ['orders'], x: 1, y: 2, width: 3, height: 4 }], fail))
+    expect(parseGroups([{ id: 'g-1', name: 'Sales', color: 'blue', tables: ['orders'], x: 1, y: 2, width: 3, height: 4 }], fail))
       .toEqual([{ id: 'g-1', name: 'Sales', color: 'blue', models: ['orders'] }]);
   });
 });
