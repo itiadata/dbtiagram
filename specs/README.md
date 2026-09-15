@@ -61,7 +61,7 @@ up-to-date spec in `specs/features/`.
 | 41  | Import source tables as models | Done |
 | 42  | Copy an AI column rename and type prompt | Done |
 | 43  | Import an AI rename and type clipboard response | Done |
-| 44  | Polish diagram icons, source notes, toolbars, table names, and display ordering | Implemented |
+| 44  | Polish diagram icons, source notes, toolbars, table names, and display ordering | Done |
 
 Status values: `draft` → `approved` → `implemented` → `done`.
 
