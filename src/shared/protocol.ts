@@ -16,6 +16,11 @@ export interface SourceImportReport {
   brokenForeignKeys: BrokenImportedForeignKey[];
 }
 
+export interface GroupPickerCandidate {
+  id: string;
+  label: string;
+}
+
 /** A model.yml file whose most recent parse failed (last good data shown). */
 export interface DiagramPendingError {
   /** File-system path of the file with the parse error. */
@@ -76,7 +81,10 @@ export type MessageToWebview =
   | { type: 'app:version'; version: string }
   /** Latest displayable result of the process-wide automatic/manual update check. */
   | { type: 'app:updateStatus'; status: 'unknown' | 'upToDate' | 'updateAvailable' }
-  | { type: 'sourceImport:result'; report: SourceImportReport };
+  | { type: 'sourceImport:result'; report: SourceImportReport }
+  | { type: 'group:createResult'; result: { name: string; models: string[] } | null }
+  | { type: 'group:editTablesResult'; groupId: string; models: string[] | null }
+  | { type: 'group:renameResult'; groupId: string; name: string | null };
 
 /** Messages sent from the webview to the extension host. */
 export type MessageToExtension =
@@ -85,6 +93,9 @@ export type MessageToExtension =
   /** Explicitly run the same update workflow used during activation. */
   | { type: 'app:checkForUpdates' }
   | { type: 'sourceImport:start' }
+  | { type: 'group:create'; candidates: GroupPickerCandidate[] }
+  | { type: 'group:editTables'; groupId: string; candidates: GroupPickerCandidate[]; selected: string[] }
+  | { type: 'group:rename'; groupId: string; currentName: string }
   | { type: 'aiPrompt:copy'; model: string; batchSize: number; batchNumber: number }
   | { type: 'aiPrompt:import'; model: string }
   /** Explicit "Save diagram" action; prompts for a path when none is active. */

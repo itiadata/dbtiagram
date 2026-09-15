@@ -57,6 +57,7 @@ import { aiPromptBatch } from '../dbt/aiPrompt';
 import { copyAiRenameTypePrompt, type AiPromptExportHost } from './aiPromptExport';
 import { importAiRenameTypeClipboardResponse, type AiPromptImportHost } from './aiPromptImport';
 import { showAiPromptCopied, vscodeAiPromptClipboard, vscodeAiPromptImportClipboard, vscodeAiPromptImportNotifier } from '../vscode/clipboard';
+import { pickGroupTables, promptGroupName } from '../vscode/groupPicker';
 
 /** Ignore text-change echoes of our own disk writes within this window. */
 const SELF_WRITE_IGNORE_MS = 250;
@@ -448,6 +449,26 @@ export class DiagramPanel {
           this.postMessage({ type: 'diagram:error', message: error instanceof Error ? error.message : String(error) });
         }
         return;
+      case 'group:create': {
+        const models = await pickGroupTables(message.candidates);
+        if (models === undefined) {
+          this.postMessage({ type: 'group:createResult', result: null });
+          return;
+        }
+        const name = await promptGroupName();
+        this.postMessage({ type: 'group:createResult', result: name === undefined ? null : { name, models } });
+        return;
+      }
+      case 'group:editTables': {
+        const models = await pickGroupTables(message.candidates, new Set(message.selected));
+        this.postMessage({ type: 'group:editTablesResult', groupId: message.groupId, models: models ?? null });
+        return;
+      }
+      case 'group:rename': {
+        const name = await promptGroupName(message.currentName);
+        this.postMessage({ type: 'group:renameResult', groupId: message.groupId, name: name ?? null });
+        return;
+      }
       case 'aiPrompt:copy':
         if (this.mode !== 'model') return;
         try {

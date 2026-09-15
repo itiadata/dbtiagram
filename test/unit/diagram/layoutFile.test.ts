@@ -21,6 +21,7 @@ const sample: DiagramLayout = {
     { name: 'orders', x: 120, y: 40 },
   ],
   notes: [],
+  groups: [],
 };
 
 describe('isLayoutFilePath', () => {
@@ -80,6 +81,7 @@ describe('buildLayout', () => {  it('sorts tables by name and rounds coordinates
         { name: 'orders', x: 120, y: 40 },
       ],
       notes: [],
+      groups: [],
     });
   });
 });
@@ -113,6 +115,7 @@ describe('serializeDiagramLayout / parseDiagramLayout', () => {
       name: 'x',
       tables: [{ name: 'orders', x: 1, y: 2 }],
       notes: [],
+      groups: [],
     });
   });
 
@@ -157,6 +160,7 @@ describe('applyLayout', () => {
         { name: 'gone', x: 0, y: 0 },
       ],
       notes: [],
+      groups: [],
     };
     const applied = applyLayout(layout, new Set(['orders']));
     expect([...applied.visible]).toEqual(['orders']);
@@ -185,6 +189,7 @@ describe('applyLayout', () => {
         { name: 'ghost', x: 0, y: 0 },
       ],
       notes,
+      groups: [],
     };
 
     const applied = applyLayout(layout, new Set(['orders']));
@@ -208,7 +213,7 @@ describe('notes (spec 16)', () => {
 
   it('round-trips a layout with notes', () => {
     const layout: DiagramLayout = { version: 2,
-  mode: 'model', name: 'd', tables: [], notes: [note] };
+  mode: 'model', name: 'd', tables: [], notes: [note], groups: [] };
     expect(parseDiagramLayout(serializeDiagramLayout(layout), 'd')).toEqual(layout);
   });
 
@@ -321,6 +326,7 @@ describe('columnDisplay (spec 24)', () => {
       name: 'd',
       tables: [{ name: 'orders', x: 0, y: 0, columnDisplay: 'pkOnly' }],
       notes: [],
+      groups: [],
       defaultColumnDisplay: 'pkAndFk',
     };
     expect(parseDiagramLayout(serializeDiagramLayout(layout), 'd')).toEqual(layout);
@@ -356,6 +362,7 @@ describe('columnDisplay (spec 24)', () => {
       name: 'd',
       tables: [{ name: 'orders', x: 0, y: 0, columnDisplay: 'nameOnly' }],
       notes: [],
+      groups: [],
       defaultColumnDisplay: 'pkOnly',
     };
     const applied = applyLayout(layout, new Set(['orders']));
@@ -376,5 +383,31 @@ describe('columnDisplay (spec 24)', () => {
         'fallback',
       ),
     ).toThrow(DiagramLayoutParseError);
+  });
+});
+
+describe('groups (spec 31)', () => {
+  const sales = { id: 'g-1', name: 'Sales', color: 'blue' as const, models: ['orders'] };
+
+  it('round-trips groups without geometry', () => {
+    const layout = buildLayout('d', 'model', [{ name: 'orders', x: 1, y: 2 }], [], undefined, [sales]);
+    const text = serializeDiagramLayout(layout);
+    const groupYaml = text.slice(text.indexOf('groups:'));
+    expect(groupYaml).not.toMatch(/^\s+(x|y|width|height):/m);
+    expect(parseDiagramLayout(text, 'd').groups).toEqual([sales]);
+  });
+
+  it('parses a pre-group file', () => {
+    expect(parseDiagramLayout('version: 1\ntables: []\n', 'd').groups).toEqual([]);
+  });
+
+  it('omits empty groups', () => {
+    expect(serializeDiagramLayout(buildLayout('d', 'model', []))).not.toContain('groups:');
+  });
+
+  it('passes source groups through applyLayout', () => {
+    const sourceGroup = { ...sales, models: ['finance.orders'] };
+    const layout = buildLayout('d', 'source', [], [], undefined, [sourceGroup]);
+    expect(applyLayout(layout, new Set()).groups).toEqual([sourceGroup]);
   });
 });

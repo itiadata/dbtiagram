@@ -48,8 +48,10 @@ import { ImportReport } from './ImportReport';
 import { useSourceImport } from './hooks/useSourceImport';
 import { SIDEBAR_DEFAULT_WIDTH } from './sidebar-constants';
 import { diagramModeLabels, type DiagramMode } from '../src/shared/diagramMode';
-import { Settings, SavePlus, Save, SaveCheck, StickyNotePlus, Grid3x3, ChartNoAxesGantt, BetweenHorizontalStart, Trash2, Waypoints, FileCode2, Import, ClipboardCopy, ClipboardPaste, PencilSparkles } from './icons';
+import { Settings, SavePlus, Save, SaveCheck, StickyNotePlus, Grid3x3, ChartNoAxesGantt, BetweenHorizontalStart, Trash2, Waypoints, FileCode2, Import, ClipboardCopy, ClipboardPaste, PencilSparkles, Group } from './icons';
 import { AiPromptExport } from './AiPromptExport';
+import { useGroups } from './hooks/useGroups';
+import { GROUP_COLORS, groupForModel, type GroupColor } from '../src/diagram/layoutGroups';
 
 export function App(): JSX.Element {
   const [graph, setGraph] = useState<DiagramGraph | null>(null);
@@ -76,9 +78,13 @@ export function App(): JSX.Element {
   const filter = useDiagramFilter();
   const sourceImport = useSourceImport(filter.showImportedModels);
   const notes = useNotes();
+  const groups = useGroups();
   const columnDisplay = useColumnDisplay();
   const fkCreate = useFkCreateMode();
   const layout = useLayoutPersistence(mode, notes.notes, {
+    groups: groups.groups,
+    mutationRevision: groups.mutationRevision,
+  }, {
     defaultMode: columnDisplay.defaultMode,
     overrides: columnDisplay.overrides,
   });
@@ -126,6 +132,7 @@ export function App(): JSX.Element {
     onLayoutApply: (message) => {
       filter.applyLayoutTables(layout.applyLayout(message));
       notes.applyLayoutNotes(message.layout.notes);
+      groups.applyLayoutGroups(message.layout.groups);
       columnDisplay.applySeed(
         message.layout.defaultColumnDisplay ?? 'all',
         new Map(
@@ -142,6 +149,9 @@ export function App(): JSX.Element {
     onAppVersion: setAppVersion,
     onAppUpdateStatus: setUpdateStatus,
     onSourceImportResult: sourceImport.applyResult,
+    onGroupCreateResult: groups.applyCreateResult,
+    onGroupEditTablesResult: groups.applyEditTablesResult,
+    onGroupRenameResult: groups.applyRenameResult,
   });
   const visibleGraph = useMemo(
     () => (graph === null ? null : filterGraph(graph, filter.visibleModels)),
@@ -297,6 +307,17 @@ export function App(): JSX.Element {
   );
   const { revealTarget, revealModel } = useRevealModel(onRevealed);
 
+  const groupCandidates = useCallback((editingId?: string) => {
+    if (graph === null || visibleGraph === null) return [];
+    const visibleIds = new Set(visibleGraph.nodes.map((node) => node.id));
+    return graph.nodes
+      .filter((node) => {
+        const owner = groupForModel(groups.groups, node.id);
+        return owner?.id === editingId || (owner === undefined && visibleIds.has(node.id));
+      })
+      .map((node) => ({ id: node.id, label: node.label }));
+  }, [visibleGraph, graph, groups.groups]);
+
   const onOpenModelSource = useCallback((model: string, column?: string): void => {
     postToHost({ type: 'diagram:openSource', entity: model, column });
   }, []);
@@ -393,6 +414,7 @@ export function App(): JSX.Element {
       const currentMode = columnDisplay.effectiveMode(model);
       const related = graph === null ? [] : relatedModels(graph, model);
       const missingRelated = related.filter((name) => !filter.visibleModels.has(name));
+      const tableGroup = groupForModel(groups.groups, model);
       return [
         { label: `Reveal in ${labels.sourceFile}`, icon: <ChartNoAxesGantt size={16} />, onSelect: () => onOpenModelSource(model, column) },
         ...(mode === 'model' ? [{
@@ -420,10 +442,17 @@ export function App(): JSX.Element {
         },
         ...(mode === 'model' ? [{ label: 'Edit fields matrix', icon: <Grid3x3 size={16} />, onSelect: () => fieldsMatrix.openForModel(model) }] : []),
         ...(mode === 'model' ? [{ label: 'AI renaming', icon: <PencilSparkles size={16} />, items: [{ label: 'Export prompt', icon: <ClipboardCopy size={16} />, onSelect: () => setAiPromptModel(model) }, { label: 'Import clipboard response', icon: <ClipboardPaste size={16} />, onSelect: () => postToHost({ type: 'aiPrompt:import', model }) }] }] : []),
+        ...(tableGroup === undefined ? [{
+          label: 'Add to group',
+          icon: <Group size={16} />,
+          disabled: groups.groups.length === 0,
+          title: groups.groups.length === 0 ? 'No groups available' : undefined,
+          items: groups.groups.map((group) => ({ label: group.name, onSelect: () => groups.addModel(group.id, model) })),
+        }] : [{ label: 'Remove from group', icon: <Group size={16} />, onSelect: () => groups.removeModel(model) }]),
         { label: 'Remove from diagram', icon: <Trash2 size={16} />, onSelect: () => onRemoveTable(model) },
       ];
     },
-    [columnDisplay, onOpenModelSource, onOpenModelSql, sqlModels, fieldsMatrix, onRemoveTable, graph, filter, mode, labels.sourceFile],
+    [columnDisplay, onOpenModelSource, onOpenModelSql, sqlModels, fieldsMatrix, onRemoveTable, graph, filter, mode, labels.sourceFile, groups],
   );
 
   const onColumnContextMenu = useCallback(
@@ -440,6 +469,25 @@ export function App(): JSX.Element {
       event.preventDefault();
       if (node.type === 'table') {
         openMenu(event.clientX, event.clientY, buildTableMenuItems(node.id));
+        return;
+      }
+      if (node.type === 'group') {
+        const group = groups.groups.find((candidate) => candidate.id === node.id);
+        if (group === undefined) return;
+        openMenu(event.clientX, event.clientY, [
+          { label: 'Edit group tables', onSelect: () => groups.startEditTables(group.id, groupCandidates(group.id)) },
+          { label: 'Rename group', onSelect: () => groups.startRename(group.id) },
+          {
+            label: 'Change color',
+            items: GROUP_COLORS.map((color) => ({
+              label: color[0].toUpperCase() + color.slice(1),
+              icon: <span className={`group-color-swatch group-color-swatch--${color}`} />,
+              checked: group.color === color,
+              onSelect: () => groups.setColor(group.id, color as GroupColor),
+            })),
+          },
+          { label: 'Remove group', onSelect: () => groups.removeGroup(group.id) },
+        ]);
         return;
       }
       if (node.type !== 'note') {
@@ -466,7 +514,7 @@ export function App(): JSX.Element {
         { label: 'Delete', onSelect: () => notes.deleteNote(note.id) },
       ]);
     },
-    [openMenu, buildTableMenuItems, notes],
+    [openMenu, buildTableMenuItems, notes, groups, groupCandidates],
   );
 
   const current = selection.selection;
@@ -690,6 +738,10 @@ export function App(): JSX.Element {
                     onAddNoteAt={onAddNoteAt}
                      onOpenFieldsMatrix={mode === 'model' ? fieldsMatrix.openGlobal : undefined}
                     onImportSourceModels={mode === 'model' ? sourceImport.start : undefined}
+                    groupNodes={groups.groupNodes}
+                    groupIds={groups.groupIds}
+                    onTableRectsChange={groups.setTableRects}
+                    onCreateGroup={() => groups.startCreate(groupCandidates())}
                     fkSource={fkPickedSource}                    fkCreateActive={fkCreate.state.active}
                     onStartFkCreate={fkCreate.start}
                     onCancelFkCreate={fkCreate.cancel}

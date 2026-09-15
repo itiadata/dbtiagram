@@ -26,6 +26,7 @@ const layout: DiagramLayout = {
   name: 'orders',
   tables: [{ name: 'orders', x: 10, y: 20 }],
   notes: [],
+  groups: [],
 };
 
 interface StubHost extends LayoutHost {
@@ -225,5 +226,21 @@ describe('publishActiveLayout', () => {
     const host = createHost();
     publishActiveLayout(host);
     expect(host.posted).toEqual([{ type: 'layout:active', path: null, name: null }]);
+  });
+});
+
+describe('groups (spec 31)', () => {
+  it('passes model and source groups through layout messages', async () => {
+    const modelGroup = { id: 'g-1', name: 'Sales', color: 'blue' as const, models: ['orders'] };
+    const modelLayout: DiagramLayout = { ...layout, groups: [modelGroup] };
+    const modelHost = createHost({ readLayout: async () => modelLayout });
+    await openLayout(modelHost, '/w/model.dbtiagram.yml');
+    expect(modelHost.posted).toContainEqual({ type: 'layout:apply', layout: modelLayout, missing: [] });
+
+    const sourceGroup = { ...modelGroup, models: ['finance.orders'] };
+    const sourceLayout: DiagramLayout = { ...layout, mode: 'source', groups: [sourceGroup] };
+    const sourceHost = createHost({ mode: 'source', readLayout: async () => sourceLayout, knownEntityNames: () => new Set(['finance.orders']) });
+    await openLayout(sourceHost, '/w/source.dbtiagram.yml');
+    expect(sourceHost.posted).toContainEqual({ type: 'layout:apply', layout: sourceLayout, missing: ['orders'] });
   });
 });

@@ -20,6 +20,7 @@ import {
   applyNodeChanges,
   useNodesInitialized,
   useReactFlow,
+  useViewport,
   type Edge,
   type EdgeChange,
   type EdgeTypes,
@@ -38,15 +39,17 @@ import { HEADER_HEIGHT, NODE_WIDTH, columnRowCenterY } from '../src/diagram/layo
 import { chooseSide } from '../src/diagram/routing';
 import { COLUMN_DISPLAY_OPTIONS, type ColumnDisplayMode } from '../src/diagram/columnDisplay';
 import type { DiagramLayoutTable } from '../src/diagram/layoutFile';
+import type { GroupTableRect } from '../src/diagram/layoutGroups';
 import { mergeFlowNodes, type NodePosition } from '../src/diagram/positions';
 import { FkEdge } from './FkEdge';
-import { StickyNotePlus, Cable, Grid3x3, Network, Import } from './icons';
+import { StickyNotePlus, Cable, Grid3x3, Network, Import, Group } from './icons';
 import type { RevealTarget } from './hooks/useRevealModel';
 import { shouldRunInitialFit, shouldRunPendingFit } from './initial-fit';
 import { NoteNode } from './NoteNode';
 import { TableNode } from './TableNode';
+import { GroupNode } from './GroupNode';
 
-const nodeTypes: NodeTypes = { table: TableNode, note: NoteNode };
+const nodeTypes: NodeTypes = { table: TableNode, note: NoteNode, group: GroupNode };
 // The obstacle-aware FK edge (spec 12) — it draws the routed polyline.
 const edgeTypes: EdgeTypes = { [FK_EDGE_TYPE]: FkEdge };
 
@@ -95,6 +98,10 @@ export interface DiagramCanvasProps {
   /** Opens the global fields matrix (spec 27's toolbar button). */
   onOpenFieldsMatrix?: () => void;
   onImportSourceModels?: () => void;
+  groupNodes: Node[];
+  groupIds: ReadonlySet<string>;
+  onTableRectsChange: (tables: GroupTableRect[]) => void;
+  onCreateGroup: () => void;
   /** The column picked as the FK gesture's source, or null (spec 26). */
   fkSource: { model: string; column: string } | null;
   fkCreateActive: boolean;
@@ -130,13 +137,19 @@ export function DiagramCanvas({
   onAddNoteAt,
   onOpenFieldsMatrix,
   onImportSourceModels,
+  groupNodes,
+  groupIds,
+  onTableRectsChange,
+  onCreateGroup,
   fkSource,
   fkCreateActive,
   onStartFkCreate,
   onCancelFkCreate,
 }: DiagramCanvasProps): JSX.Element {
   const { fitView, setCenter, getZoom, getNodes, screenToFlowPosition } = useReactFlow();
+  const viewport = useViewport();
   const containerRef = useRef<HTMLDivElement | null>(null);
+  const [canvasSize, setCanvasSize] = useState({ width: 0, height: 0 });
   // Seed the node list from the current flow so the first paint already has
   // full node rects (the live edge pass runs during render, before the adopt
   // effect below); later flow changes flow through the effect.
@@ -153,6 +166,16 @@ export function DiagramCanvas({
   const pendingFitRef = useRef(false);
   const pendingFitFrameRef = useRef<number | undefined>(undefined);
   const nodesInitialized = useNodesInitialized();
+
+  useEffect(() => {
+    const element = containerRef.current;
+    if (element === null) return;
+    const update = (): void => setCanvasSize({ width: element.clientWidth, height: element.clientHeight });
+    update();
+    const observer = new ResizeObserver(update);
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, []);
 
   // Adopt each new diagram without disturbing the layout: existing nodes keep
   // their current position (manual drags and the previous arrangement survive),
@@ -285,6 +308,16 @@ export function DiagramCanvas({
     );
   }, [rfNodes, onPositionsChange]);
 
+  useEffect(() => {
+    onTableRectsChange(rfNodes.map((node) => ({
+      name: node.id,
+      x: node.position.x,
+      y: node.position.y,
+      width: node.measured?.width ?? node.width ?? NODE_WIDTH,
+      height: node.measured?.height ?? node.height ?? HEADER_HEIGHT,
+    })));
+  }, [rfNodes, onTableRectsChange]);
+
   // Live edge geometry (spec 12): the sides an edge uses, the dot the column
   // mounts, AND the path it takes around the other cards are all re-derived
   // from the CURRENT node positions on every drag, not frozen at the initial
@@ -371,6 +404,7 @@ export function DiagramCanvas({
       const tableChanges: NodeChange[] = [];
       for (const change of changes) {
         const id = 'id' in change ? change.id : undefined;
+        if (id !== undefined && groupIds.has(id)) continue;
         if (id !== undefined && noteIds.has(id)) noteChanges.push(change);
         else tableChanges.push(change);
       }
@@ -381,7 +415,7 @@ export function DiagramCanvas({
         setRfNodes((current) => applyNodeChanges(tableChanges, current));
       }
     },
-    [noteIds, onNoteNodeChanges],
+    [groupIds, noteIds, onNoteNodeChanges],
   );
 
   const onEdgesChange = useCallback((_changes: EdgeChange[]): void => {
@@ -430,9 +464,19 @@ export function DiagramCanvas({
     (event: ReactMouseEvent | MouseEvent): void => {
       event.preventDefault();
       const point = screenToFlowPosition({ x: event.clientX, y: event.clientY });
+      const hitGroup = [...groupNodes].reverse().find((node) => {
+        const width = node.width ?? Number(node.style?.width ?? 0);
+        const height = node.height ?? Number(node.style?.height ?? 0);
+        return point.x >= node.position.x && point.x <= node.position.x + width &&
+          point.y >= node.position.y && point.y <= node.position.y + height;
+      });
+      if (hitGroup !== undefined) {
+        onNodeContextMenu(event as ReactMouseEvent, hitGroup);
+        return;
+      }
       onPaneContextMenu(event as ReactMouseEvent, point);
     },
-    [screenToFlowPosition, onPaneContextMenu],
+    [screenToFlowPosition, groupNodes, onNodeContextMenu, onPaneContextMenu],
   );
 
   const onAddNote = useCallback((): void => {
@@ -483,10 +527,31 @@ export function DiagramCanvas({
     return { from: { x, y }, to: fkMousePoint };
   }, [trackingFkPreview, fkSource, fkMousePoint, rfNodes, columnIndexOf]);
 
-  // Notes paint first so a note can never hide a table card (spec 16).
+  // Groups paint first, then notes, then table cards.
   const renderedNodes = useMemo(
-    () => [...noteNodes, ...liveNodes.map((node) => ({ ...node, zIndex: 1 }))],
-    [noteNodes, liveNodes],
+    () => {
+      const visible = {
+        x: -viewport.x / viewport.zoom,
+        y: -viewport.y / viewport.zoom,
+        width: canvasSize.width / viewport.zoom,
+        height: canvasSize.height / viewport.zoom,
+      };
+      const liveGroups = groupNodes.map((node) => ({
+        ...node,
+        data: {
+          ...node.data,
+          viewport: {
+            x: visible.x - node.position.x,
+            y: visible.y - node.position.y,
+            width: visible.width,
+            height: visible.height,
+          },
+          zoom: viewport.zoom,
+        },
+      }));
+      return [...liveGroups, ...noteNodes, ...liveNodes.map((node) => ({ ...node, zIndex: 1 }))];
+    },
+    [groupNodes, noteNodes, liveNodes, viewport, canvasSize],
   );
 
   return (
@@ -538,6 +603,14 @@ export function DiagramCanvas({
             title="Add note"
           >
             <StickyNotePlus size={16} />
+          </button>
+          <button
+            type="button"
+            className="panel-button panel-button--secondary"
+            onClick={onCreateGroup}
+            title="Create group"
+          >
+            <Group size={16} />
           </button>
           <button
             type="button"

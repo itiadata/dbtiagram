@@ -255,6 +255,79 @@ body {
   color: var(--muted);
 }
 
+/* Derived table groups (spec 31). Geometry comes from member table bounds. */
+.react-flow__node-group {
+  pointer-events: none;
+}
+
+.group {
+  width: 100%;
+  height: 100%;
+  box-sizing: border-box;
+  border: 2px solid var(--group-border);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--group-border) 10%, transparent);
+  pointer-events: none;
+}
+
+.group__label {
+  position: absolute;
+  top: 0;
+  left: 0;
+  max-width: calc(100% - 8px);
+  overflow: hidden;
+  padding: 4px 9px;
+  border: 1px solid var(--group-border);
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--group-border) 18%, var(--vscode-editor-background));
+  color: var(--vscode-editor-foreground);
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  pointer-events: auto;
+}
+
+.react-flow__node-group:hover .group,
+.react-flow__node-group:has(.group__label:hover) .group {
+  box-shadow: 0 0 0 1px var(--group-border);
+}
+
+.group--blue { --group-border: #2563eb; }
+.group--green { --group-border: #16a34a; }
+.group--amber { --group-border: #d97706; }
+.group--purple { --group-border: #9333ea; }
+.group--rose { --group-border: #e11d48; }
+.group--cyan { --group-border: #0891b2; }
+
+body.vscode-dark .group--blue, body.vscode-high-contrast .group--blue { --group-border: #60a5fa; }
+body.vscode-dark .group--green, body.vscode-high-contrast .group--green { --group-border: #4ade80; }
+body.vscode-dark .group--amber, body.vscode-high-contrast .group--amber { --group-border: #fbbf24; }
+body.vscode-dark .group--purple, body.vscode-high-contrast .group--purple { --group-border: #c084fc; }
+body.vscode-dark .group--rose, body.vscode-high-contrast .group--rose { --group-border: #fb7185; }
+body.vscode-dark .group--cyan, body.vscode-high-contrast .group--cyan { --group-border: #22d3ee; }
+
+.group-color-swatch {
+  display: inline-block;
+  width: 12px;
+  height: 12px;
+  border: 1px solid currentColor;
+  border-radius: 3px;
+  background: var(--swatch);
+}
+.group-color-swatch--blue { --swatch: #2563eb; }
+.group-color-swatch--green { --swatch: #16a34a; }
+.group-color-swatch--amber { --swatch: #d97706; }
+.group-color-swatch--purple { --swatch: #9333ea; }
+.group-color-swatch--rose { --swatch: #e11d48; }
+.group-color-swatch--cyan { --swatch: #0891b2; }
+body.vscode-dark .group-color-swatch--blue { --swatch: #60a5fa; }
+body.vscode-dark .group-color-swatch--green { --swatch: #4ade80; }
+body.vscode-dark .group-color-swatch--amber { --swatch: #fbbf24; }
+body.vscode-dark .group-color-swatch--purple { --swatch: #c084fc; }
+body.vscode-dark .group-color-swatch--rose { --swatch: #fb7185; }
+body.vscode-dark .group-color-swatch--cyan { --swatch: #22d3ee; }
+
 /* ---- Sidebar (spec 05) ---- */
 
 /* The width comes inline from the App's resize state (spec 11); `flex: 0 0

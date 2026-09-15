@@ -24,4 +24,7 @@ export {
    ClipboardCopy,
    ClipboardPaste,
   PencilSparkles,
+  Group,
+  Palette,
+  Pencil,
 } from 'lucide-react';

@@ -10,10 +10,12 @@ import { parse, stringify } from 'yaml';
 import { DEFAULT_COLUMN_DISPLAY, isColumnDisplayMode, type ColumnDisplayMode } from './columnDisplay';
 import type { NodePosition } from './positions';
 import type { DiagramMode } from '../shared/diagramMode';
+import { normalizeGroups, parseGroups, type DiagramGroup } from './layoutGroups';
+export type { DiagramGroup, GroupColor, GroupRect, GroupTableRect } from './layoutGroups';
+export { GROUP_COLORS, GROUP_PADDING, GROUP_LABEL_HEIGHT, groupRect } from './layoutGroups';
+export { LAYOUT_FILE_SUFFIX, defaultLayoutName, isLayoutFilePath, stripLayoutSuffix } from './layoutFileNames';
 
 /** File name suffix identifying a saved diagram layout. */
-export const LAYOUT_FILE_SUFFIX = '.dbtiagram.yml';
-
 /** Current layout schema version. Unknown versions are rejected. */
 export const LAYOUT_VERSION = 2;
 
@@ -51,6 +53,7 @@ export interface DiagramLayout {
   tables: DiagramLayoutTable[];
   /** Always present in memory; `[]` when the file has no notes. */
   notes: DiagramNote[];
+  groups: DiagramGroup[];
   /** The diagram-wide default column-display mode (spec 24); omitted at its default ('all'). */
   defaultColumnDisplay?: ColumnDisplayMode;
 }
@@ -66,30 +69,6 @@ export class DiagramLayoutParseError extends Error {
 }
 
 /** True when `fsPath` names a saved diagram layout file (case-insensitive). */
-export function isLayoutFilePath(fsPath: string | undefined): boolean {
-  if (fsPath === undefined || fsPath === '') {
-    return false;
-  }
-  return fsPath.toLowerCase().endsWith(LAYOUT_FILE_SUFFIX);
-}
-
-/** The default diagram name for a path: its base name minus the suffix. */
-export function defaultLayoutName(fsPath: string): string {
-  const base = fsPath.split(/[\\/]/).pop() ?? fsPath;
-  return stripLayoutSuffix(base);
-}
-
-/**
- * Removes a trailing `.dbtiagram.yml`. The save dialog suggests this bare name:
- * VS Code appends the filter's extension itself, so suggesting a name that
- * already carries the suffix produces `x.dbtiagram.yml.dbtiagram.yml`.
- */
-export function stripLayoutSuffix(name: string): string {
-  return name.toLowerCase().endsWith(LAYOUT_FILE_SUFFIX)
-    ? name.slice(0, name.length - LAYOUT_FILE_SUFFIX.length)
-    : name;
-}
-
 /**
  * Builds a layout from the currently visible tables. Tables are sorted by name
  * and coordinates rounded to integers so repeated writes produce minimal diffs.
@@ -103,6 +82,7 @@ export function buildLayout(
   visible: readonly { name: string; x: number; y: number }[],
   notes: readonly DiagramNote[] = [],
   columnDisplay?: { default: ColumnDisplayMode; overrides: ReadonlyMap<string, ColumnDisplayMode> },
+  groups: readonly DiagramGroup[] = [],
 ): DiagramLayout {
   const tables = visible
     .map((table) => {
@@ -131,6 +111,7 @@ export function buildLayout(
     name,
     tables,
     notes: sortedNotes,
+    groups: normalizeGroups(groups),
     ...(defaultColumnDisplay !== DEFAULT_COLUMN_DISPLAY ? { defaultColumnDisplay } : {}),
   };
 }
@@ -178,6 +159,9 @@ export function serializeDiagramLayout(layout: DiagramLayout): string {
       height: note.height,
       collapsedByDefault: note.collapsedByDefault,
     }));
+  }
+  if (layout.groups.length > 0) {
+    root.groups = normalizeGroups(layout.groups).map(({ id, name, color, models }) => ({ id, name, color, models }));
   }
   if (layout.defaultColumnDisplay !== undefined && layout.defaultColumnDisplay !== DEFAULT_COLUMN_DISPLAY) {
     root.defaultColumnDisplay = layout.defaultColumnDisplay;
@@ -252,6 +236,7 @@ export function parseDiagramLayout(text: string, fallbackName: string): DiagramL
 
   const name = typeof raw.name === 'string' && raw.name !== '' ? raw.name : fallbackName;
   const notes = parseNotes(raw.notes, fallbackName);
+  const groups = parseGroups(raw.groups, (message) => { throw new DiagramLayoutParseError(fallbackName, message); });
   if (raw.defaultColumnDisplay !== undefined && !isColumnDisplayMode(raw.defaultColumnDisplay)) {
     throw new DiagramLayoutParseError(fallbackName, 'Diagram file has an invalid "defaultColumnDisplay"');
   }
@@ -264,6 +249,7 @@ export function parseDiagramLayout(text: string, fallbackName: string): DiagramL
     name,
     tables,
     notes,
+    groups,
     ...(defaultColumnDisplay !== undefined ? { defaultColumnDisplay } : {}),
   };
 }
@@ -349,6 +335,7 @@ export interface AppliedLayout {
   missing: string[];
   /** Passed through untouched — notes reference nothing in the workspace. */
   notes: DiagramNote[];
+  groups: DiagramGroup[];
   /** The diagram-wide default column-display mode (spec 24); defaults to 'all' for pre-feature files. */
   defaultColumnDisplay: ColumnDisplayMode;
   /** Per-table column-display overrides for visible tables (spec 24). */
@@ -385,6 +372,7 @@ export function applyLayout(
     positions,
     missing,
     notes: layout.notes,
+    groups: layout.groups,
     defaultColumnDisplay: layout.defaultColumnDisplay ?? DEFAULT_COLUMN_DISPLAY,
     columnDisplay,
   };

@@ -1,7 +1,7 @@
 ---
 id: 31
 title: Group selected tables inside a named, coloured box
-status: approved
+status: implemented
 priority: high
 created: 2026-08-31
 owner: unassigned

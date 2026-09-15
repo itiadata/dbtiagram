@@ -73,7 +73,9 @@ including sticky notes (spec 16) and per-table/diagram-wide column-display modes
 `serializeDiagramLayout`, `parseDiagramLayout`, `applyLayout`, `createNote`, `isLayoutFilePath`, `defaultLayoutName`, 
 `stripLayoutSuffix`, `DiagramLayout`, `DiagramLayoutTable`, `DiagramNote`, `AppliedLayout`, `DiagramLayoutParseError`, 
 `LAYOUT_FILE_SUFFIX`, `LAYOUT_VERSION`, `NOTE_DEFAULT_WIDTH`, `NOTE_DEFAULT_HEIGHT`, `NOTE_MIN_WIDTH`, 
-`NOTE_MIN_HEIGHT` |
+ `NOTE_MIN_HEIGHT` |
+| `src/diagram/layoutGroups.ts` | pure | Layout-only named/coloured groups: validation, normalization, exclusive membership mutations, palette choice, and rectangles derived from member tables (spec 31). | `DiagramGroup`, `GroupColor`, `GroupRect`, `GroupTableRect`, `GROUP_COLORS`, `groupRect`, `groupForModel`, `replaceGroupModels`, `addModelToGroup`, `removeModelFromGroup` |
+| `src/diagram/layoutFileNames.ts` | pure | Saved-layout suffix and filename helpers extracted from `layoutFile.ts` (spec 31). | `LAYOUT_FILE_SUFFIX`, `isLayoutFilePath`, `defaultLayoutName`, `stripLayoutSuffix` |
 | `src/diagram/matrix.ts` | pure | Derives "fields matrix" rows (spec 27) from a `DiagramGraph`'s nodes: one row per 
 `(model, column)` pair, plus meta-key discovery. | `MatrixRow`, `discoverMetaKeys`, `buildMatrixRows` |
 
@@ -114,6 +116,7 @@ via `ExtensionContext.workspaceState` (spec 27). | `readMatrixColumnPrefs`, `wri
 | `src/vscode/updateCli.ts` | vscode-facing | Executes the authenticated GitHub CLI release query/download and a silent VS Code CLI VSIX installation for private updates (spec 39). | `fetchLatestRelease`, `downloadRelease`, `installVsix` |
 | `src/vscode/updateCheck.ts` | vscode-facing | Adapts extension metadata, storage, prompts, reload, and update CLI calls to the pure update workflow; skips external checks in test hosts (spec 39). | `installedExtensionVersion`, `checkForUpdates`, `UpdateCheckOutcome` |
 | `src/vscode/sourceImportPicker.ts` | vscode-facing | Runs the source-file, source-table, and destination-file Quick Pick sequence (spec 41). | `pickSourceImport` |
+| `src/vscode/groupPicker.ts` | vscode-facing | Native searchable multi-table picker and validated group-name input (spec 31). | `pickGroupTables`, `promptGroupName` |
 | `src/vscode/clipboard.ts` | vscode-facing | Reads/writes AI rename/type clipboard text and displays native import/export notifications (specs 42/43). | `vscodeAiPromptClipboard`, `showAiPromptCopied`, `vscodeAiPromptImportClipboard`, `vscodeAiPromptImportNotifier` |
 
 ## `src/webview/` — extension-host side of the panel
@@ -141,6 +144,7 @@ via `ExtensionContext.workspaceState` (spec 27). | `readMatrixColumnPrefs`, `wri
 | `webview-ui/DiagramCanvas.tsx` | webview | React Flow canvas: nodes, edges, pan/zoom, node drag; top-right toolbar groups Auto-layout with the diagram-wide column-display selector (spec 24); top-left toolbar hosts Add note/Add foreign key and the model-only Fields Matrix action, plus the FK-draw mouse-follow preview line and crosshair cursor (spec 26/40). | `DiagramCanvas`, `DiagramCanvasProps` |
 | `webview-ui/TableNode.tsx` | webview | Custom React Flow node rendering a table with its column rows and handles, including the header-positioned `HEADER_ANCHOR` handle for a hidden FK column (spec 24). | `TableNode` |
 | `webview-ui/NoteNode.tsx` | webview | Custom React Flow node rendering a sticky note: resizable rectangle, textarea, or collapsed icon (spec 16). | `NoteNode`, `NoteNodeData` |
+| `webview-ui/GroupNode.tsx` | webview | Non-movable React Flow background node rendering a named, palette-coloured derived group rectangle (spec 31). | `GroupNode` |
 | `webview-ui/FkEdge.tsx` | webview | Custom FK edge renderer with hover-friendly interaction width. | `FkEdge`, `roundedPath` |
 | `webview-ui/ContextMenu.tsx` | webview | Reusable portal-rendered context menu with disabled/checkable items and submenu flyouts (spec 15, spec 24). | `ContextMenu`, `ContextMenuItem`, `ContextMenuProps` |
 | `webview-ui/SettingsPanel.tsx` | webview | "Open new diagrams" settings overlay: option list with descriptions, radio selection, dismiss conventions matching `ContextMenu` (spec 23). | `SettingsPanel`, `SettingsPanelProps` |
@@ -151,6 +155,8 @@ via `ExtensionContext.workspaceState` (spec 27). | `readMatrixColumnPrefs`, `wri
 | `webview-ui/details-visibility.ts` | webview (pure) | Details sidebar visibility policy: opens/closes with the selection, manual collapse sticks until it next changes (spec 19); `{visible,key}` transition that keeps the policy safe inside a React state updater (spec 21). | `selectionKey`, `nextDetailsVisible`, `SelectionKey`, `DetailsVisibility`, `initialDetailsVisibility`, `advanceDetailsVisibility` |
 | `webview-ui/initial-fit.ts` | webview (pure) | Viewport-fit policies: the one-off post-measurement corrective fit (spec 21) and the deferred pending fit (spec 32). | `shouldRunInitialFit`, `shouldRunPendingFit` |
 | `webview-ui/layout-dirty.ts` | webview (pure) | Compares a current layout snapshot against the last-saved one to drive the manual-save header button's dirty state (spec 22), including the diagram-wide default and per-table column-display modes (spec 24). | `isLayoutDirty`, `LayoutSnapshot` |
+| `webview-ui/group-label.ts` | webview (pure) | Keeps a group label inside the visible intersection of its derived rectangle and viewport (spec 31). | `groupLabelOffset` |
+| `webview-ui/group-state.ts` | webview (pure) | Applies create/edit/rename/colour picker results to immutable group state (spec 31). | `createGroupFromPicker`, `applyGroupTablePicker`, `applyGroupRename`, `changeGroupColor` |
 | `webview-ui/column-display-state.ts` | webview (pure) | The diagram-wide default column-display mode and per-table overrides; setting the default clears every override (spec 24). | `ColumnDisplayState`, `seedColumnDisplay`, `setTableOverride`, `setDefaultMode`, `effectiveMode` |
 | `webview-ui/fk-create-state.ts` | webview (pure) | Two-click gesture state machine for the mouse-drawn foreign key (spec 26): idle -> source-picked -> completed/cancelled. | `ColumnRef`, `FkCreateState`, `FK_CREATE_IDLE`, `startFkCreate`, `cancelFkCreate`, `FkClickOutcome`, `clickColumnForFk` || `webview-ui/settings-state.ts` | webview (pure) | Pure reducer applying a `settings:current` value without forcing the settings overlay open (spec 23). | `applySettingsCurrent`, `SettingsPanelState` |
 | `webview-ui/FilterSidebar.tsx` | webview | Left sidebar: file/model filtering, search, locate, and the model row's "Open SQL file" item (spec 38). | `FilterSidebar` |
@@ -173,6 +179,7 @@ via `ExtensionContext.workspaceState` (spec 27). | `readMatrixColumnPrefs`, `wri
 | `webview-ui/hooks/useContextMenu.ts` | webview | Open/close state (point + items) for the shared context menu (spec 15). | `useContextMenu`, `ContextMenuState` |
 | `webview-ui/hooks/useRevealModel.ts` | webview | "Reveal in diagram" target state and callback (spec 15). | `useRevealModel`, `RevealTarget`, `RevealModelState` |
 | `webview-ui/hooks/useNotes.ts` | webview | Sticky note state: persisted notes, runtime collapse map, node projection, mutations (spec 16). | `useNotes`, `NotesState` |
+| `webview-ui/hooks/useGroups.ts` | webview | Group state, native picker requests/results, direct menu mutations, layout seeding, and derived React Flow nodes (spec 31). | `useGroups`, `GroupsState`, `GroupNodeData` |
 | `webview-ui/hooks/useDiagramFilter.ts` | webview | Filter sidebar state on top of `src/shared/filter.ts`, including the one-time initial model-selection cap and its popup notice for large workspaces (spec 35), unchecking models for table removal (spec 36), and checking models plus their declaring files for "Add related tables" (spec 37). | `useDiagramFilter`, `DiagramFilterState`, `InitialCapNotice` |
 | `webview-ui/hooks/useDraftForeignKeys.ts` | webview | Track in-progress FK edits that are not yet persistable. | `useDraftForeignKeys`, `DraftForeignKeysState` |
 | `webview-ui/hooks/useEdgeHighlighting.ts` | webview | Hover/selection highlighting of FK edges and handle dots. | `useEdgeHighlighting`, `EdgeHighlightingState` |

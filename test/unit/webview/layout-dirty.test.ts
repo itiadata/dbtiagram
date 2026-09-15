@@ -95,3 +95,25 @@ describe('isLayoutDirty (spec 24)', () => {
     expect(isLayoutDirty(current, saved)).toBe(true);
   });
 });
+
+describe('isLayoutDirty (spec 31)', () => {
+  const sales = { id: 'g-1', name: 'Sales', color: 'blue' as const, models: ['orders'] };
+
+  it('is true when group membership changes', () => {
+    expect(isLayoutDirty(
+      { tables: [], notes: [], groups: [{ ...sales, models: ['customers'] }] },
+      { tables: [], notes: [], groups: [sales] },
+    )).toBe(true);
+  });
+
+  it('is true when a group colour changes', () => {
+    expect(isLayoutDirty(
+      { tables: [], notes: [], groups: [{ ...sales, color: 'purple' }] },
+      { tables: [], notes: [], groups: [sales] },
+    )).toBe(true);
+  });
+
+  it('treats missing and empty groups equally', () => {
+    expect(isLayoutDirty({ tables: [], notes: [], groups: [] }, { tables: [], notes: [] })).toBe(false);
+  });
+});

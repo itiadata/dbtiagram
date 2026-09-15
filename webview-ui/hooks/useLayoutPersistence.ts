@@ -6,7 +6,7 @@
  * disk by itself (spec 22).
  */
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { buildLayout, type DiagramLayoutTable, type DiagramNote } from '../../src/diagram/layoutFile';
+import { buildLayout, type DiagramGroup, type DiagramLayoutTable, type DiagramNote } from '../../src/diagram/layoutFile';
 import type { ColumnDisplayMode } from '../../src/diagram/columnDisplay';
 import type { NodePosition } from '../../src/diagram/positions';
 import { postToHost } from '../host';
@@ -32,9 +32,15 @@ export interface LayoutPersistenceState {
   dirty: boolean;
 }
 
+export interface PersistedGroupsState {
+  groups: readonly DiagramGroup[];
+  mutationRevision: number;
+}
+
 export function useLayoutPersistence(
   mode: DiagramMode,
   notes: readonly DiagramNote[] = [],
+  groups?: PersistedGroupsState,
   columnDisplay?: { defaultMode: ColumnDisplayMode; overrides: Map<string, ColumnDisplayMode> },
 ): LayoutPersistenceState {
   const [activeLayout, setActiveLayout] = useState<{ path: string; name: string } | null>(null);
@@ -51,6 +57,10 @@ export function useLayoutPersistence(
   const savedSnapshotRef = useRef<LayoutSnapshot | null>(null);
   const [dirty, setDirty] = useState(false);
 
+  useEffect(() => {
+    if ((groups?.mutationRevision ?? 0) > 0) writeArmedRef.current = true;
+  }, [groups?.mutationRevision]);
+
   const applyLayout = useCallback((message: LayoutApplyMessage): string[] => {
     const names = message.layout.tables.map((table) => table.name);
     setSeedPositions(
@@ -61,6 +71,7 @@ export function useLayoutPersistence(
     savedSnapshotRef.current = {
       tables: message.layout.tables,
       notes: message.layout.notes,
+      groups: message.layout.groups,
       defaultColumnDisplay: message.layout.defaultColumnDisplay,
     };
     setDirty(false);
@@ -110,6 +121,7 @@ export function useLayoutPersistence(
       columnDisplay === undefined
         ? undefined
         : { default: columnDisplay.defaultMode, overrides: columnDisplay.overrides },
+      groups?.groups,
     );
     postToHost({ type: 'layout:save', layout });
     // Optimistic: there is no save-ack message in the protocol, so the
@@ -117,10 +129,11 @@ export function useLayoutPersistence(
     savedSnapshotRef.current = {
       tables: layout.tables,
       notes: layout.notes,
+      groups: layout.groups,
       defaultColumnDisplay: layout.defaultColumnDisplay,
     };
     setDirty(false);
-  }, [activeLayout, tablePositions, notes, columnDisplay, mode]);
+  }, [activeLayout, tablePositions, notes, groups, columnDisplay, mode]);
 
   // Recompute dirty whenever the live tables/notes change, comparing through
   // `buildLayout` so both sides are sorted/rounded the same way (spec 22).
@@ -137,14 +150,15 @@ export function useLayoutPersistence(
       columnDisplay === undefined
         ? undefined
         : { default: columnDisplay.defaultMode, overrides: columnDisplay.overrides },
+      groups?.groups,
     );
     setDirty(
       isLayoutDirty(
-        { tables: current.tables, notes: current.notes, defaultColumnDisplay: current.defaultColumnDisplay },
+        { tables: current.tables, notes: current.notes, groups: current.groups, defaultColumnDisplay: current.defaultColumnDisplay },
         savedSnapshotRef.current,
       ),
     );
-  }, [activeLayout, tablePositions, notes, columnDisplay, mode]);
+  }, [activeLayout, tablePositions, notes, groups, columnDisplay, mode]);
 
   // Pending-layout cache sync (spec 22): once a layout is active, every drag
   // or visibility change posts the current layout (with its dirty flag) to
@@ -161,21 +175,22 @@ export function useLayoutPersistence(
         mode,
         tablePositions,
         notes,
-        columnDisplay === undefined
-          ? undefined
-          : { default: columnDisplay.defaultMode, overrides: columnDisplay.overrides },
+          columnDisplay === undefined
+            ? undefined
+            : { default: columnDisplay.defaultMode, overrides: columnDisplay.overrides },
+          groups?.groups,
       );
       postToHost({
         type: 'layout:pending',
         layout,
         dirty: isLayoutDirty(
-          { tables: layout.tables, notes: layout.notes, defaultColumnDisplay: layout.defaultColumnDisplay },
+          { tables: layout.tables, notes: layout.notes, groups: layout.groups, defaultColumnDisplay: layout.defaultColumnDisplay },
           savedSnapshotRef.current,
         ),
       });
     }, WRITE_DEBOUNCE_MS);
     return () => window.clearTimeout(handle);
-  }, [activeLayout, tablePositions, notes, columnDisplay, mode]);
+  }, [activeLayout, tablePositions, notes, groups, columnDisplay, mode, groups?.mutationRevision]);
 
   return {
     activeLayout,

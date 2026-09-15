@@ -28,6 +28,9 @@ export interface HostMessageHandlers {
   onAppVersion: (version: string) => void;
   onAppUpdateStatus: (status: 'unknown' | 'upToDate' | 'updateAvailable') => void;
   onSourceImportResult: (report: SourceImportReport) => void;
+  onGroupCreateResult: (result: { name: string; models: string[] } | null) => void;
+  onGroupEditTablesResult: (groupId: string, models: string[] | null) => void;
+  onGroupRenameResult: (groupId: string, name: string | null) => void;
 }
 
 export function useHostMessages(handlers: HostMessageHandlers): void {
@@ -71,6 +74,15 @@ export function useHostMessages(handlers: HostMessageHandlers): void {
           break;
         case 'sourceImport:result':
           current.onSourceImportResult(message.report);
+          break;
+        case 'group:createResult':
+          current.onGroupCreateResult(message.result);
+          break;
+        case 'group:editTablesResult':
+          current.onGroupEditTablesResult(message.groupId, message.models);
+          break;
+        case 'group:renameResult':
+          current.onGroupRenameResult(message.groupId, message.name);
           break;
       }
     };

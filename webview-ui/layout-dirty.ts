@@ -6,12 +6,13 @@
  * `buildLayout`), so a straightforward deep-equality check is enough — no
  * `vscode` import, no host state.
  */
-import type { DiagramLayoutTable, DiagramNote } from '../src/diagram/layoutFile';
+import type { DiagramGroup, DiagramLayoutTable, DiagramNote } from '../src/diagram/layoutFile';
 import type { ColumnDisplayMode } from '../src/diagram/columnDisplay';
 
 export interface LayoutSnapshot {
   tables: DiagramLayoutTable[];
   notes: DiagramNote[];
+  groups?: DiagramGroup[];
   /** The diagram-wide default column-display mode (spec 24); undefined means the pre-feature default ('all'). */
   defaultColumnDisplay?: ColumnDisplayMode;
 }
@@ -23,6 +24,7 @@ export function isLayoutDirty(current: LayoutSnapshot, saved: LayoutSnapshot | n
   return (
     JSON.stringify(current.tables) !== JSON.stringify(saved.tables) ||
     JSON.stringify(current.notes) !== JSON.stringify(saved.notes) ||
+    JSON.stringify(current.groups ?? []) !== JSON.stringify(saved.groups ?? []) ||
     current.defaultColumnDisplay !== saved.defaultColumnDisplay
   );
 }
