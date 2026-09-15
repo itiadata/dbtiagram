@@ -19,7 +19,7 @@ describe('copyAiRenameTypePrompt', () => {
     const result = await copyAiRenameTypePrompt(testHost, { model: 'costs_from_source', batchSize: 25, batchNumber: 1 });
     expect(testHost.clipboard.calls).toHaveLength(1);
     expect(testHost.clipboard.calls[0]).toContain('Batch 1 of 1');
-    expect(testHost.clipboard.calls[0]?.startsWith('Use ACME vocabulary.')).toBe(true);
+    expect(testHost.clipboard.calls[0]?.startsWith('Rename each input column and choose its data type. The JSONL input describes the current dbt model columns and their source metadata. Apply the project-specific naming and data-type rules below.\n\nUse ACME vocabulary.')).toBe(true);
     expect(testHost.ruleCalls).toEqual(['costs_from_source']);
     expect(result).toMatchObject({ model: 'costs_from_source', number: 1, total: 1 });
   });

@@ -26,7 +26,7 @@ describe('AI rename/type prompt', () => {
   });
   it('uses caller-provided project rules and retains the generated contract', () => {
     const prompt = buildAiRenameTypePrompt(aiPromptBatch(model([{ name: 'id', meta: { source_name: 'id', source_datatype: 'integer' } }]), { model: 'costs_from_source', batchSize: 25, batchNumber: 1 }), 'Use ACME vocabulary.');
-    expect(prompt.startsWith('Use ACME vocabulary.')).toBe(true);
+    expect(prompt.startsWith('Rename each input column and choose its data type. The JSONL input describes the current dbt model columns and their source metadata. Apply the project-specific naming and data-type rules below.\n\nUse ACME vocabulary.')).toBe(true);
     expect(prompt).toContain('{"s":"id"');
     expect(prompt).toContain('Respond with exactly one valid JSON object');
     expect(prompt).not.toContain('Identifier columns use `ID_`');
