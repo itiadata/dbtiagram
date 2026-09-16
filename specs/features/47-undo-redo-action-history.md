@@ -513,7 +513,9 @@ export interface DiagramCanvasProps {
 13. **History UI.** The compact, Settings-sized header controls use the Lucide
     `Undo`, `Redo`, and `RotateCcwClock` icons with secondary styling; Undo and
     Redo are disabled from `cursor === 0` and `cursor === items.length`, while
-    History is always available.
+    History is always available. The title, model counter, and three-button
+    history control form visually distinct header groups with additional
+    horizontal spacing between them.
     Its dismissible overlay lists `Earlier state` when truncated, otherwise
      `Initial state`, followed by retained actions newest-to-oldest. Rows show a
     `YAML` or `Layout` badge. The row representing `cursor` is marked `Current`
