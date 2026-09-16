@@ -319,6 +319,7 @@ Then its table cards, edges, notes, groups, filters, details, layout interaction
 | `webview-ui/DetailsSidebar.tsx` | modify | Add shared read-only property rendering, including PK/FK/test/meta summaries. |
 | `webview-ui/FilterSidebar.tsx` | modify | Add an explicit browser/static mode that omits VS Code-only actions while preserving filtering/reveal. |
 | `webview-ui/NoteNode.tsx` | modify | Add read-only note rendering with temporary collapse only. |
+| `webview-ui/ForeignKeySection.tsx` | modify | Reuse the existing FK card layout in read-only mode while replacing editors and mutation controls with styled values. |
 | `webview-ui/hooks/useDiagramFilter.ts` | modify | Accept an initial selection limit while retaining the extension's current default. |
 | `webview-ui/styles.css` | modify | Add shared read-only details/card/note states without changing extension-mode selectors. |
 | `test/unit/shared/staticSite.test.ts` | create | Deterministic menu, route, duplicate-name, and safe serialization tests. |
@@ -524,6 +525,20 @@ export function StaticApp(props: StaticAppProps): JSX.Element;
   `<source columns> → <target id>.<target columns>` plus `Virtual`/`Real`.
   Column-display radio controls remain enabled because they alter only the
   current rendering; every project-backed field/control is non-editable.
+- **Manual verification addendum — browser theme:** static light/dark mode sets
+  every shared colour token used by table headers and React Flow controls. Table
+  headers and the bottom-left zoom, fit-view, and lock buttons therefore switch
+  immediately with the session theme and never retain a hard-coded light
+  background in dark mode.
+- **Manual verification addendum — FK interaction:** the static viewer uses the
+  shared `useEdgeHighlighting` behavior. Hovering an FK edge or either endpoint
+  column highlights the relationship and animates its direction exactly as in
+  the extension; leaving it stops the animation.
+- **Manual verification addendum — FK details:** read-only table details reuse
+  `ForeignKeySection` and its existing `fk-card` / `fk-pair` structure and
+  styles. Read-only mode renders target, source/target pairs, and Real/Virtual
+  state as non-editable values while omitting Add, Remove, picker, checkbox, and
+  mutation handlers. It does not use a separate plain-text FK presentation.
 - **Theme:** theme selection is held in browser memory only. Initial value comes
   from `prefers-color-scheme`; the control switches between light and dark and
   is labelled `Use light theme` or `Use dark theme` for its destination.
@@ -567,6 +582,8 @@ export function StaticApp(props: StaticAppProps): JSX.Element;
 | `test/unit/webview/readOnlyComponents.test.ts` | `renders read-only details` | Table and column entities with description, type, PK and FK | Values, key relation text, and column-display radios render; no project-backed input, textarea, select, reveal, add, remove, or edit button renders. |
 | `test/unit/webview/readOnlyComponents.test.ts` | `renders static filter actions only` | Read-only filter with one file/entity | Search, checkboxes and reveal-in-diagram render; source/SQL/action-menu controls do not. |
 | `test/unit/webview/readOnlyComponents.test.ts` | `renders a non-editable note` | Expanded read-only note | Saved text renders without textarea or resize grip; collapse control remains. |
+| `test/unit/webview/readOnlyComponents.test.ts` | `renders foreign keys with the shared card structure` | Read-only table with one real FK | `fk-card` and `fk-pair` render with target, paired columns and `Real`; no combobox, checkbox, Add, or Remove control renders. |
+| `test/unit/webview/readOnlyComponents.test.ts` | `keeps static FK hover animation behavior` | Static flow containing one FK and its shared highlighting hook | Hover marks that edge active and animated; leave restores its inactive state. |
 | `test/unit/fixture.test.ts` | `generates static site data from the sample dbt project` | Existing sample fixture and its committed layouts | Model/source universes and layouts build with no error; all referenced fixture entities resolve. |
 
 Every UI scenario also has a manual check because Node-only unit tests do not
