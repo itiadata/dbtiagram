@@ -159,7 +159,7 @@ Then they are reapplied in the original order
 Given the retained actions are "Rename column orders.state to status", "Move table orders", and "Add note"
 And all three actions are currently applied
 When the user opens History
-Then those actions appear oldest-to-newest with YAML or Layout indicators
+Then those actions appear newest-to-oldest with YAML or Layout indicators
 And "Add note" is marked as the current state
 When the user selects the state after "Rename column orders.state to status"
 Then "Add note" and "Move table orders" are undone in reverse order
@@ -510,10 +510,12 @@ export interface DiagramCanvasProps {
 12. **Groups.** Confirmed picker/prompt results and direct add/remove/recolour/
     delete actions each call `recordMutation`. Cancelled results and pure no-ops
     produce no entry. Derived group rectangles are never snapshotted separately.
-13. **History UI.** The header's Undo and Redo buttons are disabled from
-    `cursor === 0` and `cursor === items.length`; History is always available.
+13. **History UI.** The compact, Settings-sized header controls use the Lucide
+    `Undo`, `Redo`, and `RotateCcwClock` icons with secondary styling; Undo and
+    Redo are disabled from `cursor === 0` and `cursor === items.length`, while
+    History is always available.
     Its dismissible overlay lists `Earlier state` when truncated, otherwise
-    `Initial state`, followed by retained actions oldest-to-newest. Rows show a
+     `Initial state`, followed by retained actions newest-to-oldest. Rows show a
     `YAML` or `Layout` badge. The row representing `cursor` is marked `Current`
     and disabled; selecting another row sends its cursor through `history:goTo`.
     No snapshots or file contents are sent to the webview.

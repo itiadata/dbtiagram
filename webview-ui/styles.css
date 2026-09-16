@@ -1803,6 +1803,7 @@ body.vscode-dark .group-color-swatch--cyan { --swatch: #22d3ee; }
 }
 /* Spec 47: compact history controls and modal. */
 .undo-redo-controls { display: flex; gap: 4px; }
+.undo-redo-controls__button { display: inline-flex; align-items: center; justify-content: center; padding: 6px 8px; }
 .history-backdrop { position: fixed; inset: 0; z-index: 1000; background: rgb(0 0 0 / 35%); display: grid; place-items: center; }
 .history-panel { width: min(480px, calc(100vw - 32px)); max-height: 70vh; overflow: auto; padding: 12px; background: var(--vscode-editor-background); border: 1px solid var(--vscode-panel-border); box-shadow: 0 8px 30px rgb(0 0 0 / 40%); }
 .history-panel header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }

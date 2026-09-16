@@ -27,7 +27,7 @@ export {
   Group,
   Palette,
   Pencil,
-  Undo2,
-  Redo2,
-  History,
+  Undo,
+  Redo,
+  RotateCcwClock,
 } from 'lucide-react';
