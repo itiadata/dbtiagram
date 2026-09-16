@@ -64,6 +64,7 @@ up-to-date spec in `specs/features/`.
 | 44  | Polish diagram icons, source notes, toolbars, table names, and display ordering | Done |
 | 45  | Configure AI renaming rules per dbt project | Done |
 | 46  | Move, copy, paste, reorder, and add columns | Done |
+| 48  | Generate static documentation diagrams | Approved |
 
 Status values: `draft` → `approved` → `implemented` → `done`.
 
