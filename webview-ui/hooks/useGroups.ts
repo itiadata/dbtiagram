@@ -37,23 +37,25 @@ export interface GroupsState {
   setColor: (id: string, color: GroupColor) => void;
   removeGroup: (id: string) => void;
   applyLayoutGroups: (groups: readonly DiagramGroup[]) => void;
+  replaceFromHistory: (groups: readonly DiagramGroup[]) => void;
   setTableRects: (tables: readonly GroupTableRect[]) => void;
 }
 
-export function useGroups(): GroupsState {
+export function useGroups(recordMutation?: (label: string, mutate: () => void) => void): GroupsState {
   const [groups, setGroups] = useState<DiagramGroup[]>([]);
   const [tableRects, setRects] = useState<readonly GroupTableRect[]>([]);
   const [mutationRevision, setMutationRevision] = useState(0);
   const setTableRects = useCallback((tables: readonly GroupTableRect[]): void => {
     setRects((current) => JSON.stringify(current) === JSON.stringify(tables) ? current : [...tables]);
   }, []);
-  const mutate = useCallback((fn: (current: DiagramGroup[]) => DiagramGroup[]): void => {
-    setGroups((current) => {
+  const mutate = useCallback((label: string, fn: (current: DiagramGroup[]) => DiagramGroup[]): void => {
+    const apply = (): void => setGroups((current) => {
       const next = fn(current);
       if (next !== current) setMutationRevision((revision) => revision + 1);
       return next;
     });
-  }, []);
+    if (recordMutation === undefined) apply(); else recordMutation(label, apply);
+  }, [recordMutation]);
   const groupNodes = useMemo(() => groups.flatMap((group): Node<GroupNodeData, 'group'>[] => {
     const rect = groupRect(group, tableRects);
     return rect === null ? [] : [{
@@ -84,14 +86,15 @@ export function useGroups(): GroupsState {
       const current = groups.find((group) => group.id === id);
       if (current !== undefined) postToHost({ type: 'group:rename', groupId: id, currentName: current.name });
     },
-    applyCreateResult: (result) => mutate((current) => createGroupFromPicker(current, newGroupId(Math.random), result)),
-    applyEditTablesResult: (id, models) => mutate((current) => applyGroupTablePicker(current, id, models)),
-    applyRenameResult: (id, name) => mutate((current) => applyGroupRename(current, id, name)),
-    addModel: (id, model) => mutate((current) => addModelToGroup(current, id, model)),
-    removeModel: (model) => mutate((current) => removeModelFromGroup(current, model)),
-    setColor: (id, color) => mutate((current) => changeGroupColor(current, id, color)),
-    removeGroup: (id) => mutate((current) => current.filter((group) => group.id !== id)),
+    applyCreateResult: (result) => mutate(`Create group ${result?.name ?? ''}`, (current) => createGroupFromPicker(current, newGroupId(Math.random), result)),
+    applyEditTablesResult: (id, models) => mutate(`Edit group ${groups.find((group) => group.id === id)?.name ?? id} tables`, (current) => applyGroupTablePicker(current, id, models)),
+    applyRenameResult: (id, name) => mutate(`Rename group ${groups.find((group) => group.id === id)?.name ?? id} to ${name ?? ''}`, (current) => applyGroupRename(current, id, name)),
+    addModel: (id, model) => mutate(`Edit group ${groups.find((group) => group.id === id)?.name ?? id} tables`, (current) => addModelToGroup(current, id, model)),
+    removeModel: (model) => mutate(`Edit group ${groups.find((group) => group.models.includes(model))?.name ?? model} tables`, (current) => removeModelFromGroup(current, model)),
+    setColor: (id, color) => mutate(`Change group ${groups.find((group) => group.id === id)?.name ?? id} color`, (current) => changeGroupColor(current, id, color)),
+    removeGroup: (id) => mutate(`Remove group ${groups.find((group) => group.id === id)?.name ?? id}`, (current) => current.filter((group) => group.id !== id)),
     applyLayoutGroups: (next) => setGroups(normalizeGroups(next)),
+    replaceFromHistory: (next) => setGroups(normalizeGroups(next)),
     setTableRects,
   };
 }

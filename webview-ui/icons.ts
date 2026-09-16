@@ -27,4 +27,7 @@ export {
   Group,
   Palette,
   Pencil,
+  Undo2,
+  Redo2,
+  History,
 } from 'lucide-react';

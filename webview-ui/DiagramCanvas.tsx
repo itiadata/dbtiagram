@@ -107,6 +107,8 @@ export interface DiagramCanvasProps {
   fkCreateActive: boolean;
   onStartFkCreate: () => void;
   onCancelFkCreate: () => void;
+  onLayoutGestureStart: (label: string) => void;
+  onLayoutGestureFinish: () => void;
 }
 
 export function DiagramCanvas({
@@ -145,6 +147,8 @@ export function DiagramCanvas({
   fkCreateActive,
   onStartFkCreate,
   onCancelFkCreate,
+  onLayoutGestureStart,
+  onLayoutGestureFinish,
 }: DiagramCanvasProps): JSX.Element {
   const { fitView, setCenter, getZoom, getNodes, screenToFlowPosition } = useReactFlow();
   const viewport = useViewport();
@@ -588,6 +592,8 @@ export function DiagramCanvas({
       onEdgeDoubleClick={onEdgeDoubleClick}
       onPaneClick={onPaneClick}
       onNodeContextMenu={onNodeContextMenu}
+      onNodeDragStart={(_event, node) => onLayoutGestureStart(node.type === 'note' ? 'Move note' : `Move table ${node.id}`)}
+      onNodeDragStop={onLayoutGestureFinish}
       onPaneContextMenu={onPaneContextMenuInternal}
       minZoom={0.1}
       maxZoom={2}
@@ -647,7 +653,7 @@ export function DiagramCanvas({
           <button
             type="button"
             className="panel-button panel-button--secondary"
-            onClick={onAutoLayout}
+            onClick={() => { onLayoutGestureStart('Auto-layout diagram'); onAutoLayout(); onLayoutGestureFinish(); }}
             title="Auto-layout"
           >
             <Network size={16} />

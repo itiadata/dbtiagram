@@ -6,7 +6,7 @@
  * disk by itself (spec 22).
  */
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { buildLayout, type DiagramGroup, type DiagramLayoutTable, type DiagramNote } from '../../src/diagram/layoutFile';
+import { buildLayout, type DiagramGroup, type DiagramLayout, type DiagramLayoutTable, type DiagramNote } from '../../src/diagram/layoutFile';
 import type { ColumnDisplayMode } from '../../src/diagram/columnDisplay';
 import type { NodePosition } from '../../src/diagram/positions';
 import { postToHost } from '../host';
@@ -30,6 +30,8 @@ export interface LayoutPersistenceState {
   applyActiveLayout: (message: LayoutActiveMessage) => void;
   /** True when the current tables/notes differ from the last-saved/opened snapshot. */
   dirty: boolean;
+  currentLayout: DiagramLayout;
+  applyHistoryTables: (tables: readonly DiagramLayoutTable[]) => void;
 }
 
 export interface PersistedGroupsState {
@@ -88,6 +90,12 @@ export function useLayoutPersistence(
 
   const dismissLayoutMissing = useCallback((): void => {
     setLayoutMissing([]);
+  }, []);
+
+  const applyHistoryTables = useCallback((tables: readonly DiagramLayoutTable[]): void => {
+    const positions = new Map(tables.map((table) => [table.name, { x: table.x, y: table.y }]));
+    setSeedPositions(positions);
+    setSeedTick((tick) => tick + 1);
   }, []);
 
   // Spec 13: the canvas reports the live positions of the visible tables; they
@@ -203,5 +211,11 @@ export function useLayoutPersistence(
     applyLayout,
     applyActiveLayout,
     dirty,
+    currentLayout: buildLayout(
+      activeLayout?.name ?? 'mydiagram', mode, tablePositions, notes,
+      columnDisplay === undefined ? undefined : { default: columnDisplay.defaultMode, overrides: columnDisplay.overrides },
+      groups?.groups,
+    ),
+    applyHistoryTables,
   };
 }

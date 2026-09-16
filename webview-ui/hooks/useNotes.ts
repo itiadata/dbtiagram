@@ -30,6 +30,7 @@ export interface NotesState {
   isCollapsed: (id: string) => boolean;
   /** Seeds from an opened layout and resets every runtime collapse state. */
   applyLayoutNotes: (notes: DiagramNote[]) => void;
+  replaceFromHistory: (notes: readonly DiagramNote[]) => void;
   /** Ids of currently selected notes, for the Delete key. */
   selectedNoteIds: string[];
 }
@@ -41,7 +42,7 @@ function newNoteId(): string {
   return `n-${Array.from(bytes, (byte) => byte.toString(16).padStart(2, '0')).join('')}`;
 }
 
-export function useNotes(): NotesState {
+export function useNotes(recordMutation?: (label: string, mutate: () => void) => void): NotesState {
   const [notes, setNotes] = useState<DiagramNote[]>([]);
   const [collapsedNow, setCollapsedNow] = useState<Map<string, boolean>>(new Map());
   const [selected, setSelected] = useState<ReadonlySet<string>>(new Set());
@@ -61,16 +62,18 @@ export function useNotes(): NotesState {
 
   const addNote = useCallback((x: number, y: number): string => {
     const id = newNoteId();
-    setNotes((current) => [...current, createNote(x, y, id)]);
+    const mutate = (): void => setNotes((current) => [...current, createNote(x, y, id)]);
+    if (recordMutation === undefined) mutate(); else recordMutation('Add note', mutate);
     return id;
-  }, []);
+  }, [recordMutation]);
 
   const updateNoteText = useCallback((id: string, text: string): void => {
-    setNotes((current) => current.map((note) => (note.id === id ? { ...note, text } : note)));
-  }, []);
+    const mutate = (): void => setNotes((current) => current.map((note) => (note.id === id ? { ...note, text } : note)));
+    if (recordMutation === undefined) mutate(); else recordMutation('Edit note', mutate);
+  }, [recordMutation]);
 
   const resizeNote = useCallback((id: string, width: number, height: number): void => {
-    setNotes((current) =>
+    const mutate = (): void => setNotes((current) =>
       current.map((note) =>
         note.id === id
           ? {
@@ -81,10 +84,12 @@ export function useNotes(): NotesState {
           : note,
       ),
     );
-  }, []);
+    if (recordMutation === undefined) mutate(); else recordMutation('Resize note', mutate);
+  }, [recordMutation]);
 
   const deleteNote = useCallback((id: string): void => {
-    setNotes((current) => current.filter((note) => note.id !== id));
+    const mutate = (): void => setNotes((current) => current.filter((note) => note.id !== id));
+    if (recordMutation === undefined) mutate(); else recordMutation('Delete note', mutate);
     setCollapsedNow((current) => {
       if (!current.has(id)) return current;
       const next = new Map(current);
@@ -97,7 +102,7 @@ export function useNotes(): NotesState {
       next.delete(id);
       return next;
     });
-  }, []);
+  }, [recordMutation]);
 
   const setCollapsedByDefault = useCallback(
     (id: string, value: boolean): void => {
@@ -108,11 +113,12 @@ export function useNotes(): NotesState {
       setCollapsedNow((current) =>
         current.has(id) ? current : new Map(current).set(id, isCollapsed(id)),
       );
-      setNotes((current) =>
+      const mutate = (): void => setNotes((current) =>
         current.map((note) => (note.id === id ? { ...note, collapsedByDefault: value } : note)),
       );
+      if (recordMutation === undefined) mutate(); else recordMutation('Change note default', mutate);
     },
-    [isCollapsed],
+    [isCollapsed, recordMutation],
   );
 
   const toggleCollapsedNow = useCallback(
@@ -199,6 +205,7 @@ export function useNotes(): NotesState {
     toggleCollapsedNow,
     isCollapsed,
     applyLayoutNotes,
+    replaceFromHistory: (incoming) => setNotes(incoming.map((note) => ({ ...note }))),
     selectedNoteIds: useMemo(() => [...selected], [selected]),
   };
 }

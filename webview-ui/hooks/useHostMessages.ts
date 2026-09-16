@@ -10,6 +10,8 @@ import { postToHost } from '../host';
 import type { MessageToWebview, SourceImportReport } from '../../src/shared/protocol';
 import type { OpenBehavior } from '../../src/shared/openBehavior';
 import type { MatrixScope, StoredMatrixColumnPref } from '../../src/shared/matrixColumns';
+import type { HistoryState } from '../../src/shared/history';
+import type { DiagramLayout } from '../../src/diagram/layoutFile';
 
 export type DiagramUpdateMessage = Extract<MessageToWebview, { type: 'diagram:update' }>;
 export type LayoutApplyMessage = Extract<MessageToWebview, { type: 'layout:apply' }>;
@@ -32,6 +34,8 @@ export interface HostMessageHandlers {
   onGroupCreateResult: (result: { name: string; models: string[] } | null) => void;
   onGroupEditTablesResult: (groupId: string, models: string[] | null) => void;
   onGroupRenameResult: (groupId: string, name: string | null) => void;
+  onHistoryState: (state: HistoryState) => void;
+  onHistoryApplyLayout: (layout: DiagramLayout) => void;
 }
 
 export function useHostMessages(handlers: HostMessageHandlers): void {
@@ -87,6 +91,12 @@ export function useHostMessages(handlers: HostMessageHandlers): void {
           break;
         case 'group:renameResult':
           current.onGroupRenameResult(message.groupId, message.name);
+          break;
+        case 'history:state':
+          current.onHistoryState(message.state);
+          break;
+        case 'history:applyLayout':
+          current.onHistoryApplyLayout(message.layout);
           break;
       }
     };

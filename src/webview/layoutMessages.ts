@@ -46,6 +46,7 @@ export interface LayoutHost {
   setPendingLayout(layout: DiagramLayout, dirty: boolean): void;
   /** Reads back the cached pending layout, if any (spec 22). */
   getPendingLayout(): { layout: DiagramLayout; dirty: boolean } | undefined;
+  onLayoutReplaced(): void;
 }
 
 /** Layout entries naming models that no longer exist, in file order. */
@@ -86,6 +87,7 @@ export async function openLayout(host: LayoutHost, fsPath: string): Promise<void
   host.setActiveLayout({ fsPath, name: layout.name });
   host.onLayoutOpened(layout.name);
   host.setPendingLayout(layout, false);
+  host.onLayoutReplaced();
   host.republish();
   host.postMessage({ type: 'layout:apply', layout, missing: missingModels(host, layout) });
   publishActiveLayout(host);

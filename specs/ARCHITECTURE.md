@@ -84,7 +84,7 @@ including sticky notes (spec 16) and per-table/diagram-wide column-display modes
 
 | Path | Layer | Responsibility | Key exports |
 |------|-------|----------------|-------------|
-| `src/shared/protocol.ts` | shared | The **only** message contract between extension host and webview, including source-import requests and reports. | `MessageToWebview`, `MessageToExtension`, `DiagramModelFile`, `DiagramPendingError`, `SourceImportReport` |
+| `src/shared/protocol.ts` | shared | The **only** message contract between extension host and webview, including source-import and history requests/results. | `MessageToWebview`, `MessageToExtension`, `DiagramModelFile`, `DiagramPendingError`, `SourceImportReport` |
 | `src/shared/diagramMode.ts` | shared | Diagram mode and mode-specific UI nouns. | `DiagramMode`, `diagramModeLabels` |
 | `src/shared/filter.ts` | shared | File/model filtering and selection reconciliation for the filter sidebar, the initial model-selection cap for large workspaces (spec 35), and the pure `removeModels` unchecking helper for table removal (spec 36). | `filterGraph`, `computeVisibleModels`, `reconcileSelection`, `scopeSelectionToFile`, `matchesSearch`, `capInitialSelection`, `INITIAL_MODEL_SELECTION_LIMIT`, `removeModels` |
 | `src/shared/glob.ts` | shared | Minimal glob matching used for model file discovery patterns. | `matchesGlob`, `globToRegExp`, `normalizePathForGlob` |
@@ -101,6 +101,7 @@ show/hide, reorder, and merging with stored preferences. Used by both the webvie
 | `src/shared/sqlFiles.ts` | shared | Pure derivation of the `.sql` discovery glob from the model glob, the model name of a `.sql` path, and the name -> path index (spec 38). | `DEFAULT_SQL_GLOB`, `sqlGlobForModelGlob`, `modelNameFromSqlPath`, `indexSqlPaths` |
 | `src/shared/update.ts` | shared | Pure validation of the designated private GitHub Release, stable version comparison, user-facing messages, and update workflow/result against a host port (spec 39). | `UPDATE_REPOSITORY`, `LatestRelease`, `UpdateHost`, `UpdateCheckOutcome`, `decodeLatestRelease`, `isNewerVersion`, `updateAvailableMessage`, `updateInstalledMessage`, `runUpdateCheck` |
 | `src/shared/aiRenaming.ts` | shared | Project rules path, exact unavailable reason, and non-blank rules predicate (spec 45). | `AI_RENAMING_RULES_RELATIVE_PATH`, `AI_RENAMING_UNAVAILABLE_REASON`, `hasAiRenamingRules` |
+| `src/shared/history.ts` | shared | Safe history projection types, retention limit, and deterministic model-edit labels (spec 47). | `HistoryDomain`, `HistoryItem`, `HistoryState`, `HISTORY_LIMIT`, `describeModelEdit` |
 
 ## `src/vscode/` — VS Code API wrappers
 
@@ -126,17 +127,18 @@ via `ExtensionContext.workspaceState` (spec 27). | `readMatrixColumnPrefs`, `wri
 
 | Path | Layer | Responsibility | Key exports |
 |------|-------|----------------|-------------|
-| `src/webview/panel.ts` | vscode-facing | The diagram panel: lifecycle, message pump, stores, write-back, source import, layout cache, SQL paths, update status, and project AI-rules availability/guards (spec 45). | `DiagramPanel`, `DiagramPanel.setUpdateStatus`, `DiagramPanel.setUpdateCheckHandler` |
+| `src/webview/panel.ts` | vscode-facing | The diagram panel: lifecycle, serialized message pump, stores, write-back, panel-local history, source import, layout cache, SQL paths, update status, and project AI-rules availability/guards. | `DiagramPanel`, `DiagramPanel.setUpdateStatus`, `DiagramPanel.setUpdateCheckHandler` |
 | `src/webview/html.ts` | vscode-facing | Build the webview HTML shell (CSP, nonce, asset URIs). | `buildWebviewHtml` |
 | `src/webview/panelKey.ts` | pure | One panel per source file: key and title derivation. | `diagramPanelKey`, `diagramPanelTitle`, `DiagramSource`, `defaultCaseInsensitive` |
 | `src/webview/openSource.ts` | pure | Orchestrates "Reveal in model.yml" against a host port: resolve, read, locate (model or a specific column, falling back to the model), reveal or report (spec 15, extended by spec 25). | `openModelSource`, `OpenSourceHost` |
 | `src/webview/openSql.ts` | pure | Orchestrates "Open SQL file" against a host port: lookup, rescan-on-miss (or on a stale cached path), republish, open or report (spec 38). | `openModelSql`, `OpenSqlHost` |
-| `src/webview/layoutMessages.ts` | pure | Layout-related message handling against a small `LayoutHost` port, so it stays testable. Manual save (spec 22): `cachePendingLayout` only caches the webview's latest layout in host memory, never writes to disk. | `publishActiveLayout`, `openLayout`, `sendActiveLayout`, `saveLayout`, `cachePendingLayout`, `ActiveLayout`, `LayoutHost` |
+| `src/webview/layoutMessages.ts` | pure | Layout-related message handling against a small `LayoutHost` port, including explicit-open history invalidation. Manual save only caches pending layouts until Save. | `publishActiveLayout`, `openLayout`, `sendActiveLayout`, `saveLayout`, `cachePendingLayout`, `ActiveLayout`, `LayoutHost` |
 | `src/webview/sourceImport.ts` | pure | Orchestrates source loading, selection, conversion, persistence, and reporting (spec 41). | `runSourceImport`, `SourceImportHost`, `SourceImportCandidate`, `SourceImportSelection` |
 | `src/webview/aiPromptExport.ts` | pure | Requires freshly loaded project rules, builds an AI rename/type prompt, copies it, and returns batch metadata (spec 45). | `copyAiRenameTypePrompt`, `AiPromptExportHost`, `AiPromptClipboard` |
 | `src/webview/aiPromptImport.ts` | pure | Requires fresh project rules before clipboard response validation, bulk persistence, and completion reporting (spec 45). | `importAiRenameTypeClipboardResponse`, `AiPromptImportHost`, `AiPromptImportClipboard`, `AiPromptImportNotifier` |
 | `src/webview/aiPromptProjectRules.ts` | pure | Traverses URI ancestors to load non-blank rules from the nearest workspace-bounded dbt project (spec 45). | `loadAiRenamingRulesFromProject`, `AiPromptProjectRulesHost` |
 | `src/webview/aiPromptAvailability.ts` | pure | Derives unique available model names from model files through an asynchronous rules loader (spec 45). | `availableAiRenamingModels`, `AiPromptModelFile`, `AiPromptRulesLoader` |
+| `src/webview/history.ts` | pure | Panel-local bounded mixed YAML/layout journal, changed-file deltas, and cursor travel (spec 47). | `createUndoJournal`, `pushUndoEntry`, `undo`, `redo`, `moveTo`, `clearUndoJournal`, `toHistoryState`, `modelFileDeltas`, `sourceFileDeltas` |
 | `src/extension.ts` | vscode-facing | `activate` / `deactivate` only — command registration and disposal. | `activate`, `deactivate` |
 
 ## `webview-ui/` — React front-end (webview)
@@ -144,7 +146,7 @@ via `ExtensionContext.workspaceState` (spec 27). | `readMatrixColumnPrefs`, `wri
 | Path | Layer | Responsibility | Key exports |
 |------|-------|----------------|-------------|
 | `webview-ui/index.tsx` | webview | Mount point: renders `App` into the webview document. | — |
-| `webview-ui/App.tsx` | webview | Top-level composition: state hooks, sidebars, canvas; routes column clicks through the mouse-drawn FK gesture (spec 26). | `App` |
+| `webview-ui/App.tsx` | webview | Top-level composition: state hooks, sidebars, canvas, and history controls/restoration; routes column clicks through the mouse-drawn FK gesture. | `App` |
 | `webview-ui/ProductTitle.tsx` | webview | The stacked dbt Diagram header, running extension version/status, and manual update-check button (spec 39). | `ProductTitle`, `ProductTitleProps` |
 | `webview-ui/DiagramCanvas.tsx` | webview | React Flow canvas: nodes, edges, pan/zoom, node drag; top-right toolbar groups Auto-layout with the diagram-wide column-display selector (spec 24); top-left toolbar hosts Add note/Add foreign key and the model-only Fields Matrix action, plus the FK-draw mouse-follow preview line and crosshair cursor (spec 26/40). | `DiagramCanvas`, `DiagramCanvasProps` |
 | `webview-ui/TableNode.tsx` | webview | Custom React Flow node rendering a table with its column rows and handles, including the header-positioned `HEADER_ANCHOR` handle for a hidden FK column (spec 24). | `TableNode` |
@@ -168,6 +170,8 @@ via `ExtensionContext.workspaceState` (spec 27). | `readMatrixColumnPrefs`, `wri
 | `webview-ui/DetailsSidebar.tsx` | webview | Right sidebar: edit the selected model or column; renders the "Columns shown" section between Description and Primary key for a table (spec 24); Column section has a "Primary key" checkbox and both sections have a "Reveal in model.yml" button (spec 34). | `DetailsSidebar`, `SelectedEntity` |
 | `webview-ui/columnPrimaryKey.ts` | webview (pure) | Derives whether a column is part of its table's displayed primary key, and the `setPrimaryKey` edit toggling its membership (spec 34). | `isPrimaryKeyColumn`, `toggleColumnPrimaryKey` |
 | `webview-ui/column-transfer-state.ts` | webview (pure) | Contiguous diagram-column selection, insertion targets, and internal cut/copy clipboard transitions (spec 46). | `selectColumn`, `selectionContains`, `copySelection`, `cutSelection`, `clipboardEdit`, `afterPaste` |
+| `webview-ui/layout-history.ts` | webview (pure) | Captures normalized before/after layouts and rejects structural no-ops (spec 47). | `beginLayoutCapture`, `finishLayoutCapture`, `LayoutCapture`, `CompletedLayoutCapture` |
+| `webview-ui/history-shortcuts.ts` | webview (pure) | Classifies undo/redo shortcuts while protecting editable targets (spec 47). | `historyShortcut`, `HistoryKeyInput` |
 | `webview-ui/matrix-row-order.ts` | webview (pure) | Model-matrix filter gating and reorder/add edit construction (spec 46). | `hasActiveMatrixFilter`, `matrixReorderEdit`, `addColumnEdit` |
 | `webview-ui/PrimaryKeySection.tsx` | webview | Primary key editing UI inside the details sidebar. | `PrimaryKeySection` |
 | `webview-ui/ColumnDisplaySection.tsx` | webview | "Columns shown" radio section of the details pane (spec 24). | `ColumnDisplaySection`, `ColumnDisplaySectionProps` |
@@ -206,6 +210,9 @@ every model's, with filter, column show/hide + reorder, editable cells, and batc
 filter text for the fields matrix (spec 27). | `useFieldsMatrix`, `FieldsMatrixState`, `MatrixTarget` |
 | `webview-ui/hooks/useSourceImport.ts` | webview | Owns source-import request/report state and reveals successful imports through the filter (spec 41). | `useSourceImport`, `SourceImportState` |
 | `webview-ui/hooks/useColumnTransfer.ts` | webview | React state/ref wrapper for diagram column selection, drag/drop, and the internal clipboard (spec 46). | `useColumnTransfer`, `ColumnTransferState` |
+| `webview-ui/hooks/useUndoRedo.ts` | webview | Host-owned history state, shortcuts, layout capture, cursor requests, and layout restoration (spec 47). | `useUndoRedo`, `UndoRedoState` |
+| `webview-ui/UndoRedoControls.tsx` | webview | Compact header Undo, Redo, and History controls (spec 47). | `UndoRedoControls`, `UndoRedoControlsProps` |
+| `webview-ui/HistoryPanel.tsx` | webview | Selectable chronological retained-state overlay with domain badges (spec 47). | `HistoryPanel`, `HistoryPanelProps` |
 
 ## Tests
 

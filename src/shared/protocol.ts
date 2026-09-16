@@ -9,6 +9,7 @@ import type { OpenBehavior } from './openBehavior';
 import type { MatrixScope, StoredMatrixColumnPref } from './matrixColumns';
 import type { DiagramMode } from './diagramMode';
 import type { BrokenImportedForeignKey } from '../dbt/importSource';
+import type { HistoryState } from './history';
 
 export interface SourceImportReport {
   destinationUri: string;
@@ -85,7 +86,9 @@ export type MessageToWebview =
   | { type: 'sourceImport:result'; report: SourceImportReport }
   | { type: 'group:createResult'; result: { name: string; models: string[] } | null }
   | { type: 'group:editTablesResult'; groupId: string; models: string[] | null }
-  | { type: 'group:renameResult'; groupId: string; name: string | null };
+  | { type: 'group:renameResult'; groupId: string; name: string | null }
+  | { type: 'history:state'; state: HistoryState }
+  | { type: 'history:applyLayout'; layout: DiagramLayout };
 
 /** Messages sent from the webview to the extension host. */
 export type MessageToExtension =
@@ -107,6 +110,10 @@ export type MessageToExtension =
    * carried alongside so the host never has to recompute it.
    */
   | { type: 'layout:pending'; layout: DiagramLayout; dirty: boolean }
+  | { type: 'history:recordLayout'; label: string; before: DiagramLayout; after: DiagramLayout }
+  | { type: 'history:undo' }
+  | { type: 'history:redo' }
+  | { type: 'history:goTo'; cursor: number }
     /** Open the model.yml declaring `model` and reveal its declaration, or a specific `column` within it (spec 15, extended by spec 25). */
     | { type: 'diagram:openSource'; entity: string; column?: string }
   /** Persist a new "Open new diagrams" choice as a VS Code user setting (spec 23). */

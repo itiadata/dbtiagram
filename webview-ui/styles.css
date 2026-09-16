@@ -1801,3 +1801,14 @@ body.vscode-dark .group-color-swatch--cyan { --swatch: #22d3ee; }
   border-radius: 4px;
   background: var(--card-header);
 }
+/* Spec 47: compact history controls and modal. */
+.undo-redo-controls { display: flex; gap: 4px; }
+.history-backdrop { position: fixed; inset: 0; z-index: 1000; background: rgb(0 0 0 / 35%); display: grid; place-items: center; }
+.history-panel { width: min(480px, calc(100vw - 32px)); max-height: 70vh; overflow: auto; padding: 12px; background: var(--vscode-editor-background); border: 1px solid var(--vscode-panel-border); box-shadow: 0 8px 30px rgb(0 0 0 / 40%); }
+.history-panel header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
+.history-row { width: 100%; display: flex; gap: 8px; align-items: center; padding: 8px; color: var(--vscode-foreground); background: transparent; border: 0; border-top: 1px solid var(--vscode-panel-border); text-align: left; }
+.history-row:not(:disabled) { cursor: pointer; }
+.history-row:not(:disabled):hover { background: var(--vscode-list-hoverBackground); }
+.history-row span { flex: 1; }
+.history-row small { padding: 2px 5px; border-radius: 3px; background: var(--vscode-badge-background); color: var(--vscode-badge-foreground); }
+.history-row em { font-style: normal; color: var(--vscode-descriptionForeground); }

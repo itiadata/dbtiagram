@@ -1,7 +1,7 @@
 ---
 id: 47
 title: Undo, redo, and action history
-status: approved
+status: implemented
 priority: high
 created: 2026-09-16
 owner: unassigned

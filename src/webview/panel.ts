@@ -59,6 +59,8 @@ import { showAiPromptCopied, vscodeAiPromptClipboard, vscodeAiPromptImportClipbo
 import { pickGroupTables, promptGroupName } from '../vscode/groupPicker';
 import { readAiRenamingRules, registerAiRenamingRulesWatcher } from '../vscode/aiRenamingRules';
 import { availableAiRenamingModels } from './aiPromptAvailability';
+import { describeModelEdit } from '../shared/history';
+import { clearUndoJournal, createUndoJournal, modelFileDeltas, moveTo, pushUndoEntry, redo, sourceFileDeltas, toHistoryState, undo, type UndoJournal, type UndoStep } from './history';
 
 /** Ignore text-change echoes of our own disk writes within this window. */
 const SELF_WRITE_IGNORE_MS = 250;
@@ -98,6 +100,8 @@ export class DiagramPanel {
   private lastViewColumn: vscode.ViewColumn | undefined;
   /** Model name -> `.sql` fs path, refreshed on ready/refresh/rescan (spec 38). */
   private sqlPaths: Map<string, string> = new Map();
+  private journal: UndoJournal = createUndoJournal();
+  private messageQueue: Promise<void> = Promise.resolve();
 
   private constructor(
     panel: vscode.WebviewPanel,
@@ -138,7 +142,9 @@ export class DiagramPanel {
 
     panel.webview.onDidReceiveMessage(
       (message: MessageToExtension) => {
-        void this.onMessage(message);
+        this.messageQueue = this.messageQueue.then(() => this.onMessage(message)).catch((error: unknown) => {
+          this.postMessage({ type: 'diagram:error', message: error instanceof Error ? error.message : String(error) });
+        });
       },
       undefined,
       this.disposables,
@@ -283,6 +289,7 @@ export class DiagramPanel {
         }
       },
       onLayoutSaved: (fsPath, name) => this.rekeyToLayout(fsPath, name),
+      onLayoutReplaced: () => this.clearHistory(),
       republish: () => this.publish(),
       setPendingLayout: (layout, dirty) => {
         this.pendingLayout = layout;
@@ -343,6 +350,7 @@ export class DiagramPanel {
 
   /** Reloads every model.yml file from disk, keeping last good data for broken files. */
   public async refresh(): Promise<void> {
+    this.clearHistory();
     if (this.mode === 'source') {
       const result = await loadSourceYmlFiles(this.modelGlob);
       this.sourceStore = replaceSourceStore(this.sourceStore, result.records.map((record) => ({ uri: record.uri.fsPath, file: record.file })), result.failures.map((failure) => ({ uri: failure.uri.fsPath, error: failure.message })));
@@ -363,6 +371,7 @@ export class DiagramPanel {
   private onDocumentChanged(uri: vscode.Uri, content: string): void {
     const fsPath = uri.fsPath;
     if (this.isSelfWrite(fsPath)) return;
+    this.clearHistory();
     if (this.mode === 'source') this.sourceStore = applySourceTextChange(this.sourceStore, fsPath, content);
     else this.store = applyTextChange(this.store, fsPath, content);
     this.publish();
@@ -370,6 +379,7 @@ export class DiagramPanel {
   }
 
   private async onFilesCreated(uris: vscode.Uri[]): Promise<void> {
+    if (uris.some((uri) => !this.isSelfWrite(uri.fsPath))) this.clearHistory();
     for (const uri of uris) {
       const fsPath = uri.fsPath;
       if (this.isSelfWrite(fsPath)) continue;
@@ -387,6 +397,7 @@ export class DiagramPanel {
   }
 
   private onFilesDeleted(uris: vscode.Uri[]): void {
+    this.clearHistory();
     for (const uri of uris) {
       if (this.mode === 'source') this.sourceStore = applySourceFileDeleted(this.sourceStore, uri.fsPath);
       else this.store = applyFileDeleted(this.store, uri.fsPath);
@@ -396,6 +407,7 @@ export class DiagramPanel {
   }
 
   private async onFilesRenamed(oldUri: vscode.Uri, newUri: vscode.Uri): Promise<void> {
+    this.clearHistory();
     const oldPath = oldUri.fsPath;
     const newPath = newUri.fsPath;
     if (!matchesGlob(newPath, this.modelGlob) || isLayoutFilePath(newPath)) {
@@ -444,6 +456,7 @@ export class DiagramPanel {
         this.sqlPaths = await findSqlFiles(sqlGlobForModelGlob(this.modelGlob));
         this.postMessage({ type: 'model:sqlFiles', models: [...this.sqlPaths.keys()] });
         await this.publishAiPromptAvailability();
+        this.publishHistory();
         return;
       case 'app:checkForUpdates':
         DiagramPanel.updateCheckHandler?.();
@@ -451,8 +464,11 @@ export class DiagramPanel {
       case 'sourceImport:start':
         if (this.mode !== 'model') return;
         try {
+          const before = this.store;
           const report = await runSourceImport(this.sourceImportHost);
           if (report !== undefined) {
+            const files = modelFileDeltas(before, this.store);
+            if (files.length > 0) this.pushHistory({ label: `Import ${report.importedModels.length} source table${report.importedModels.length === 1 ? '' : 's'}`, domain: 'modelYaml', files });
             this.publish();
             this.postMessage({ type: 'sourceImport:result', report });
           }
@@ -513,6 +529,18 @@ export class DiagramPanel {
         return;
       case 'layout:pending':
         cachePendingLayout(this.layoutHost, message.layout, message.dirty);
+        return;
+      case 'history:recordLayout':
+        if (JSON.stringify(message.before) !== JSON.stringify(message.after)) this.pushHistory({ label: message.label, domain: 'layout', before: message.before, after: message.after });
+        return;
+      case 'history:undo':
+        await this.applyHistoryTransition(undo(this.journal));
+        return;
+      case 'history:redo':
+        await this.applyHistoryTransition(redo(this.journal));
+        return;
+      case 'history:goTo':
+        await this.applyHistoryTransition(moveTo(this.journal, message.cursor));
         return;
         case 'diagram:openSource':
           await openDiagramSource(this.openSourceHost, { mode: this.mode, entity: message.entity, column: message.column });
@@ -659,14 +687,18 @@ export class DiagramPanel {
 
   private async applyEditAndPersist(edit: ModelEdit): Promise<void> {
     if (this.mode === 'source') {
+      const before = this.sourceStore;
       const all: SourceDefinition[] = this.sourceStore.records.flatMap((record) => record.file.sources);
       const { sources } = applySourceEdit(all, edit);
       for (const record of distributeEditedSources(this.sourceStore, sources)) {
         this.sourceStore = upsertSourceRecord(this.sourceStore, record.uri, record.file);
         await writeSourceYmlFile(vscode.Uri.file(record.uri), record.file); this.selfWrites.set(record.uri, Date.now());
       }
+      const files = sourceFileDeltas(before, this.sourceStore);
+      if (files.length > 0) this.pushHistory({ label: describeModelEdit(edit), domain: 'sourceYaml', files });
       this.publish(); return;
     }
+    const before = this.store;
     const all: ModelDefinition[] = this.store.records.flatMap((record) => record.file.models);
     const { models } = applyEdit(all, edit);
 
@@ -680,7 +712,65 @@ export class DiagramPanel {
       this.selfWrites.set(record.uri, Date.now());
     }
 
+    const files = modelFileDeltas(before, this.store);
+    if (files.length > 0) this.pushHistory({ label: describeModelEdit(edit), domain: 'modelYaml', files });
     this.publish();
+  }
+
+  private pushHistory(entry: Parameters<typeof pushUndoEntry>[1]): void {
+    this.journal = pushUndoEntry(this.journal, entry);
+    this.publishHistory();
+  }
+
+  private clearHistory(): void {
+    this.journal = clearUndoJournal(this.journal);
+    this.publishHistory();
+  }
+
+  private publishHistory(): void {
+    this.postMessage({ type: 'history:state', state: toHistoryState(this.journal) });
+  }
+
+  private async applyHistoryTransition(transition: ReturnType<typeof moveTo>): Promise<void> {
+    if (transition.steps.length === 0) return;
+    try {
+      for (const step of transition.steps) await this.applyHistoryStep(step);
+      this.journal = transition.journal;
+      this.publish();
+      this.publishHistory();
+    } catch (error) {
+      this.journal = clearUndoJournal(this.journal);
+      this.publishHistory();
+      await this.refresh();
+      throw error;
+    }
+  }
+
+  private async applyHistoryStep(step: UndoStep): Promise<void> {
+    const entry = step.entry;
+    if (entry.domain === 'layout') {
+      this.postMessage({ type: 'history:applyLayout', layout: step.direction === 'undo' ? entry.before : entry.after });
+      return;
+    }
+    if (entry.domain === 'modelYaml') {
+      for (const delta of entry.files) {
+        const expected = step.direction === 'undo' ? delta.after : delta.before;
+        const replacement = step.direction === 'undo' ? delta.before : delta.after;
+        if (this.store.records.find((record) => record.uri === delta.uri)?.file !== expected) throw new Error(`Cannot restore changed file: ${delta.uri}`);
+        await writeModelYmlFile(vscode.Uri.file(delta.uri), replacement);
+        this.selfWrites.set(delta.uri, Date.now());
+        this.store = upsertRecord(this.store, delta.uri, replacement);
+      }
+      return;
+    }
+    for (const delta of entry.files) {
+      const expected = step.direction === 'undo' ? delta.after : delta.before;
+      const replacement = step.direction === 'undo' ? delta.before : delta.after;
+      if (this.sourceStore.records.find((record) => record.uri === delta.uri)?.file !== expected) throw new Error(`Cannot restore changed file: ${delta.uri}`);
+      await writeSourceYmlFile(vscode.Uri.file(delta.uri), replacement);
+      this.selfWrites.set(delta.uri, Date.now());
+      this.sourceStore = upsertSourceRecord(this.sourceStore, delta.uri, replacement);
+    }
   }
 
   private postMessage(message: MessageToWebview): void {

@@ -117,3 +117,16 @@ describe('isLayoutDirty (spec 31)', () => {
     expect(isLayoutDirty({ tables: [], notes: [], groups: [] }, { tables: [], notes: [] })).toBe(false);
   });
 });
+
+describe('isLayoutDirty (spec 47)', () => {
+  const saved: LayoutSnapshot = { tables: [{ name: 'orders', x: 1, y: 2 }], notes: [] };
+
+  it('undoing to the saved layout is clean', () => {
+    expect(isLayoutDirty({ tables: [{ name: 'orders', x: 9, y: 2 }], notes: [] }, saved)).toBe(true);
+    expect(isLayoutDirty(saved, saved)).toBe(false);
+  });
+
+  it('redoing away from the saved layout is dirty', () => {
+    expect(isLayoutDirty({ tables: [{ name: 'orders', x: 9, y: 2 }], notes: [] }, saved)).toBe(true);
+  });
+});

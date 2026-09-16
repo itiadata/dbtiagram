@@ -36,6 +36,7 @@ interface StubHost extends LayoutHost {
   saved: Array<{ fsPath: string; name: string }>;
   republished: number;
   pending: Array<{ layout: DiagramLayout; dirty: boolean }>;
+  replaced: number;
 }
 
 function createHost(overrides: Partial<LayoutHost> = {}): StubHost {
@@ -54,6 +55,7 @@ function createHost(overrides: Partial<LayoutHost> = {}): StubHost {
     saved,
     republished: 0,
     pending,
+    replaced: 0,
     postMessage: (message) => {
       posted.push(message);
     },
@@ -81,6 +83,7 @@ function createHost(overrides: Partial<LayoutHost> = {}): StubHost {
       pending.push({ layout: nextLayout, dirty });
     },
     getPendingLayout: () => pendingLayout,
+    onLayoutReplaced: () => { host.replaced += 1; },
     ...overrides,
   };
   return host;
@@ -94,6 +97,7 @@ describe('openLayout', () => {
     expect(host.getActiveLayout()).toEqual({ fsPath: '/w/orders.dbtiagram.yml', name: 'orders' });
     expect(host.opened).toEqual(['orders']);
     expect(host.republished).toBe(1);
+    expect(host.replaced).toBe(1);
     expect(host.posted).toContainEqual({ type: 'layout:apply', layout, missing: [] });
     expect(host.posted).toContainEqual({
       type: 'layout:active',

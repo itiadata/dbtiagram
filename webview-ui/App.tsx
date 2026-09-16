@@ -54,6 +54,9 @@ import { useGroups } from './hooks/useGroups';
 import { useColumnTransfer } from './hooks/useColumnTransfer';
 import { GROUP_COLORS, groupForModel, type GroupColor } from '../src/diagram/layoutGroups';
 import { AI_RENAMING_UNAVAILABLE_REASON } from '../src/shared/aiRenaming';
+import { useUndoRedo } from './hooks/useUndoRedo';
+import { UndoRedoControls } from './UndoRedoControls';
+import { HistoryPanel } from './HistoryPanel';
 
 export function App(): JSX.Element {
   const [graph, setGraph] = useState<DiagramGraph | null>(null);
@@ -80,8 +83,9 @@ export function App(): JSX.Element {
   const selection = useSelection();
   const filter = useDiagramFilter();
   const sourceImport = useSourceImport(filter.showImportedModels);
-  const notes = useNotes();
-  const groups = useGroups();
+  const undoRedo = useUndoRedo();
+  const notes = useNotes(undoRedo.recordMutation);
+  const groups = useGroups(undoRedo.recordMutation);
   const columnDisplay = useColumnDisplay();
   const fkCreate = useFkCreateMode();
   const layout = useLayoutPersistence(mode, notes.notes, {
@@ -94,6 +98,12 @@ export function App(): JSX.Element {
   const settings = useSettings();
   const fieldsMatrix = useFieldsMatrix(postToHost);
   const columnTransfer = useColumnTransfer();
+  const applyHistoricalLayout = useCallback((historical: import('../src/diagram/layoutFile').DiagramLayout): void => {
+    layout.applyHistoryTables(historical.tables);
+    notes.replaceFromHistory(historical.notes);
+    groups.replaceFromHistory(historical.groups);
+  }, [layout.applyHistoryTables, notes.replaceFromHistory, groups.replaceFromHistory]);
+  undoRedo.bindLayout(layout.currentLayout, applyHistoricalLayout);
   // Stable callbacks pulled out of the hook results: memo dependency lists must
   // reference these, never the freshly-built hook result objects, or every
   // render would invalidate `interaction` and re-render every TableNode.
@@ -158,6 +168,8 @@ export function App(): JSX.Element {
     onGroupCreateResult: groups.applyCreateResult,
     onGroupEditTablesResult: groups.applyEditTablesResult,
     onGroupRenameResult: groups.applyRenameResult,
+    onHistoryState: undoRedo.applyHistoryState,
+    onHistoryApplyLayout: undoRedo.applyLayout,
   });
   const visibleGraph = useMemo(
     () => (graph === null ? null : filterGraph(graph, filter.visibleModels)),
@@ -679,6 +691,7 @@ export function App(): JSX.Element {
             />
             {activeLayout !== null && <span className="app__layout">{activeLayout.name}</span>}
             <span className="app__status">{statusText}</span>
+            <UndoRedoControls state={undoRedo.history} onUndo={undoRedo.undo} onRedo={undoRedo.redo} onOpenHistory={undoRedo.openHistory} />
             <button
               type="button"
               className="panel-button app__settings"
@@ -796,6 +809,8 @@ export function App(): JSX.Element {
                     fkSource={fkPickedSource}                    fkCreateActive={fkCreate.state.active}
                     onStartFkCreate={fkCreate.start}
                     onCancelFkCreate={fkCreate.cancel}
+                    onLayoutGestureStart={undoRedo.beginGesture}
+                    onLayoutGestureFinish={undoRedo.finishGesture}
                   />
                 </DiagramInteractionContext.Provider>
               </ReactFlowProvider>
@@ -894,6 +909,7 @@ export function App(): JSX.Element {
           onClose={() => setAiPromptModel(null)}
         />
       )}
+      {undoRedo.historyOpen && <HistoryPanel state={undoRedo.history} onGoTo={undoRedo.goTo} onClose={undoRedo.closeHistory} />}
     </main>
   );
 }
