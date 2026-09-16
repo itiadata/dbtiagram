@@ -13,6 +13,7 @@ import type { DiagramEntityFile } from '../src/shared/protocol';
 import type { DiagramModeLabels } from '../src/shared/diagramMode';
 import type { ContextMenuItem } from './ContextMenu';
 import { FileCode2 } from './icons';
+import { useDiagramPresentationMode } from './presentation-mode';
 
 interface CollapsibleSectionProps {
   title: string;
@@ -132,6 +133,7 @@ export function FilterSidebar({
   onCollapse,
   style,
 }: FilterSidebarProps): JSX.Element {
+  const readOnly = useDiagramPresentationMode() === 'readonly';
   // Collapse toggles are plain webview state: they survive panel hide/reveal
   // (retainContextWhenHidden) and reset on reopen. All filter data still flows
   // through props.
@@ -153,8 +155,8 @@ export function FilterSidebar({
       title: selectedModels.has(name) ? undefined : 'Model is hidden by the filter',
       onSelect: () => onRevealModel(name),
     },
-    { label: `Reveal in ${labels.sourceFile}`, onSelect: () => onOpenModelSource(name) },
-    ...(showSql ? [{
+    ...(!readOnly ? [{ label: `Reveal in ${labels.sourceFile}`, onSelect: () => onOpenModelSource(name) }] : []),
+    ...(!readOnly && showSql ? [{
       label: 'Open SQL file',
       icon: <FileCode2 size={16} />,
       disabled: !sqlModels.has(name),
@@ -272,7 +274,7 @@ export function FilterSidebar({
               <li
                 key={name}
                 className="sidebar__row"
-                onContextMenu={(event) => {
+                onContextMenu={readOnly ? undefined : (event) => {
                   event.preventDefault();
                   onOpenMenu(event.clientX, event.clientY, modelMenuItems(name));
                 }}
@@ -286,7 +288,7 @@ export function FilterSidebar({
                   <span className="sidebar__item-label">{name}</span>
                 </label>
                 {/* Keyboard-reachable equivalent of the right-click menu. */}
-                <button
+                {readOnly ? <button type="button" className="sidebar__more" onClick={() => onRevealModel(name)} aria-label={`Reveal ${name} in diagram`}>⌖</button> : <button
                   type="button"
                   className="sidebar__more"
                   aria-label={`Actions for ${name}`}
@@ -296,7 +298,7 @@ export function FilterSidebar({
                   }}
                 >
                   ⋯
-                </button>
+                </button>}
               </li>
             ))}
             {visibleModels.length === 0 && <li className="sidebar__empty">No matches</li>}

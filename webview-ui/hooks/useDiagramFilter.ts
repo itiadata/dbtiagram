@@ -59,7 +59,7 @@ export interface DiagramFilterState {
   dismissInitialCapNotice: () => void;
 }
 
-export function useDiagramFilter(): DiagramFilterState {
+export function useDiagramFilter(initialSelectionLimit: number = INITIAL_MODEL_SELECTION_LIMIT): DiagramFilterState {
   const [modelFiles, setModelFiles] = useState<DiagramEntityFile[]>([]);
   const [selectedFiles, setSelectedFiles] = useState<Set<string>>(new Set());
   const [selectedModels, setSelectedModels] = useState<Set<string>>(new Set());
@@ -116,14 +116,14 @@ export function useDiagramFilter(): DiagramFilterState {
     // every later call reconciles normally, uncapped.
     const isInitialLoad = !hasLoadedOnceRef.current;
     hasLoadedOnceRef.current = true;
-    if (isInitialLoad && modelNames.length > INITIAL_MODEL_SELECTION_LIMIT) {
-      setSelectedModels(capInitialSelection(modelNames));
-      setInitialCapNotice({ shown: INITIAL_MODEL_SELECTION_LIMIT, total: modelNames.length });
+    if (isInitialLoad && modelNames.length > initialSelectionLimit) {
+      setSelectedModels(capInitialSelection(modelNames, initialSelectionLimit));
+      setInitialCapNotice({ shown: initialSelectionLimit, total: modelNames.length });
     } else {
       setSelectedModels((current) => reconcileSelection(previousNames, modelNames, current));
     }
     previousModelNamesRef.current = modelNames;
-  }, []);
+  }, [initialSelectionLimit]);
 
   // Spec 14: this tab was opened from a single model.yml, so it starts showing
   // only that file's models. A layout always wins, and an unknown file leaves
@@ -142,15 +142,15 @@ export function useDiagramFilter(): DiagramFilterState {
     if (scoped === null) return;
     setSelectedFiles(scoped.files);
     const scopedNames = [...scoped.models];
-    if (scopedNames.length > INITIAL_MODEL_SELECTION_LIMIT) {
-      setSelectedModels(capInitialSelection(scopedNames));
-      setInitialCapNotice({ shown: INITIAL_MODEL_SELECTION_LIMIT, total: scopedNames.length });
+    if (scopedNames.length > initialSelectionLimit) {
+      setSelectedModels(capInitialSelection(scopedNames, initialSelectionLimit));
+      setInitialCapNotice({ shown: initialSelectionLimit, total: scopedNames.length });
     } else {
       setSelectedModels(scoped.models);
       setInitialCapNotice(null);
     }
     setFilterTick((tick) => tick + 1);
-  }, []);
+  }, [initialSelectionLimit]);
 
   // Spec 13: every file is checked so file precedence can never hide a layout
   // table; the layout's table list becomes the checked model set.

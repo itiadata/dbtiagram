@@ -31,6 +31,7 @@ import {
 import { HEADER_HEIGHT, ROW_HEIGHT } from '../src/diagram/layout';
 import { DiagramInteractionContext } from './diagram-interaction-context';
 import { KeyRound, FlaskConical, FlaskConicalOff } from './icons';
+import { useDiagramPresentationMode } from './presentation-mode';
 
 const EMPTY_COLUMNS: ReadonlySet<string> = new Set();
 const EMPTY_PK_COLUMNS: readonly string[] = [];
@@ -45,6 +46,7 @@ type EditingCell =
 
 function TableNodeComponent({ id, data }: NodeProps<FlowNode>): JSX.Element {
   const interaction = useContext(DiagramInteractionContext);
+  const readOnly = useDiagramPresentationMode() === 'readonly';
   const highlighted = interaction?.highlightedColumns.get(id) ?? EMPTY_COLUMNS;
   const selectedTable = interaction?.selectedTableId === id;
   const selectedColumnRef = interaction?.selectedColumnRef ?? null;
@@ -126,8 +128,8 @@ function TableNodeComponent({ id, data }: NodeProps<FlowNode>): JSX.Element {
   return (
     <div
       className={`table-node${selectedTable ? ' table-node--selected' : ''}`}
-      onDragOver={(event) => { event.preventDefault(); interaction?.onColumnDragOver({ model: id }); }}
-      onDrop={(event) => { event.preventDefault(); interaction?.onColumnDrop({ model: id }, event.ctrlKey); }}
+      onDragOver={readOnly ? undefined : (event) => { event.preventDefault(); interaction?.onColumnDragOver({ model: id }); }}
+      onDrop={readOnly ? undefined : (event) => { event.preventDefault(); interaction?.onColumnDrop({ model: id }, event.ctrlKey); }}
     >
       {renderHandle(CARD_ANCHOR, 'left', 'target')}
       {renderHandle(CARD_ANCHOR, 'right', 'target')}
@@ -142,11 +144,13 @@ function TableNodeComponent({ id, data }: NodeProps<FlowNode>): JSX.Element {
         title={data.description === undefined ? data.label : `${data.label}\n${data.description}`}
         onClick={() => interaction?.onTableSelect(id)}
         onContextMenu={(event) => {
+          if (readOnly) return;
           event.preventDefault();
           event.stopPropagation();
           interaction?.onColumnContextMenu(id, '', event);
         }}
         onDoubleClick={(event) => {
+          if (readOnly) return;
           event.stopPropagation();
           setEditing({ kind: 'title' });
         }}
@@ -189,26 +193,30 @@ function TableNodeComponent({ id, data }: NodeProps<FlowNode>): JSX.Element {
             title={column.description}
             onMouseEnter={() => interaction?.onColumnHover(id, column.name)}
             onMouseLeave={() => interaction?.onColumnLeave(id, column.name)}
-            draggable={editingCell === null}
+            draggable={!readOnly && editingCell === null}
             onClick={(event) => interaction?.onColumnSelect(id, column.name, event)}
             onDragStart={(event) => {
+              if (readOnly) return;
               event.stopPropagation();
               interaction?.onColumnDragStart(id, column.name, orderedColumns);
               event.dataTransfer.effectAllowed = 'copyMove';
             }}
             onDragOver={(event) => {
+              if (readOnly) return;
               event.preventDefault();
               event.stopPropagation();
               interaction?.onColumnDragOver(insertionTarget(event.clientY, event.currentTarget));
             }}
-            onDragLeave={() => interaction?.onColumnDragLeave()}
+            onDragLeave={readOnly ? undefined : () => interaction?.onColumnDragLeave()}
             onDrop={(event) => {
+              if (readOnly) return;
               event.preventDefault();
               event.stopPropagation();
               interaction?.onColumnDrop(insertionTarget(event.clientY, event.currentTarget), event.ctrlKey);
             }}
-            onDragEnd={() => interaction?.onColumnDragEnd()}
+            onDragEnd={readOnly ? undefined : () => interaction?.onColumnDragEnd()}
             onContextMenu={(event) => {
+              if (readOnly) return;
               event.preventDefault();
               event.stopPropagation();
               interaction?.onColumnContextMenu(id, column.name, event);
@@ -254,6 +262,7 @@ function TableNodeComponent({ id, data }: NodeProps<FlowNode>): JSX.Element {
               <span
                 className="table-node__column-name nodrag"
                 onDoubleClick={(event) => {
+                  if (readOnly) return;
                   event.stopPropagation();
                   setEditing({ kind: 'column', column: column.name, cell: 'name' });
                 }}
@@ -290,6 +299,7 @@ function TableNodeComponent({ id, data }: NodeProps<FlowNode>): JSX.Element {
                   column.dataType === undefined ? ' table-node__column-type--placeholder' : ''
                 }`}
                 onDoubleClick={(event) => {
+                  if (readOnly) return;
                   event.stopPropagation();
                   setEditing({ kind: 'column', column: column.name, cell: 'type' });
                 }}

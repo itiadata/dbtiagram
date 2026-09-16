@@ -29,6 +29,7 @@ import { ForeignKeySection, type DraftForeignKey } from './ForeignKeySection';
 import { ChartNoAxesGantt } from './icons';
 import { PrimaryKeySection } from './PrimaryKeySection';
 import type { DiagramMode } from '../src/shared/diagramMode';
+import { useDiagramPresentationMode } from './presentation-mode';
 
 /** The entity the sidebar renders: a table, or a column within its table. */
 export type SelectedEntity =
@@ -79,6 +80,22 @@ export function DetailsSidebar({
   style,
   mode,
 }: DetailsSidebarProps): JSX.Element {
+  const readOnly = useDiagramPresentationMode() === 'readonly';
+  if (readOnly) {
+    return (
+      <aside className="details details--readonly" style={style}>
+        <div className="details__header"><span className="details__header-title">Properties</span><button type="button" className="sidebar__collapse" aria-label="Hide sidebar" onClick={onCollapse}><span className="sidebar__chevron sidebar__chevron--flip" /></button></div>
+        {entity === null ? <p className="details__empty">Select a table or a column to inspect its properties.</p> : entity.kind === 'table' ? (
+          <div className="details__section"><h2 className="details__section-title">Table</h2>
+            <ReadOnlyField label="Name" value={entity.node.label} /><ReadOnlyField label="Description" value={entity.node.description} />
+            <ColumnDisplaySection mode={columnDisplayMode} onChange={onColumnDisplayModeChange} />
+            <ReadOnlyField label="Primary key" value={entity.node.primaryKey?.columns.join(', ')} />
+            <div className="details__field"><span className="details__label">Foreign keys</span>{entity.node.foreignKeys.length === 0 ? <span>—</span> : entity.node.foreignKeys.map((fk, index) => <div key={`${fk.to}-${index}`}>{fk.columns.join(', ')} → {fk.target ?? fk.to}.{fk.toColumns.join(', ')} ({fk.virtual ? 'Virtual' : 'Real'})</div>)}</div>
+          </div>
+        ) : <div className="details__section"><h2 className="details__section-title">Column</h2><ReadOnlyField label="Name" value={entity.column.name} /><ReadOnlyField label="Data type" value={entity.column.dataType} /><ReadOnlyField label="Description" value={entity.column.description} /><ReadOnlyField label="Primary key" value={isPrimaryKeyColumn(entity.node, entity.column.name) ? 'Yes' : 'No'} /></div>}
+      </aside>
+    );
+  }
   return (
     <aside className="details" style={style}>
       <div className="details__header">
@@ -211,6 +228,10 @@ export function DetailsSidebar({
       )}
     </aside>
   );
+}
+
+function ReadOnlyField({ label, value }: { label: string; value?: string }): JSX.Element {
+  return <div className="details__field"><span className="details__label">{label}</span><span className="details__readonly-value">{value === undefined || value === '' ? '—' : value}</span></div>;
 }
 
 interface EditableFieldProps {

@@ -11,6 +11,7 @@ import type { ModelDefinition } from '../../src/dbt/types';
 import { buildDiagram } from '../../src/diagram/graph';
 import { applyLayout, isLayoutFilePath, parseDiagramLayout } from '../../src/diagram/layoutFile';
 import { disambiguateFileLabels } from '../../src/shared/labels';
+import { buildStaticSite } from '../../src/static/site';
 
 const fixtureModelsDir = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
@@ -198,5 +199,19 @@ describe('sample fixture (fixtures/sample-dbt)', () => {
     const products = graph.nodes.find((n) => n.id === 'products')!;
     const productName = products.columns.find((c) => c.name === 'name')!;
     expect(productName.tests).toEqual(['not_null', 'unique']);
+  });
+
+  it('generates static site data from the sample dbt project', () => {
+    const root = path.resolve(fixtureModelsDir, '..');
+    const yamlFiles = listModelYmlFiles(fixtureModelsDir).map((file) => ({
+      relativePath: path.relative(root, file).split(path.sep).join('/'),
+      text: fs.readFileSync(file, 'utf8'),
+    }));
+    const diagrams = path.join(root, 'diagrams');
+    const layoutFiles = fs.readdirSync(diagrams).filter((name) => name.endsWith('.dbtiagram.yml')).map((name) => ({ relativePath: `diagrams/${name}`, text: fs.readFileSync(path.join(diagrams, name), 'utf8') }));
+    const built = buildStaticSite({ projectRoot: root, yamlFiles, layoutFiles }, 100);
+    expect(built.data.model?.graph.nodes.length).toBeGreaterThan(0);
+    expect(built.data.source?.graph.nodes.length).toBeGreaterThan(0);
+    expect(built.warnings).toEqual([]);
   });
 });

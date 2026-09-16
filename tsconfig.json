@@ -19,5 +19,5 @@
     "noEmit": true,
     "types": ["node", "vscode", "mocha"]
   },
-  "include": ["src", "webview-ui", "test"]
+  "include": ["src", "webview-ui", "static-ui", "test"]
 }

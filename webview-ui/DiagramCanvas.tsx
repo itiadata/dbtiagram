@@ -48,6 +48,7 @@ import { shouldRunInitialFit, shouldRunPendingFit } from './initial-fit';
 import { NoteNode } from './NoteNode';
 import { TableNode } from './TableNode';
 import { GroupNode } from './GroupNode';
+import { useDiagramPresentationMode } from './presentation-mode';
 
 const nodeTypes: NodeTypes = { table: TableNode, note: NoteNode, group: GroupNode };
 // The obstacle-aware FK edge (spec 12) — it draws the routed polyline.
@@ -150,6 +151,7 @@ export function DiagramCanvas({
   onLayoutGestureStart,
   onLayoutGestureFinish,
 }: DiagramCanvasProps): JSX.Element {
+  const readOnly = useDiagramPresentationMode() === 'readonly';
   const { fitView, setCenter, getZoom, getNodes, screenToFlowPosition } = useReactFlow();
   const viewport = useViewport();
   const containerRef = useRef<HTMLDivElement | null>(null);
@@ -409,7 +411,7 @@ export function DiagramCanvas({
       for (const change of changes) {
         const id = 'id' in change ? change.id : undefined;
         if (id !== undefined && groupIds.has(id)) continue;
-        if (id !== undefined && noteIds.has(id)) noteChanges.push(change);
+        if (id !== undefined && noteIds.has(id)) { if (!readOnly) noteChanges.push(change); }
         else tableChanges.push(change);
       }
       if (noteChanges.length > 0) {
@@ -419,7 +421,7 @@ export function DiagramCanvas({
         setRfNodes((current) => applyNodeChanges(tableChanges, current));
       }
     },
-    [groupIds, noteIds, onNoteNodeChanges],
+    [groupIds, noteIds, onNoteNodeChanges, readOnly],
   );
 
   const onEdgesChange = useCallback((_changes: EdgeChange[]): void => {
@@ -453,6 +455,7 @@ export function DiagramCanvas({
       if (event.key !== 'Delete' && event.key !== 'Backspace') {
         return;
       }
+      if (readOnly) return;
       const target = event.target as HTMLElement | null;
       const tag = target?.tagName;
       if (tag === 'INPUT' || tag === 'TEXTAREA' || target?.isContentEditable === true) {
@@ -461,7 +464,7 @@ export function DiagramCanvas({
       onDeleteSelectedNotes();
       onRemoveSelectedTable();
     },
-    [onDeleteSelectedNotes, onRemoveSelectedTable],
+    [onDeleteSelectedNotes, onRemoveSelectedTable, readOnly],
   );
 
   const onPaneContextMenuInternal = useCallback(
@@ -478,9 +481,9 @@ export function DiagramCanvas({
         onNodeContextMenu(event as ReactMouseEvent, hitGroup);
         return;
       }
-      onPaneContextMenu(event as ReactMouseEvent, point);
+      if (!readOnly) onPaneContextMenu(event as ReactMouseEvent, point);
     },
-    [screenToFlowPosition, groupNodes, onNodeContextMenu, onPaneContextMenu],
+    [screenToFlowPosition, groupNodes, onNodeContextMenu, onPaneContextMenu, readOnly],
   );
 
   const onAddNote = useCallback((): void => {
@@ -591,7 +594,7 @@ export function DiagramCanvas({
       onEdgeClick={onEdgeClick}
       onEdgeDoubleClick={onEdgeDoubleClick}
       onPaneClick={onPaneClick}
-      onNodeContextMenu={onNodeContextMenu}
+      onNodeContextMenu={readOnly ? undefined : onNodeContextMenu}
       onNodeDragStart={(_event, node) => onLayoutGestureStart(node.type === 'note' ? 'Move note' : `Move table ${node.id}`)}
       onNodeDragStop={onLayoutGestureFinish}
       onPaneContextMenu={onPaneContextMenuInternal}
@@ -600,7 +603,7 @@ export function DiagramCanvas({
     >
       <Background gap={16} size={1} />
       <Controls />
-      <Panel position="top-left">
+      {!readOnly && <Panel position="top-left">
         <div className="canvas-toolbar">
           <button
             type="button"
@@ -647,7 +650,7 @@ export function DiagramCanvas({
             </button>
           )}
         </div>
-      </Panel>
+      </Panel>}
       <Panel position="top-right">
         <div className="canvas-toolbar">
           <button

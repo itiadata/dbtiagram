@@ -65,7 +65,7 @@ up-to-date spec in `specs/features/`.
 | 45  | Configure AI renaming rules per dbt project | Done |
 | 46  | Move, copy, paste, reorder, and add columns | Done |
 | 47  | Undo, redo, and action history | Done |
-| 48  | Generate static documentation diagrams | Approved |
+| 48  | Generate static documentation diagrams | Implemented |
 
 Status values: `draft` → `approved` → `implemented` → `done`.
 

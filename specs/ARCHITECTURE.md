@@ -102,6 +102,17 @@ show/hide, reorder, and merging with stored preferences. Used by both the webvie
 | `src/shared/update.ts` | shared | Pure validation of the designated private GitHub Release, stable version comparison, user-facing messages, and update workflow/result against a host port (spec 39). | `UPDATE_REPOSITORY`, `LatestRelease`, `UpdateHost`, `UpdateCheckOutcome`, `decodeLatestRelease`, `isNewerVersion`, `updateAvailableMessage`, `updateInstalledMessage`, `runUpdateCheck` |
 | `src/shared/aiRenaming.ts` | shared | Project rules path, exact unavailable reason, and non-blank rules predicate (spec 45). | `AI_RENAMING_RULES_RELATIVE_PATH`, `AI_RENAMING_UNAVAILABLE_REASON`, `hasAiRenamingRules` |
 | `src/shared/history.ts` | shared | Safe history projection types, retention limit, and deterministic model-edit labels (spec 47). | `HistoryDomain`, `HistoryItem`, `HistoryState`, `HISTORY_LIMIT`, `describeModelEdit` |
+| `src/shared/staticSite.ts` | shared | Static-site data schema, stable routes, deterministic menu derivation, and safe JSON embedding (spec 48). | `StaticSiteData`, `StaticDiagramUniverse`, `StaticLayoutEntry`, `StaticMenuEntry`, `staticLayoutRoute`, `parseStaticDiagramHash`, `buildStaticMenu`, `serializeStaticSiteData` |
+
+## `src/static/` — static documentation generator
+
+| Path | Layer | Responsibility | Key exports |
+|------|-------|----------------|-------------|
+| `src/static/config.ts` | pure/Node-facing | Strict static-generator CLI and YAML configuration decoding. | `StaticGeneratorOptions`, `StaticCliArguments`, `parseStaticCliArguments`, `resolveStaticGeneratorOptions` |
+| `src/static/project.ts` | Node-facing | Deterministic project filesystem discovery and reads. | `StaticProjectInputs`, `StaticInputFile`, `loadStaticProjectInputs` |
+| `src/static/site.ts` | pure | Classifies parsed project YAML, validates identities, builds universes/layout entries, and reports missing layout tables. | `StaticSiteWarning`, `BuiltStaticSite`, `buildStaticSite` |
+| `src/static/generate.ts` | Node-facing | Builds deterministic offline HTML/assets and transactionally replaces generator-owned output. | `GenerateStaticSiteResult`, `generateStaticSite` |
+| `src/static/cli.ts` | Node-facing | Thin process/console adapter for the static generator. | — |
 
 ## `src/vscode/` — VS Code API wrappers
 
@@ -213,6 +224,18 @@ filter text for the fields matrix (spec 27). | `useFieldsMatrix`, `FieldsMatrixS
 | `webview-ui/hooks/useUndoRedo.ts` | webview | Host-owned history state, shortcuts, layout capture, cursor requests, and layout restoration (spec 47). | `useUndoRedo`, `UndoRedoState` |
 | `webview-ui/UndoRedoControls.tsx` | webview | Compact header Undo, Redo, and History controls (spec 47). | `UndoRedoControls`, `UndoRedoControlsProps` |
 | `webview-ui/HistoryPanel.tsx` | webview | Selectable chronological retained-state overlay with domain badges (spec 47). | `HistoryPanel`, `HistoryPanelProps` |
+| `webview-ui/presentation-mode.tsx` | webview | Defaults shared diagram presentation to editable and lets the static viewer suppress mutation affordances (spec 48). | `DiagramPresentationMode`, `DiagramPresentationProvider`, `useDiagramPresentationMode` |
+
+## `static-ui/` — offline browser viewer
+
+| Path | Layer | Responsibility | Key exports |
+|------|-------|----------------|-------------|
+| `static-ui/index.tsx` | webview/browser | Reads embedded data and mounts the static application. | — |
+| `static-ui/StaticApp.tsx` | webview/browser | Hash routing, theme state, menu/diagram composition, and read-only presentation provider. | `StaticApp`, `StaticAppProps` |
+| `static-ui/DiagramMenu.tsx` | webview/browser | Searchable explorer and saved-layout landing menu. | `DiagramMenu`, `DiagramMenuProps` |
+| `static-ui/StaticDiagram.tsx` | webview/browser | Read-only diagram state and shared canvas/sidebar composition. | `StaticDiagram`, `StaticDiagramProps` |
+| `static-ui/static-data.ts` | webview/browser | Validates and reads embedded static-site JSON. | `readStaticSiteData` |
+| `static-ui/styles.css` | webview/browser | Browser theme fallbacks, landing menu, responsive shell, and shared-style import. | — |
 
 ## Tests
 

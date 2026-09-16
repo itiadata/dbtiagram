@@ -21,6 +21,9 @@ body {
   margin: 0;
 }
 
+.details__readonly-value { white-space: pre-wrap; }
+.note__text--readonly { padding: 8px; overflow: auto; white-space: pre-wrap; }
+
 body {
   background: var(--bg);
   color: var(--text);

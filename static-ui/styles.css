@@ -1,0 +1,19 @@
+@import '../webview-ui/styles.css';
+@import '@xyflow/react/dist/style.css';
+
+.static-app { height: 100vh; background: var(--bg); color: var(--text); }
+.static-app--light { color-scheme: light; --bg: #f5f5f5; --text: #1f1f1f; --card: #fff; --border: #d0d0d0; }
+.static-app--dark { color-scheme: dark; --bg: #1e1e1e; --text: #ddd; --card: #252526; --border: #555; }
+.theme-toggle { position: fixed; z-index: 100; top: 12px; right: 12px; }
+.static-menu { box-sizing: border-box; max-width: 900px; min-height: 100%; margin: auto; padding: 40px 24px; }
+.static-menu > input { box-sizing: border-box; width: 100%; padding: 10px; }
+.static-menu ul { padding: 0; display: grid; gap: 8px; }
+.static-menu li { list-style: none; }
+.static-menu li button { width: 100%; padding: 12px; text-align: left; background: var(--card); color: var(--text); border: 1px solid var(--border); }
+.static-menu li span { display: block; color: var(--muted); }
+.static-diagram { height: 100vh; display: flex; flex-direction: column; }
+.static-diagram__header { padding: 8px 130px 8px 12px; border-bottom: 1px solid var(--border); }
+.static-diagram__body { display: flex; min-height: 0; flex: 1; }
+.static-diagram__canvas { flex: 1; min-width: 0; }
+.static-warning { margin: 0; padding: 6px 12px; color: var(--error); }
+@media (max-width: 700px) { .static-diagram__body { flex-direction: column; } .sidebar, .details { width: auto !important; max-height: 35vh; } }

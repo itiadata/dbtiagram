@@ -13,6 +13,7 @@ import {
   type DiagramNote,
 } from '../src/diagram/layoutFile';
 import { SquareText } from './icons';
+import { useDiagramPresentationMode } from './presentation-mode';
 
 export interface NoteNodeData extends Record<string, unknown> {
   note: DiagramNote;
@@ -30,6 +31,7 @@ function firstLine(text: string): string {
 
 export function NoteNode(props: NodeProps): JSX.Element {
   const data = props.data as NoteNodeData;
+  const readOnly = useDiagramPresentationMode() === 'readonly';
   const { note, collapsed, onTextChange, onResize, onToggleCollapsed } = data;
   const { getZoom } = useReactFlow();
 
@@ -99,20 +101,20 @@ export function NoteNode(props: NodeProps): JSX.Element {
       <div className="note__header" onDoubleClick={() => onToggleCollapsed(note.id)}>
         <span className="note__title">Note</span>
       </div>
-      <textarea
+      {readOnly ? <div className="note__text note__text--readonly">{note.text}</div> : <textarea
         className="note__text nodrag nowheel"
         value={draft}
         placeholder="Write a note…"
         onChange={(event) => setDraft(event.target.value)}
         onBlur={() => onTextChange(note.id, draft)}
-      />
-      <div
+      />}
+      {!readOnly && <div
         className="note__grip nodrag nowheel"
         role="presentation"
         onPointerDown={onGripPointerDown}
         onPointerMove={onGripPointerMove}
         onPointerUp={onGripPointerUp}
-      />
+      />}
     </div>
   );
 }

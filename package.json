@@ -114,6 +114,8 @@
   },
   "scripts": {
     "build": "node esbuild.config.mjs",
+    "build:static": "node esbuild.config.mjs --static-only",
+    "generate": "npm run build:static && node dist/static/cli.js",
     "watch": "node esbuild.config.mjs --watch",
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "verify": "npm run typecheck && npm run test:unit",
