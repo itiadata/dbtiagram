@@ -25,6 +25,7 @@ import type { ModelEdit } from '../src/dbt/edit';
 import type { ForeignKeyDescriptor } from '../src/dbt/types';
 import type { TableNode } from '../src/diagram/graph';
 import { SearchSelect } from './SearchSelect';
+import { useDiagramPresentationMode } from './presentation-mode';
 
 /** Content match of two FK descriptors (to/columns/toColumns, spec 08 (d)). */
 export function sameFkContent(a: ForeignKeyDescriptor, b: ForeignKeyDescriptor): boolean {
@@ -83,8 +84,36 @@ export function ForeignKeySection({
   onRemoveLastPair,
   forceVirtual = false,
 }: ForeignKeySectionProps): JSX.Element {
+  const readOnly = useDiagramPresentationMode() === 'readonly';
   const modelNames = nodes.map((n) => n.id).sort();
   const foreignKeys = node.foreignKeys;
+
+  if (readOnly) {
+    return (
+      <section className="details__sub-section">
+        <h3 className="details__sub-section-title">Foreign keys</h3>
+        {foreignKeys.length === 0 && <p className="details__note">No foreign keys</p>}
+        <div className="fk-list">
+          {foreignKeys.map((fk, index) => (
+            <div key={index} className={`fk-card${focusedFk !== null && sameFkContent(focusedFk, fk) ? ' fk-card--focused' : ''}`}>
+              <div className="fk-card__header">
+                <div className="fk-card__target" title={fk.target ?? fk.to}>{fk.target ?? fk.to}</div>
+                <span className="fk-card__storage">{fk.virtual ? 'Virtual' : 'Real'}</span>
+              </div>
+              {fk.columns.length === 0 && <p className="fk-card__draft-note">No column pairs</p>}
+              {fk.columns.map((source, pairIndex) => (
+                <div key={pairIndex} className="fk-pair">
+                  <div className="fk-pair__select"><span className="fk-pair__value">{source}</span></div>
+                  <span className="fk-pair__arrow">→</span>
+                  <div className="fk-pair__select"><span className="fk-pair__value">{fk.toColumns[pairIndex] ?? '—'}</span></div>
+                </div>
+              ))}
+            </div>
+          ))}
+        </div>
+      </section>
+    );
+  }
 
   return (
     <section className="details__sub-section">

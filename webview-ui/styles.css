@@ -23,6 +23,8 @@ body {
 
 .details__readonly-value { white-space: pre-wrap; }
 .note__text--readonly { padding: 8px; overflow: auto; white-space: pre-wrap; }
+.fk-card__storage { color: var(--muted); font-size: 11px; }
+.fk-pair__value { display: block; overflow: hidden; padding: 5px 7px; text-overflow: ellipsis; white-space: nowrap; }
 
 body {
   background: var(--bg);

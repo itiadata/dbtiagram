@@ -90,7 +90,7 @@ export function DetailsSidebar({
             <ReadOnlyField label="Name" value={entity.node.label} /><ReadOnlyField label="Description" value={entity.node.description} />
             <ColumnDisplaySection mode={columnDisplayMode} onChange={onColumnDisplayModeChange} />
             <ReadOnlyField label="Primary key" value={entity.node.primaryKey?.columns.join(', ')} />
-            <div className="details__field"><span className="details__label">Foreign keys</span>{entity.node.foreignKeys.length === 0 ? <span>—</span> : entity.node.foreignKeys.map((fk, index) => <div key={`${fk.to}-${index}`}>{fk.columns.join(', ')} → {fk.target ?? fk.to}.{fk.toColumns.join(', ')} ({fk.virtual ? 'Virtual' : 'Real'})</div>)}</div>
+            <ForeignKeySection node={entity.node} nodes={nodes} focusedFk={focusedFk} drafts={[]} onEdit={onEdit} onAddDraft={onAddDraft} onRemoveDraft={onRemoveDraft} onDraftVirtualChange={onDraftVirtualChange} onDraftAddPair={onDraftAddPair} onRemoveLastPair={onRemoveLastPair} forceVirtual={mode === 'source'} />
           </div>
         ) : <div className="details__section"><h2 className="details__section-title">Column</h2><ReadOnlyField label="Name" value={entity.column.name} /><ReadOnlyField label="Data type" value={entity.column.dataType} /><ReadOnlyField label="Description" value={entity.column.description} /><ReadOnlyField label="Primary key" value={isPrimaryKeyColumn(entity.node, entity.column.name) ? 'Yes' : 'No'} /></div>}
       </aside>

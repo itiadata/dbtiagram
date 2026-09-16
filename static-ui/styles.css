@@ -2,8 +2,12 @@
 @import '@xyflow/react/dist/style.css';
 
 .static-app { height: 100vh; background: var(--bg); color: var(--text); }
-.static-app--light { color-scheme: light; --bg: #f5f5f5; --text: #1f1f1f; --card: #fff; --border: #d0d0d0; }
-.static-app--dark { color-scheme: dark; --bg: #1e1e1e; --text: #ddd; --card: #252526; --border: #555; }
+.static-app--light { color-scheme: light; --bg: #f5f5f5; --text: #1f1f1f; --muted: #616161; --card: #fff; --card-header: #f3f3f3; --border: #d0d0d0; --accent: #2563eb; --xy-controls-button-background-color-default: #fff; --xy-controls-button-color-default: #1f1f1f; }
+.static-app--dark { color-scheme: dark; --bg: #1e1e1e; --text: #ddd; --muted: #aaa; --card: #252526; --card-header: #303031; --border: #555; --accent: #3794ff; --xy-controls-button-background-color-default: #252526; --xy-controls-button-color-default: #ddd; }
+.static-app .table-node__title { background: var(--card-header); }
+.static-app .react-flow__controls-button { background: var(--card) !important; color: var(--text) !important; border-color: var(--border) !important; }
+.static-app .react-flow__controls-button:hover { background: color-mix(in srgb, var(--accent) 20%, var(--card)) !important; }
+.static-app .react-flow__controls-button svg, .static-app .react-flow__controls-button path { fill: currentColor !important; }
 .theme-toggle { position: fixed; z-index: 100; top: 12px; right: 12px; }
 .static-menu { box-sizing: border-box; max-width: 900px; min-height: 100%; margin: auto; padding: 40px 24px; }
 .static-menu > input { box-sizing: border-box; width: 100%; padding: 10px; }
