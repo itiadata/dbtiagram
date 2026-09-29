@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { parseSourceYml } from '../../../src/dbt/sourceParse';
 import { mergeSourceYml } from '../../../src/dbt/sourceMerge';
 import { applySourceEdit } from '../../../src/dbt/sourceEdit';
+import { parse as parseYaml } from 'yaml';
 
 describe('mergeSourceYml', () => {
   it('changes descriptions without damaging unknown YAML', () => {
@@ -22,5 +23,30 @@ describe('mergeSourceYml', () => {
     expect(merged).toContain('owner: data');
     expect(merged).toContain('confidentiality: restricted');
     expect(merged).toContain('name: untouched');
+  });
+
+  it('writes an edited source meta array as a YAML sequence', () => {
+    const text = `version: 2
+sources:
+  - name: finops
+    tables:
+      - name: costs
+        columns:
+          - name: id
+            config:
+              meta:
+                sample_values:
+                  - 1
+                  - 2
+`;
+    const file = parseSourceYml(text);
+    file.sources = applySourceEdit(file.sources, {
+      kind: 'setColumnMetaArray', model: 'finops.costs', column: 'id',
+      key: 'sample_values', values: [1, 3],
+    }).sources;
+    const merged = mergeSourceYml(text, file);
+    const parsed = parseYaml(merged) as { sources: { tables: { columns: { config: { meta: { sample_values: unknown } } }[] }[] }[] };
+    expect(parsed.sources[0].tables[0].columns[0].config.meta.sample_values).toEqual([1, 3]);
+    expect(merged).not.toContain('sample_values: 1,');
   });
 });

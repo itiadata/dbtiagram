@@ -27,6 +27,12 @@ describe('applySourceEdit', () => {
     expect(result.sources[0].tables[0].columns?.[0].meta).toEqual({ confidentiality: '' });
   });
 
+  it('edits a source column meta array', () => {
+    const input: SourceDefinition[] = [{ name: 'finops', tables: [{ name: 'costs', columns: [{ name: 'id', meta: { sample_values: [1, 2] } }] }] }];
+    const result = applySourceEdit(input, { kind: 'setColumnMetaArray', model: 'finops.costs', column: 'id', key: 'sample_values', values: [1, 3] });
+    expect(result.sources[0].tables[0].columns?.[0].meta?.sample_values).toEqual([1, 3]);
+  });
+
   it('rejects source column structural edits', () => {
     const edits: ModelEdit[] = [
       { kind: 'setColumnName', model: 'finops.costs', column: 'id', name: 'renamed' },

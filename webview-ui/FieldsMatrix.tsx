@@ -23,6 +23,8 @@ import type { MatrixColumnFilters } from './hooks/useFieldsMatrix';
 import { FieldsMatrixRow } from './FieldsMatrixRow';
 import { FieldsMatrixCreateRow } from './FieldsMatrixCreateRow';
 import { addColumnEdit, hasActiveMatrixFilter, matrixAllowsRowStructure, matrixReorderEdit } from './matrix-row-order';
+import { matrixArrayEdit, matrixMetaPreview, matrixTextEdit, metaValuesSupportTextBatch } from './matrix-meta-values';
+import { MetaArrayEditor } from './MetaArrayEditor';
 
 export interface FieldsMatrixProps {
   mode: DiagramMode;
@@ -48,7 +50,7 @@ function cellText(row: MatrixRow, id: MatrixColumnId): string {
   if (id === 'dataType') return row.dataType ?? '';
   if (id === 'description') return row.description ?? '';
   if (id === 'primaryKey' || id === 'virtualPrimaryKey') return '';
-  return row.meta[id.meta] ?? '';
+  return matrixMetaPreview(row.meta[id.meta]);
 }
 
 export function FieldsMatrix({
@@ -71,6 +73,7 @@ export function FieldsMatrix({
   const [batchValue, setBatchValue] = useState('');
   const [columnsMenuOpen, setColumnsMenuOpen] = useState(false);
   const [draggedRow, setDraggedRow] = useState<string | null>(null);
+  const [arrayEditor, setArrayEditor] = useState<{ row: MatrixRow; column: MatrixColumnId; values: readonly unknown[] } | null>(null);
 
   const nodes: TableNode[] = useMemo(() => {
     if (target.scope === 'global') return graph.nodes;
@@ -116,6 +119,7 @@ export function FieldsMatrix({
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent): void => {
       if (event.key === 'Escape') {
+        if (arrayEditor !== null) return;
         if (columnsMenuOpen) {
           setColumnsMenuOpen(false);
           return;
@@ -144,29 +148,11 @@ export function FieldsMatrix({
       window.removeEventListener('keydown', onKeyDown);
       window.removeEventListener('pointerdown', onPointerDown);
     };
-  }, [onClose, columnsMenuOpen]);
+  }, [onClose, columnsMenuOpen, arrayEditor]);
 
   function editRow(row: MatrixRow, columnId: MatrixColumnId, value: string): void {
-    if (columnId === 'model') return;
-    if (columnId === 'name') {
-      onEdit({ kind: 'setColumnName', model: row.model, column: row.column, name: value });
-      return;
-    }
-    if (columnId === 'dataType') {
-      onEdit({ kind: 'setColumnDataType', model: row.model, column: row.column, dataType: value });
-      return;
-    }
-    if (columnId === 'description') {
-      onEdit({
-        kind: 'setColumnDescription',
-        model: row.model,
-        column: row.column,
-        description: value,
-      });
-      return;
-    }
-    if (columnId === 'primaryKey' || columnId === 'virtualPrimaryKey') return;
-    onEdit({ kind: 'setColumnMeta', model: row.model, column: row.column, key: columnId.meta, value });
+    const edit = matrixTextEdit(row, columnId, value);
+    if (edit !== null) onEdit(edit);
   }
 
   function togglePrimaryKey(row: MatrixRow): void {
@@ -218,8 +204,16 @@ export function FieldsMatrix({
     const columnIndex = [...columnIndexes][0];
     const column = visibleColumns[columnIndex];
     if (column === undefined || !column.batchEditable) return undefined;
+    if (typeof column.id !== 'string') {
+      const metaKey = column.id.meta;
+      const values = selectedCells.map((cell) => {
+        const rowIndex = filteredRowIndexes[cell.row];
+        return rowIndex === undefined ? undefined : rows[rowIndex]?.meta[metaKey];
+      });
+      if (!metaValuesSupportTextBatch(values)) return undefined;
+    }
     return column;
-  }, [selectedCells, visibleColumns]);
+  }, [selectedCells, visibleColumns, filteredRowIndexes, rows]);
 
   const isCheckboxColumn = (id: MatrixColumnId): boolean =>
     id === 'primaryKey' || id === 'virtualPrimaryKey';
@@ -353,8 +347,9 @@ export function FieldsMatrix({
                 if (row === undefined) return null;
                 return <FieldsMatrixRow key={`${row.model}.${row.column}`} row={row} visibleRowIndex={visibleRowIndex}
                   visibleColumns={visibleColumns} selectedCells={selectedSet} reorderEnabled={reorderEnabled}
-                  onCellPointerDown={onCellPointerDown} onCellPointerEnter={onCellPointerEnter}
-                  onTextCommit={editRow} onPrimaryKeyToggle={togglePrimaryKey} onVirtualPrimaryKeyToggle={toggleVirtualPrimaryKey}
+                   onCellPointerDown={onCellPointerDown} onCellPointerEnter={onCellPointerEnter}
+                   onTextCommit={editRow} onPrimaryKeyToggle={togglePrimaryKey} onVirtualPrimaryKeyToggle={toggleVirtualPrimaryKey}
+                   onArrayCommit={(arrayRow, arrayColumn, values) => setArrayEditor({ row: arrayRow, column: arrayColumn, values })}
                   onReorderDragStart={allowsRowStructure && target.scope === 'model' ? setDraggedRow : undefined}
                   onReorderDropBefore={allowsRowStructure && target.scope === 'model' ? (before) => {
                     if (draggedRow !== null) onEdit(matrixReorderEdit(target.model, rows, draggedRow, before));
@@ -396,6 +391,13 @@ export function FieldsMatrix({
           </div>
         )}
       </div>
+      {arrayEditor !== null && typeof arrayEditor.column !== 'string' && <MetaArrayEditor
+        model={arrayEditor.row.model} column={arrayEditor.row.column} metaKey={arrayEditor.column.meta}
+        values={arrayEditor.values} onCancel={() => setArrayEditor(null)} onSave={(values) => {
+          const edit = matrixArrayEdit(arrayEditor.row, arrayEditor.column, values);
+          if (edit !== null) onEdit(edit);
+          setArrayEditor(null);
+        }} />}
     </div>
   );
 }

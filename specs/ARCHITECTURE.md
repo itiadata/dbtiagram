@@ -77,8 +77,9 @@ including sticky notes (spec 16) and per-table/diagram-wide column-display modes
  `NOTE_MIN_HEIGHT` |
 | `src/diagram/layoutGroups.ts` | pure | Layout-only named/coloured groups: validation, normalization, exclusive membership mutations, palette choice, and rectangles derived from member tables (spec 31). | `DiagramGroup`, `GroupColor`, `GroupRect`, `GroupTableRect`, `GROUP_COLORS`, `groupRect`, `groupForModel`, `replaceGroupModels`, `addModelToGroup`, `removeModelFromGroup` |
 | `src/diagram/layoutFileNames.ts` | pure | Saved-layout suffix and filename helpers extracted from `layoutFile.ts` (spec 31). | `LAYOUT_FILE_SUFFIX`, `isLayoutFilePath`, `defaultLayoutName`, `stripLayoutSuffix` |
-| `src/diagram/matrix.ts` | pure | Derives "fields matrix" rows (spec 27) from a `DiagramGraph`'s nodes: one row per 
-`(model, column)` pair, plus meta-key discovery. | `MatrixRow`, `discoverMetaKeys`, `buildMatrixRows` |
+| `src/diagram/matrix.ts` | pure | Derives "fields matrix" rows, retaining raw scalar/array meta values (specs 27/50): one row per `(model, column)` pair, plus meta-key discovery. | `MatrixRow`, `discoverMetaKeys`, `buildMatrixRows` |
+
+> Feature 50 update: `src/diagram/matrix.ts` retains raw scalar/array meta values in `MatrixRow.meta`.
 
 ## `src/shared/` — host ↔ webview shared code
 
@@ -217,6 +218,10 @@ every table's, with filter, column show/hide + reorder, policy-controlled editab
 `FieldsMatrixProps` |
 | `webview-ui/FieldsMatrixRow.tsx` | webview | Matrix row rendering with mode-policy read-only controls and model-scope row drag handle (specs 46/49). | `FieldsMatrixRow`, `FieldsMatrixRowProps` |
 | `webview-ui/FieldsMatrixCreateRow.tsx` | webview | Model-scope final Name/Data type creation row (spec 46). | `FieldsMatrixCreateRow`, `FieldsMatrixCreateRowProps` |
+| `webview-ui/matrix-meta-values.ts` | webview (pure) | Matrix meta previews, typed scalar parsing, edit construction, and text-batch eligibility (spec 50). | `EditableMetaScalar`, `MetaScalarParseResult`, `isMetaArray`, `isEditableMetaScalar`, `matrixMetaPreview`, `parseEditedMetaScalar`, `matrixTextEdit`, `matrixArrayEdit`, `metaValuesSupportTextBatch` |
+| `webview-ui/MetaArrayEditor.tsx` | webview | Modal editor for existing scalar items in first-level column meta arrays (spec 50). | `MetaArrayEditor`, `MetaArrayEditorProps` |
+| `webview-ui/matrix-meta-values.ts` | webview (pure) | Matrix meta previews, typed scalar parsing, edit construction, and text-batch eligibility (spec 50). | `EditableMetaScalar`, `MetaScalarParseResult`, `isMetaArray`, `isEditableMetaScalar`, `matrixMetaPreview`, `parseEditedMetaScalar`, `matrixTextEdit`, `matrixArrayEdit`, `metaValuesSupportTextBatch` |
+| `webview-ui/MetaArrayEditor.tsx` | webview | Modal editor for existing scalar items in first-level column meta arrays (spec 50). | `MetaArrayEditor`, `MetaArrayEditorProps` |
 | `webview-ui/hooks/useFieldsMatrix.ts` | webview | Open/close state, column-prefs round trip, and the always-reset 
 filter text for the fields matrix (spec 27). | `useFieldsMatrix`, `FieldsMatrixState`, `MatrixTarget` |
 | `webview-ui/hooks/useSourceImport.ts` | webview | Owns source-import request/report state and reveals successful imports through the filter (spec 41). | `useSourceImport`, `SourceImportState` |

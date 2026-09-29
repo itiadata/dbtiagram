@@ -44,4 +44,13 @@ describe('buildMatrixRows', () => {
     expect(idRow).toMatchObject({ isPrimaryKey: true, virtualPrimaryKey: true });
     expect(nameRow).toMatchObject({ isPrimaryKey: false });
   });
+
+  it('retains array meta values without stringifying them', () => {
+    const values = ['2026-08-17', '2026-08-18'];
+    const rows = buildMatrixRows([node({
+      id: 'orders', columns: [{ name: 'Day', meta: { sample_values: values } }],
+    })], ['sample_values']);
+    expect(rows[0].meta.sample_values).toEqual(values);
+    expect(typeof rows[0].meta.sample_values).not.toBe('string');
+  });
 });

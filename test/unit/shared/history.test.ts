@@ -12,6 +12,7 @@ describe('history descriptions', () => {
       { kind: 'setColumnDataType', model: 'orders', column: 'status', dataType: 'varchar' },
       { kind: 'setColumnDescription', model: 'orders', column: 'status', description: 'x' },
       { kind: 'setColumnMeta', model: 'orders', column: 'status', key: 'pii', value: 'yes' },
+      { kind: 'setColumnMetaArray', model: 'orders', column: 'Day', key: 'sample_values', values: [1, 2] },
       { kind: 'setPrimaryKey', model: 'orders', columns: ['id'], virtual: false },
       { kind: 'setForeignKeyTarget', model: 'orders', fk, target: 'users' },
       { kind: 'setForeignKeyColumns', model: 'orders', fk, columns: ['x'], toColumns: ['y'] },
@@ -26,6 +27,7 @@ describe('history descriptions', () => {
       'Rename model orders to sales', 'Change model orders description',
       'Rename column orders.state to status', 'Change orders.status data type',
       'Change orders.status description', 'Change orders.status meta pii',
+      'Change orders.Day meta sample_values',
       'Change primary key on orders', 'Edit foreign key on orders',
       'Edit foreign key on orders', 'Edit foreign key on orders',
       'Create foreign key on orders', 'Delete foreign key on orders',
@@ -34,4 +36,11 @@ describe('history descriptions', () => {
   });
 
   it('sets retention to 50', () => expect(HISTORY_LIMIT).toBe(50));
+
+  it('describes a column meta array edit', () => {
+    expect(describeModelEdit({
+      kind: 'setColumnMetaArray', model: 'orders', column: 'Day',
+      key: 'sample_values', values: [1, 2],
+    })).toBe('Change orders.Day meta sample_values');
+  });
 });

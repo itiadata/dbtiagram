@@ -81,6 +81,24 @@ export function setColumnMetaValue(
   });
 }
 
+/** Replaces one column `config.meta` value with a shallow-copied array. */
+export function setColumnMetaArrayValue(
+  model: ModelDefinition,
+  column: string,
+  key: string,
+  values: readonly unknown[],
+): ModelDefinition {
+  return mapColumn(model, column, (c) => {
+    const meta = c.meta ?? {};
+    const current = meta[key];
+    if (
+      Array.isArray(current) && current.length === values.length &&
+      current.every((value, index) => Object.is(value, values[index]))
+    ) return c;
+    return { ...c, meta: { ...meta, [key]: [...values] } };
+  });
+}
+
 /**
  * Renames a column and re-points every FK reference to it: `to_columns` in
  * constraints whose `to` targets the renamed model (in any model,

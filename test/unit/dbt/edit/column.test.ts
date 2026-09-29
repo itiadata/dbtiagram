@@ -424,6 +424,32 @@ describe('applyEdit', () => {
     });
   });
 
+  describe('setColumnMetaArray', () => {
+    it('replaces a meta array while preserving item types and order', () => {
+      const withMeta: ModelDefinition[] = [{
+        name: 'orders',
+        columns: [{ name: 'Day', meta: { sample_values: ['10', 10, false] } }],
+      }];
+      const { models: next } = applyEdit(withMeta, {
+        kind: 'setColumnMetaArray', model: 'orders', column: 'Day',
+        key: 'sample_values', values: ['11', 12, true],
+      });
+      expect(next[0].columns?.[0].meta?.sample_values).toEqual(['11', 12, true]);
+    });
+
+    it('returns the original model for an equal meta array', () => {
+      const withMeta: ModelDefinition[] = [{
+        name: 'orders',
+        columns: [{ name: 'Day', meta: { sample_values: [1, 'a', false] } }],
+      }];
+      const { models: next } = applyEdit(withMeta, {
+        kind: 'setColumnMetaArray', model: 'orders', column: 'Day',
+        key: 'sample_values', values: [1, 'a', false],
+      });
+      expect(next[0]).toBe(withMeta[0]);
+    });
+  });
+
   it('does not mutate the input models', () => {
     applyEdit(models, { kind: 'setModelName', model: 'orders', name: 'orders_v2' });
     expect(models[0].name).toBe('orders');

@@ -25,6 +25,7 @@ export function describeModelEdit(edit: ModelEdit): string {
     case 'setColumnDataType': return `Change ${edit.model}.${edit.column} data type`;
     case 'setColumnDescription': return `Change ${edit.model}.${edit.column} description`;
     case 'setColumnMeta': return `Change ${edit.model}.${edit.column} meta ${edit.key}`;
+    case 'setColumnMetaArray': return `Change ${edit.model}.${edit.column} meta ${edit.key}`;
     case 'setPrimaryKey': return `Change primary key on ${edit.model}`;
     case 'setForeignKeyTarget':
     case 'setForeignKeyColumns':

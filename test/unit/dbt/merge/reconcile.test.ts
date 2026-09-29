@@ -362,6 +362,27 @@ models:
     expect(out).toContain('meta:\n            GDPR: "true"');
     expect(out).not.toContain('{');
   });
+
+  it('writes an edited model meta array as a YAML sequence', () => {
+    const text = `version: 2
+models:
+  - name: orders
+    columns:
+      - name: Day
+        config:
+          meta:
+            sample_values:
+              - 2026-08-17
+              - 2026-08-18
+`;
+    const file = edited(text, (f) => {
+      f.models[0].columns![0].meta = { sample_values: ['2026-08-17', '2026-08-19'] };
+    });
+    const out = mergeModelYml(text, file);
+    const parsed = parseYaml(out) as { models: { columns: { config: { meta: { sample_values: unknown } } }[] }[] };
+    expect(parsed.models[0].columns[0].config.meta.sample_values).toEqual(['2026-08-17', '2026-08-19']);
+    expect(out).not.toContain('sample_values: 2026-08-17,');
+  });
 });
 
 describe('mergeModelYml scalar wrapping (spec 29 addendum)', () => {

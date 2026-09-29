@@ -14,7 +14,7 @@ export interface MatrixRow {
   /** Only meaningful when isPrimaryKey is true; mirrors the model's PK virtual flag. */
   virtualPrimaryKey: boolean;
   /** One entry per discovered meta key in scope; absent key -> undefined. */
-  meta: Record<string, string | undefined>;
+  meta: Record<string, unknown>;
 }
 
 /** Unions and dedupes `column.meta` keys across the given nodes, alphabetical. */
@@ -42,10 +42,10 @@ export function buildMatrixRows(
     const pkVirtual = node.primaryKey?.virtual ?? false;
     for (const column of node.columns) {
       const isPrimaryKey = pkColumns.has(column.name);
-      const meta: Record<string, string | undefined> = {};
+      const meta: Record<string, unknown> = {};
       for (const key of metaKeys) {
         const value = column.meta?.[key];
-        meta[key] = value === undefined ? undefined : String(value);
+        meta[key] = value;
       }
       rows.push({
         model: node.id,

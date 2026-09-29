@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import type { MatrixRow } from '../src/diagram/matrix';
 import type { MatrixColumnDef, MatrixColumnId } from '../src/shared/matrixColumns';
+import { isMetaArray, matrixMetaPreview } from './matrix-meta-values';
 
 export interface FieldsMatrixRowProps {
   row: MatrixRow;
@@ -11,6 +12,7 @@ export interface FieldsMatrixRowProps {
   onCellPointerDown: (rowIndex: number, columnIndex: number) => void;
   onCellPointerEnter: (rowIndex: number, columnIndex: number) => void;
   onTextCommit: (row: MatrixRow, column: MatrixColumnId, value: string) => void;
+  onArrayCommit: (row: MatrixRow, column: MatrixColumnId, values: readonly unknown[]) => void;
   onPrimaryKeyToggle: (row: MatrixRow) => void;
   onVirtualPrimaryKeyToggle: (row: MatrixRow) => void;
   onReorderDragStart?: (column: string) => void;
@@ -24,7 +26,7 @@ function text(row: MatrixRow, id: MatrixColumnId): string {
   if (id === 'dataType') return row.dataType ?? '';
   if (id === 'description') return row.description ?? '';
   if (id === 'primaryKey' || id === 'virtualPrimaryKey') return '';
-  return row.meta[id.meta] ?? '';
+  return matrixMetaPreview(row.meta[id.meta]);
 }
 
 export function FieldsMatrixRow(props: FieldsMatrixRowProps): JSX.Element {
@@ -48,6 +50,9 @@ export function FieldsMatrixRow(props: FieldsMatrixRowProps): JSX.Element {
           </td>;
         }
         if (column.id === 'model') return <td key="model">{props.row.model}</td>;
+        const rawValue = typeof column.id === 'string' ? undefined : props.row.meta[column.id.meta];
+        if (isMetaArray(rawValue)) return <ArrayCell key={key(column.id)} value={rawValue} selected={selected}
+          {...events} readOnly={!column.editable} onCommit={(values) => props.onArrayCommit(props.row, column.id, values)} />;
         return <EditableCell key={key(column.id)} value={text(props.row, column.id)} selected={selected}
           {...events} readOnly={!column.editable} onCommit={(value) => props.onTextCommit(props.row, column.id, value)} />;
       })}
@@ -59,6 +64,17 @@ export function FieldsMatrixRow(props: FieldsMatrixRowProps): JSX.Element {
       </td>}
     </tr>
   );
+}
+
+function ArrayCell({ value, selected, readOnly, onPointerDown, onPointerEnter, onCommit }: {
+  value: readonly unknown[]; selected: boolean; readOnly: boolean; onPointerDown: () => void;
+  onPointerEnter: () => void; onCommit: (value: readonly unknown[]) => void;
+}): JSX.Element {
+  return <td className={`${selected ? 'fields-matrix__cell--selected ' : ''}fields-matrix__array-cell`}
+    onPointerDown={onPointerDown} onPointerEnter={onPointerEnter}
+    onDoubleClick={() => { if (!readOnly) onCommit(value); }} title={readOnly ? undefined : 'Double-click to edit array'}>
+    {matrixMetaPreview(value)}
+  </td>;
 }
 
 function EditableCell({ value, selected, readOnly, onPointerDown, onPointerEnter, onCommit }: {

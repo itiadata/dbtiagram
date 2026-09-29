@@ -1,7 +1,7 @@
 ---
 id: 50
 title: Edit array meta values in the fields matrix
-status: approved
+status: implemented
 priority: medium
 created: 2026-09-29
 owner: unassigned

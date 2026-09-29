@@ -1,6 +1,6 @@
 import type { ModelEdit } from './edit';
 import { EditError, blankToUndefined } from './edit/internal';
-import { setColumnMetaValue } from './edit/column';
+import { setColumnMetaArrayValue, setColumnMetaValue } from './edit/column';
 import { applyForeignKeyColumns, applyForeignKeyTarget, createForeignKey, removeFkFromModel } from './edit/foreignKey';
 import { setPrimaryKeyOnModel } from './edit/primaryKey';
 import { formatSourceRef } from './sourceRefs';
@@ -20,6 +20,7 @@ export function applySourceEdit(sources: SourceDefinition[], edit: ModelEdit): A
     case 'setModelDescription': edited = mapOne(models, edit.model, (model) => ({ ...model, description: blankToUndefined(edit.description) })); break;
     case 'setColumnDescription': edited = mapOne(models, edit.model, (model) => ({ ...model, columns: (model.columns ?? []).map((column) => column.name === edit.column ? { ...column, description: blankToUndefined(edit.description) } : column) })); break;
     case 'setColumnMeta': edited = mapOne(models, edit.model, (model) => setColumnMetaValue(model, edit.column, edit.key, edit.value)); break;
+    case 'setColumnMetaArray': edited = mapOne(models, edit.model, (model) => setColumnMetaArrayValue(model, edit.column, edit.key, edit.values)); break;
     case 'setPrimaryKey': edited = mapOne(models, edit.model, (model) => setPrimaryKeyOnModel(model, edit.columns, true, false)); break;
     case 'setForeignKeyTarget': edited = applyForeignKeyTarget(models, edit.model, edit.fk, edit.target, formatSourceRef).models; break;
     case 'setForeignKeyColumns': edited = applyForeignKeyColumns(models, edit.model, edit.fk, edit.columns, edit.toColumns).models; break;
