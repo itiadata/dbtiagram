@@ -1,7 +1,7 @@
 ---
 id: 49
 title: Edit source columns in the fields matrix
-status: implemented
+status: done
 priority: medium
 created: 2026-09-29
 owner: unassigned
