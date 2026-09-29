@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type DragEvent } from 'react';
 import type { ModelEdit } from '../src/dbt/edit';
 import type { DiagramGraph, TableNode } from '../src/diagram/graph';
+import type { DiagramMode } from '../src/shared/diagramMode';
 import { buildMatrixRows, discoverMetaKeys, type MatrixRow } from '../src/diagram/matrix';
 import {
   applyStoredPrefs,
@@ -21,9 +22,10 @@ import {
 import type { MatrixColumnFilters } from './hooks/useFieldsMatrix';
 import { FieldsMatrixRow } from './FieldsMatrixRow';
 import { FieldsMatrixCreateRow } from './FieldsMatrixCreateRow';
-import { addColumnEdit, hasActiveMatrixFilter, matrixReorderEdit } from './matrix-row-order';
+import { addColumnEdit, hasActiveMatrixFilter, matrixAllowsRowStructure, matrixReorderEdit } from './matrix-row-order';
 
 export interface FieldsMatrixProps {
+  mode: DiagramMode;
   target: { scope: 'model'; model: string } | { scope: 'global' };
   graph: DiagramGraph;
   onEdit: (edit: ModelEdit) => void;
@@ -50,6 +52,7 @@ function cellText(row: MatrixRow, id: MatrixColumnId): string {
 }
 
 export function FieldsMatrix({
+  mode,
   target,
   graph,
   onEdit,
@@ -83,7 +86,7 @@ export function FieldsMatrix({
   useEffect(() => {
     if (columns.length > 0) return;
     const metaKeys = discoverMetaKeys(nodes);
-    seedColumns(applyStoredPrefs(defaultMatrixColumns(metaKeys, target.scope), storedPrefs));
+    seedColumns(applyStoredPrefs(defaultMatrixColumns(metaKeys, target.scope, mode), storedPrefs));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [columns.length]);
 
@@ -205,7 +208,8 @@ export function FieldsMatrix({
 
   const selectedCells = selection === null ? [] : cellsInSelection(selection);
   const selectedSet = new Set(selectedCells.map((c) => `${c.row}:${c.columnIndex}`));
-  const reorderEnabled = target.scope === 'model' && !hasActiveMatrixFilter(columnFilters);
+  const allowsRowStructure = matrixAllowsRowStructure(mode);
+  const reorderEnabled = allowsRowStructure && target.scope === 'model' && !hasActiveMatrixFilter(columnFilters);
 
   const batchColumn: MatrixColumnDef | undefined = useMemo(() => {
     if (selectedCells.length < 2) return undefined;
@@ -253,7 +257,7 @@ export function FieldsMatrix({
     onColumnsChange(reorderColumn(columns, fromIndex, index));
   }
 
-  const scopeLabel = target.scope === 'global' ? 'Edit fields matrix (all models)' : `Edit columns — ${target.model}`;
+  const scopeLabel = target.scope === 'global' ? `Edit fields matrix (all ${mode === 'source' ? 'tables' : 'models'})` : `Edit columns — ${target.model}`;
 
   return (
     <div className="fields-matrix-overlay">
@@ -313,7 +317,7 @@ export function FieldsMatrix({
                     {column.label}
                   </th>
                 ))}
-                {target.scope === 'model' && <th className="fields-matrix__row-handle-cell">Order</th>}
+                {allowsRowStructure && target.scope === 'model' && <th className="fields-matrix__row-handle-cell">Order</th>}
               </tr>
               <tr className="fields-matrix__filter-row">
                 {visibleColumns.map((column) => (
@@ -329,7 +333,7 @@ export function FieldsMatrix({
                     )}
                   </th>
                 ))}
-                {target.scope === 'model' && <th className="fields-matrix__row-handle-cell" />}
+                {allowsRowStructure && target.scope === 'model' && <th className="fields-matrix__row-handle-cell" />}
               </tr>
             </thead>
             <tbody
@@ -351,13 +355,13 @@ export function FieldsMatrix({
                   visibleColumns={visibleColumns} selectedCells={selectedSet} reorderEnabled={reorderEnabled}
                   onCellPointerDown={onCellPointerDown} onCellPointerEnter={onCellPointerEnter}
                   onTextCommit={editRow} onPrimaryKeyToggle={togglePrimaryKey} onVirtualPrimaryKeyToggle={toggleVirtualPrimaryKey}
-                  onReorderDragStart={target.scope === 'model' ? setDraggedRow : undefined}
-                  onReorderDropBefore={target.scope === 'model' ? (before) => {
+                  onReorderDragStart={allowsRowStructure && target.scope === 'model' ? setDraggedRow : undefined}
+                  onReorderDropBefore={allowsRowStructure && target.scope === 'model' ? (before) => {
                     if (draggedRow !== null) onEdit(matrixReorderEdit(target.model, rows, draggedRow, before));
                     setDraggedRow(null);
                   } : undefined} />;
               })}
-              {target.scope === 'model' && <FieldsMatrixCreateRow visibleColumns={visibleColumns} onCreate={(name, dataType) => {
+              {allowsRowStructure && target.scope === 'model' && <FieldsMatrixCreateRow visibleColumns={visibleColumns} onCreate={(name, dataType) => {
                 const edit = addColumnEdit(target.model, name, dataType);
                 if (edit !== null) onEdit(edit);
               }} />}

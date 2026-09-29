@@ -4,6 +4,7 @@
  * (rendering/editing the grid) and the extension host (typing what it
  * persists) — MUST NOT import `vscode`.
  */
+import type { DiagramMode } from './diagramMode';
 
 export type MatrixScope = 'model' | 'global';
 
@@ -20,6 +21,7 @@ export interface MatrixColumnDef {
   id: MatrixColumnId;
   label: string;
   visible: boolean;
+  editable: boolean;
   /** Batch multi-cell apply offered for this column kind. */
   batchEditable: boolean;
 }
@@ -42,20 +44,22 @@ function matrixColumnIdsEqual(a: MatrixColumnId, b: MatrixColumnId): boolean {
 export function defaultMatrixColumns(
   metaKeys: readonly string[],
   scope: MatrixScope,
+  mode: DiagramMode = 'model',
 ): MatrixColumnDef[] {
   const base: MatrixColumnDef[] = [];
   if (scope === 'global') {
-    base.push({ id: 'model', label: 'Model', visible: true, batchEditable: false });
+    base.push({ id: 'model', label: mode === 'source' ? 'Table' : 'Model', visible: true, editable: false, batchEditable: false });
   }
+  const source = mode === 'source';
   base.push(
-    { id: 'name', label: 'Column', visible: true, batchEditable: false },
-    { id: 'dataType', label: 'Data type', visible: true, batchEditable: true },
-    { id: 'description', label: 'Description', visible: true, batchEditable: true },
-    { id: 'primaryKey', label: 'Primary key', visible: true, batchEditable: true },
-    { id: 'virtualPrimaryKey', label: 'Virtual PK', visible: true, batchEditable: true },
+    { id: 'name', label: 'Column', visible: true, editable: !source, batchEditable: false },
+    { id: 'dataType', label: 'Data type', visible: true, editable: !source, batchEditable: !source },
+    { id: 'description', label: 'Description', visible: true, editable: true, batchEditable: true },
+    { id: 'primaryKey', label: 'Primary key', visible: true, editable: true, batchEditable: true },
+    { id: 'virtualPrimaryKey', label: 'Virtual PK', visible: true, editable: !source, batchEditable: !source },
   );
   for (const key of metaKeys) {
-    base.push({ id: { meta: key }, label: key, visible: true, batchEditable: true });
+    base.push({ id: { meta: key }, label: key, visible: true, editable: true, batchEditable: true });
   }
   return base;
 }

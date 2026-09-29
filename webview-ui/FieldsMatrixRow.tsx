@@ -43,13 +43,13 @@ export function FieldsMatrixRow(props: FieldsMatrixRowProps): JSX.Element {
           const virtual = column.id === 'virtualPrimaryKey';
           return <td key={key(column.id)} className={selected ? 'fields-matrix__cell--selected' : undefined} {...events}>
             <input type="checkbox" checked={virtual ? props.row.virtualPrimaryKey : props.row.isPrimaryKey}
-              disabled={virtual && !props.row.isPrimaryKey}
+              disabled={!column.editable || (virtual && !props.row.isPrimaryKey)}
               onChange={() => virtual ? props.onVirtualPrimaryKeyToggle(props.row) : props.onPrimaryKeyToggle(props.row)} />
           </td>;
         }
         if (column.id === 'model') return <td key="model">{props.row.model}</td>;
         return <EditableCell key={key(column.id)} value={text(props.row, column.id)} selected={selected}
-          {...events} onCommit={(value) => props.onTextCommit(props.row, column.id, value)} />;
+          {...events} readOnly={!column.editable} onCommit={(value) => props.onTextCommit(props.row, column.id, value)} />;
       })}
       {props.onReorderDragStart !== undefined && <td className="fields-matrix__row-handle-cell">
         <span className={`fields-matrix__row-handle${props.reorderEnabled ? '' : ' fields-matrix__row-handle--disabled'}`}
@@ -61,13 +61,13 @@ export function FieldsMatrixRow(props: FieldsMatrixRowProps): JSX.Element {
   );
 }
 
-function EditableCell({ value, selected, onPointerDown, onPointerEnter, onCommit }: {
-  value: string; selected: boolean; onPointerDown: () => void; onPointerEnter: () => void; onCommit: (value: string) => void;
+function EditableCell({ value, selected, readOnly, onPointerDown, onPointerEnter, onCommit }: {
+  value: string; selected: boolean; readOnly: boolean; onPointerDown: () => void; onPointerEnter: () => void; onCommit: (value: string) => void;
 }): JSX.Element {
   const [draft, setDraft] = useState(value);
   useEffect(() => setDraft(value), [value]);
   return <td className={selected ? 'fields-matrix__cell--selected' : undefined} onPointerDown={onPointerDown} onPointerEnter={onPointerEnter}>
-    <input type="text" value={draft} onChange={(event) => setDraft(event.target.value)} onBlur={() => onCommit(draft)}
+    <input type="text" value={draft} readOnly={readOnly} onChange={(event) => setDraft(event.target.value)} onBlur={() => { if (!readOnly) onCommit(draft); }}
       onKeyDown={(event) => { if (event.key === 'Enter') (event.target as HTMLInputElement).blur(); }} />
   </td>;
 }

@@ -9,11 +9,29 @@ import {
 } from '../../../src/shared/matrixColumns';
 
 describe('defaultMatrixColumns', () => {
-  it('includes the Model column only for global scope', () => {
-    const global = defaultMatrixColumns(['a'], 'global');
-    const model = defaultMatrixColumns(['a'], 'model');
-    expect(global[0].id).toBe('model');
-    expect(model.some((c) => c.id === 'model')).toBe(false);
+  it('makes only permitted source fields editable', () => {
+    const columns = defaultMatrixColumns(['confidentiality'], 'global', 'source');
+    expect(columns.map((column) => [column.label, column.editable, column.batchEditable])).toEqual([
+      ['Table', false, false],
+      ['Column', false, false],
+      ['Data type', false, false],
+      ['Description', true, true],
+      ['Primary key', true, true],
+      ['Virtual PK', false, false],
+      ['confidentiality', true, true],
+    ]);
+  });
+
+  it('preserves model matrix field behavior', () => {
+    const columns = defaultMatrixColumns([], 'global', 'model');
+    expect(columns.map((column) => [column.label, column.editable, column.batchEditable])).toEqual([
+      ['Model', false, false],
+      ['Column', true, false],
+      ['Data type', true, true],
+      ['Description', true, true],
+      ['Primary key', true, true],
+      ['Virtual PK', true, true],
+    ]);
   });
 });
 
@@ -35,9 +53,9 @@ describe('toggleColumnVisible', () => {
 describe('reorderColumn', () => {
   it('moves a column to a new index', () => {
     const columns: MatrixColumnDef[] = [
-      { id: 'name', label: 'Name', visible: true, batchEditable: false },
-      { id: 'dataType', label: 'Data type', visible: true, batchEditable: true },
-      { id: 'description', label: 'Description', visible: true, batchEditable: true },
+      { id: 'name', label: 'Name', visible: true, editable: true, batchEditable: false },
+      { id: 'dataType', label: 'Data type', visible: true, editable: true, batchEditable: true },
+      { id: 'description', label: 'Description', visible: true, editable: true, batchEditable: true },
     ];
     const next = reorderColumn(columns, 2, 0);
     expect(next.map((c) => c.id)).toEqual(['description', 'name', 'dataType']);
@@ -46,11 +64,11 @@ describe('reorderColumn', () => {
 
 describe('applyStoredPrefs', () => {
   const defaults: MatrixColumnDef[] = [
-    { id: 'name', label: 'Name', visible: true, batchEditable: false },
-    { id: 'dataType', label: 'Data type', visible: true, batchEditable: true },
-    { id: 'description', label: 'Description', visible: true, batchEditable: true },
-    { id: { meta: 'a' }, label: 'a', visible: true, batchEditable: true },
-    { id: { meta: 'b' }, label: 'b', visible: true, batchEditable: true },
+    { id: 'name', label: 'Name', visible: true, editable: true, batchEditable: false },
+    { id: 'dataType', label: 'Data type', visible: true, editable: true, batchEditable: true },
+    { id: 'description', label: 'Description', visible: true, editable: true, batchEditable: true },
+    { id: { meta: 'a' }, label: 'a', visible: true, editable: true, batchEditable: true },
+    { id: { meta: 'b' }, label: 'b', visible: true, editable: true, batchEditable: true },
   ];
 
   it('orders by stored prefs, appends new defaults, drops vanished ids', () => {

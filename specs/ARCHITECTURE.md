@@ -40,7 +40,7 @@ lines** under `test/unit/` (see `specs/features/17-modular-source-layout.md`).
 | `src/dbt/sourceMerge.ts` | pure | Surgical source YAML write-back. | `mergeSourceYml` |
 | `src/dbt/sourceLocate.ts` | pure | Locate nested source table and column declarations. | `findSourceTableDeclaration`, `findSourceColumnDeclaration` |
 | `src/dbt/sourceStore.ts` | pure | Source-file last-good store and redistribution. | `createSourceStore`, `applySourceTextChange`, `distributeEditedSources` |
-| `src/dbt/sourceEdit.ts` | pure | Forced-virtual source table edits. | `applySourceEdit` |
+| `src/dbt/sourceEdit.ts` | pure | Forced-virtual source table edits, including source column `config.meta` values while structural column edits remain read-only. | `applySourceEdit` |
 | `src/dbt/importSource.ts` | pure | Collision-safe source-table conversion, source provenance and universal column metadata prefixing, virtual-key promotion to real constraints/tests, FK rewriting, destination append, and broken-FK reporting (spec 41). | `nextImportedModelName`, `importSourceTables`, `SourceImportResult`, `BrokenImportedForeignKey` |
 | `src/dbt/aiPrompt.ts` | pure | Selects provenance-backed columns, validates batch requests, normalizes evidence, and builds deterministic AI rename/type JSONL prompts from caller-provided project rules (specs 42/45). | `eligibleAiPromptColumns`, `aiPromptBatch`, `buildAiRenameTypePrompt`, `AiPromptRequest`, `AiPromptBatch` |
 | `src/dbt/aiPromptImport.ts` | pure | Decodes and validates AI rename/type clipboard responses against current provenance-backed columns and filters naming conflicts (spec 43). | `planAiRenameTypeImport`, `AiPromptImportColumn`, `AiPromptImportPlan` |
@@ -94,7 +94,7 @@ including sticky notes (spec 16) and per-table/diagram-wide column-display modes
 | `src/shared/openBehaviorPlacement.ts` | shared (pure) | Pure four-way placement decision for a new diagram panel, 
 given the setting and whether a reusable separate-window tab group was found (spec 23). | `decidePlacement`, 
 `PlacementDecision`, `ReuseTarget` |
-| `src/shared/matrixColumns.ts` | shared | Grid column definitions for the "fields matrix" (spec 27): defaults, 
+| `src/shared/matrixColumns.ts` | shared | Mode-aware grid column definitions for the "fields matrix" (specs 27/49): defaults, editability,
 show/hide, reorder, and merging with stored preferences. Used by both the webview and the extension host. | 
 `MatrixScope`, `MatrixColumnId`, `MatrixColumnDef`, `StoredMatrixColumnPref`, `defaultMatrixColumns`, 
 `toggleColumnVisible`, `reorderColumn`, `applyStoredPrefs`, `toStoredPrefs`, `mergeStoredPrefs` |
@@ -157,7 +157,7 @@ via `ExtensionContext.workspaceState` (spec 27). | `readMatrixColumnPrefs`, `wri
 | Path | Layer | Responsibility | Key exports |
 |------|-------|----------------|-------------|
 | `webview-ui/index.tsx` | webview | Mount point: renders `App` into the webview document. | — |
-| `webview-ui/App.tsx` | webview | Top-level composition: state hooks, sidebars, canvas, and history controls/restoration; routes column clicks through the mouse-drawn FK gesture. | `App` |
+| `webview-ui/App.tsx` | webview | Top-level composition: state hooks, sidebars, canvas, history controls/restoration, and model/source matrix entry points; routes column clicks through the mouse-drawn FK gesture. | `App` |
 | `webview-ui/ProductTitle.tsx` | webview | The stacked dbt Diagram header, running extension version/status, and manual update-check button (spec 39). | `ProductTitle`, `ProductTitleProps` |
 | `webview-ui/DiagramCanvas.tsx` | webview | React Flow canvas: nodes, edges, pan/zoom, node drag; top-right toolbar groups Auto-layout with the diagram-wide column-display selector (spec 24); top-left toolbar hosts Add note/Add foreign key and the model-only Fields Matrix action, plus the FK-draw mouse-follow preview line and crosshair cursor (spec 26/40). | `DiagramCanvas`, `DiagramCanvasProps` |
 | `webview-ui/TableNode.tsx` | webview | Custom React Flow node rendering a table with its column rows and handles, including the header-positioned `HEADER_ANCHOR` handle for a hidden FK column (spec 24). | `TableNode` |
@@ -183,7 +183,7 @@ via `ExtensionContext.workspaceState` (spec 27). | `readMatrixColumnPrefs`, `wri
 | `webview-ui/column-transfer-state.ts` | webview (pure) | Contiguous diagram-column selection, insertion targets, and internal cut/copy clipboard transitions (spec 46). | `selectColumn`, `selectionContains`, `copySelection`, `cutSelection`, `clipboardEdit`, `afterPaste` |
 | `webview-ui/layout-history.ts` | webview (pure) | Captures normalized before/after layouts and rejects structural no-ops (spec 47). | `beginLayoutCapture`, `finishLayoutCapture`, `LayoutCapture`, `CompletedLayoutCapture` |
 | `webview-ui/history-shortcuts.ts` | webview (pure) | Classifies undo/redo shortcuts while protecting editable targets (spec 47). | `historyShortcut`, `HistoryKeyInput` |
-| `webview-ui/matrix-row-order.ts` | webview (pure) | Model-matrix filter gating and reorder/add edit construction (spec 46). | `hasActiveMatrixFilter`, `matrixReorderEdit`, `addColumnEdit` |
+| `webview-ui/matrix-row-order.ts` | webview (pure) | Mode capability, model-matrix filter gating, and reorder/add edit construction (specs 46/49). | `matrixAllowsRowStructure`, `hasActiveMatrixFilter`, `matrixReorderEdit`, `addColumnEdit` |
 | `webview-ui/PrimaryKeySection.tsx` | webview | Primary key editing UI inside the details sidebar. | `PrimaryKeySection` |
 | `webview-ui/ColumnDisplaySection.tsx` | webview | "Columns shown" radio section of the details pane (spec 24). | `ColumnDisplaySection`, `ColumnDisplaySectionProps` |
 | `webview-ui/ForeignKeySection.tsx` | webview | Foreign key editing UI, including draft (incomplete) FKs. | `ForeignKeySection`, `DraftForeignKey`, `sameFkContent` |
@@ -212,10 +212,10 @@ cancellation and the hint banner text (spec 26). | `useFkCreateMode`, `FkCreateM
 | `webview-ui/matrix-selection.ts` | webview (pure) | Rectangular multi-cell selection over a `(rowIndex, 
 columnIndex)` grid (spec 27). | `CellRef`, `MatrixSelection`, `startSelection`, `extendSelection`, 
 `cellsInSelection` |
-| `webview-ui/FieldsMatrix.tsx` | webview | The "fields matrix" modal (spec 27): grid over one model's columns or 
-every model's, with filter, column show/hide + reorder, editable cells, and batch-apply. | `FieldsMatrix`, 
+| `webview-ui/FieldsMatrix.tsx` | webview | The mode-aware "fields matrix" modal (specs 27/49): grid over one table's columns or
+every table's, with filter, column show/hide + reorder, policy-controlled editable cells, and batch-apply. | `FieldsMatrix`,
 `FieldsMatrixProps` |
-| `webview-ui/FieldsMatrixRow.tsx` | webview | Existing matrix row rendering and model-scope row drag handle (spec 46). | `FieldsMatrixRow`, `FieldsMatrixRowProps` |
+| `webview-ui/FieldsMatrixRow.tsx` | webview | Matrix row rendering with mode-policy read-only controls and model-scope row drag handle (specs 46/49). | `FieldsMatrixRow`, `FieldsMatrixRowProps` |
 | `webview-ui/FieldsMatrixCreateRow.tsx` | webview | Model-scope final Name/Data type creation row (spec 46). | `FieldsMatrixCreateRow`, `FieldsMatrixCreateRowProps` |
 | `webview-ui/hooks/useFieldsMatrix.ts` | webview | Open/close state, column-prefs round trip, and the always-reset 
 filter text for the fields matrix (spec 27). | `useFieldsMatrix`, `FieldsMatrixState`, `MatrixTarget` |

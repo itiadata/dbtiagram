@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { addColumnEdit, hasActiveMatrixFilter, matrixReorderEdit } from '../../../webview-ui/matrix-row-order';
+import { addColumnEdit, hasActiveMatrixFilter, matrixAllowsRowStructure, matrixReorderEdit } from '../../../webview-ui/matrix-row-order';
 
 describe('matrix row order', () => {
   it('detects only nonblank active filters', () => {
@@ -16,5 +16,10 @@ describe('matrix row order', () => {
   it('requires both trimmed add-column fields', () => {
     expect(addColumnEdit('orders', 'status', '')).toBeNull();
     expect(addColumnEdit('orders', ' status ', ' varchar ')).toEqual({ kind: 'addColumn', model: 'orders', name: 'status', dataType: 'varchar' });
+  });
+
+  it('allows matrix row structure only in model mode', () => {
+    expect(matrixAllowsRowStructure('model')).toBe(true);
+    expect(matrixAllowsRowStructure('source')).toBe(false);
   });
 });

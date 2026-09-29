@@ -1,5 +1,10 @@
 import type { ModelEdit } from '../src/dbt/edit';
 import type { MatrixRow } from '../src/diagram/matrix';
+import type { DiagramMode } from '../src/shared/diagramMode';
+
+export function matrixAllowsRowStructure(mode: DiagramMode): boolean {
+  return mode === 'model';
+}
 
 export function hasActiveMatrixFilter(filters: Readonly<Record<string, string>>): boolean {
   return Object.values(filters).some((value) => value.trim().length > 0);

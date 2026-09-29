@@ -394,7 +394,7 @@ export function App(): JSX.Element {
           onSelect: sourceImport.start,
         }] : []),
         {
-          label: 'Edit fields matrix (all models)',
+          label: `Edit fields matrix (all ${mode === 'source' ? 'tables' : 'models'})`,
           icon: <Grid3x3 size={16} />,
           onSelect: () => fieldsMatrix.openGlobal(),
         },
@@ -462,7 +462,7 @@ export function App(): JSX.Element {
             onSelect: () => columnDisplay.setTableMode(model, option.value),
           })),
         },
-        ...(mode === 'model' ? [{ label: 'Edit columns', icon: <Grid3x3 size={16} />, onSelect: () => fieldsMatrix.openForModel(model) }] : []),
+        { label: 'Edit columns', icon: <Grid3x3 size={16} />, onSelect: () => fieldsMatrix.openForModel(model) },
         ...(mode === 'model' ? [{
           label: 'AI renaming',
           icon: <PencilSparkles size={16} />,
@@ -800,7 +800,7 @@ export function App(): JSX.Element {
                     onDeleteSelectedNotes={onDeleteSelectedNotes}
                     onRemoveSelectedTable={onRemoveSelectedTable}
                     onAddNoteAt={onAddNoteAt}
-                     onOpenFieldsMatrix={mode === 'model' ? fieldsMatrix.openGlobal : undefined}
+                    onOpenFieldsMatrix={fieldsMatrix.openGlobal}
                     onImportSourceModels={mode === 'model' ? sourceImport.start : undefined}
                     groupNodes={groups.groupNodes}
                     groupIds={groups.groupIds}
@@ -880,8 +880,9 @@ export function App(): JSX.Element {
           onClose={settings.closePanel}
         />
       )}
-      {mode === 'model' && fieldsMatrix.target !== null && graph !== null && (
+      {fieldsMatrix.target !== null && graph !== null && (
         <FieldsMatrix
+          mode={mode}
           target={fieldsMatrix.target}
           graph={graph}
           onEdit={onEdit}

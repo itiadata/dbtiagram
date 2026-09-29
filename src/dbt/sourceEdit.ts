@@ -1,5 +1,6 @@
 import type { ModelEdit } from './edit';
 import { EditError, blankToUndefined } from './edit/internal';
+import { setColumnMetaValue } from './edit/column';
 import { applyForeignKeyColumns, applyForeignKeyTarget, createForeignKey, removeFkFromModel } from './edit/foreignKey';
 import { setPrimaryKeyOnModel } from './edit/primaryKey';
 import { formatSourceRef } from './sourceRefs';
@@ -11,13 +12,14 @@ export interface ApplySourceEditResult { sources: SourceDefinition[]; changed: b
 const readonlyError = (): never => { throw new EditError('This field is read-only in source mode'); };
 
 export function applySourceEdit(sources: SourceDefinition[], edit: ModelEdit): ApplySourceEditResult {
-  if (edit.kind === 'setModelName' || edit.kind === 'setColumnName' || edit.kind === 'setColumnDataType' || edit.kind === 'setColumnMeta' || edit.kind === 'setForeignKeyVirtual') return readonlyError();
+  if (edit.kind === 'setModelName' || edit.kind === 'setColumnName' || edit.kind === 'setColumnDataType' || edit.kind === 'setForeignKeyVirtual' || edit.kind === 'addColumn' || edit.kind === 'transferColumns' || edit.kind === 'applyAiPromptImport') return readonlyError();
   const qualified = flattenSourceTables(sources);
   const models: ModelDefinition[] = qualified.map(({ id, table }) => ({ name: id, description: table.description, config: table.config, columns: table.columns }));
   let edited: ModelDefinition[];
   switch (edit.kind) {
     case 'setModelDescription': edited = mapOne(models, edit.model, (model) => ({ ...model, description: blankToUndefined(edit.description) })); break;
     case 'setColumnDescription': edited = mapOne(models, edit.model, (model) => ({ ...model, columns: (model.columns ?? []).map((column) => column.name === edit.column ? { ...column, description: blankToUndefined(edit.description) } : column) })); break;
+    case 'setColumnMeta': edited = mapOne(models, edit.model, (model) => setColumnMetaValue(model, edit.column, edit.key, edit.value)); break;
     case 'setPrimaryKey': edited = mapOne(models, edit.model, (model) => setPrimaryKeyOnModel(model, edit.columns, true, false)); break;
     case 'setForeignKeyTarget': edited = applyForeignKeyTarget(models, edit.model, edit.fk, edit.target, formatSourceRef).models; break;
     case 'setForeignKeyColumns': edited = applyForeignKeyColumns(models, edit.model, edit.fk, edit.columns, edit.toColumns).models; break;
