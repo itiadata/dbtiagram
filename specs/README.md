@@ -66,6 +66,7 @@ up-to-date spec in `specs/features/`.
 | 46  | Move, copy, paste, reorder, and add columns | Done |
 | 47  | Undo, redo, and action history | Done |
 | 48  | Generate static documentation diagrams | Done |
+| 49  | Edit source columns in the fields matrix | Approved |
 
 Status values: `draft` → `approved` → `implemented` → `done`.
 
