@@ -161,6 +161,7 @@ Then they are three distinct cards despite overlapping visible names
 | `src/static/project.ts` | modify | Read the dbt package name and model SQL files for static lineage. |
 | `src/static/site.ts` | modify | Build one combined static universe and reconstruct current ref/source lineage. |
 | `src/static/generate.ts` | modify | Report one combined layout count after static schema unification. |
+| `src/static/cli.ts` | modify | Print the combined explorer/layout generation summary. |
 | `src/shared/staticSite.ts` | modify | Replace separate model/source static universes and routes with one combined explorer. |
 | `static-ui/StaticDiagram.tsx` | modify | Render the combined static universe with domain-aware shared sidebars. |
 | `static-ui/DiagramMenu.tsx` | modify | Present one combined explorer and one combined saved-layout section. |
