@@ -61,6 +61,13 @@ import { readAiRenamingRules, registerAiRenamingRulesWatcher } from '../vscode/a
 import { availableAiRenamingModels } from './aiPromptAvailability';
 import { describeModelEdit } from '../shared/history';
 import { clearUndoJournal, createUndoJournal, modelFileDeltas, moveTo, pushUndoEntry, redo, sourceFileDeltas, toHistoryState, undo, type UndoJournal, type UndoStep } from './history';
+import { describeModelRename } from '../shared/history';
+import { planModelRename, reverseModelRenamePlan, type ModelRenameInput } from '../dbt/modelRename';
+import { executeModelRename } from './modelRename';
+import { vscodeModelRenameFiles } from '../vscode/modelRename';
+import { findContainingDbtProject, findProjectSqlFiles, findWorkspaceDbtProjects } from '../vscode/dbtProjects';
+import { fileExists } from '../vscode/project';
+import * as path from 'path';
 
 /** Ignore text-change echoes of our own disk writes within this window. */
 const SELF_WRITE_IGNORE_MS = 250;
@@ -515,7 +522,8 @@ export class DiagramPanel {
         return;
       case 'diagram:edit': {
         try {
-          await this.applyEditAndPersist(message.edit);
+          if (message.edit.kind === 'setModelName' && this.mode === 'model') await this.renameModelAndPersist(message.edit.model, message.edit.name.trim());
+          else await this.applyEditAndPersist(message.edit);
         } catch (err) {
           this.postMessage({
             type: 'diagram:error',
@@ -717,6 +725,41 @@ export class DiagramPanel {
     this.publish();
   }
 
+  private async renameModelAndPersist(oldName: string, newName: string): Promise<void> {
+    if (newName.length === 0) throw new Error('Model name must not be empty');
+    if (newName === oldName) return;
+    const declaring = this.store.records.find((record) => record.file.models.some((model) => model.name === oldName));
+    if (declaring === undefined) throw new Error(`No model named "${oldName}" exists in the workspace`);
+    const targetProject = await findContainingDbtProject(vscode.Uri.file(declaring.uri));
+    if (targetProject === null) throw new Error(`Cannot rename model: no dbt_project.yml contains ${declaring.uri}`);
+    const projects = await findWorkspaceDbtProjects();
+    const sqlEntries = (await Promise.all(projects.map(async (project) => {
+      const files = await findProjectSqlFiles(project);
+      return Promise.all([...files].map(async ([fsPath, kind]) => ({ path: fsPath, projectRoot: project.root.fsPath, text: await readFileText(vscode.Uri.file(fsPath)), kind })));
+    }))).flat();
+    const modelFiles = await Promise.all(this.store.records.map(async (record) => ({
+      path: record.uri, projectRoot: (await findContainingDbtProject(vscode.Uri.file(record.uri)))?.root.fsPath ?? null,
+      text: await readFileText(vscode.Uri.file(record.uri)),
+    })));
+    const matching = sqlEntries.filter((file) => file.kind === 'model' && path.basename(file.path).toLowerCase() === `${oldName}.sql`.toLowerCase() && sameFsPath(file.projectRoot, targetProject.root.fsPath)).map((file) => file.path);
+    const destinationPath = matching[0] === undefined ? undefined : path.join(path.dirname(matching[0]), `${newName}.sql`);
+    const destination = destinationPath === undefined || sameFsPath(destinationPath, matching[0]) ? false : await fileExists(vscode.Uri.file(destinationPath));
+    const input: ModelRenameInput = { oldName, newName, targetModelFilePath: declaring.uri, targetProjectRoot: targetProject.root.fsPath, targetPackage: targetProject.config.name, modelFiles, sqlFiles: sqlEntries, matchingModelSqlPaths: matching, destinationExists: destination, workspaceProjects: projects.map((project) => ({ root: project.root.fsPath, name: project.config.name })) };
+    const plan = planModelRename(input);
+    for (const file of plan.textFiles) this.selfWrites.set(file.path, Date.now());
+    if (plan.sqlRename !== undefined) { this.selfWrites.set(plan.sqlRename.from, Date.now()); this.selfWrites.set(plan.sqlRename.to, Date.now()); }
+    try { await executeModelRename(vscodeModelRenameFiles, plan); } catch (error) { await this.reloadAfterRename(); throw error; }
+    await this.reloadAfterRename();
+    this.pushHistory({ label: describeModelRename(oldName, newName), domain: 'modelRename', plan });
+  }
+
+  private async reloadAfterRename(): Promise<void> {
+    const result = await loadModelYmlFiles(this.modelGlob);
+    this.store = replaceModelStore(this.store, result.records.map((record) => ({ uri: record.uri.fsPath, file: record.file })), result.failures.map((failure) => ({ uri: failure.uri.fsPath, error: failure.message })));
+    this.sqlPaths = await findSqlFiles(sqlGlobForModelGlob(this.modelGlob)); this.publish();
+    this.postMessage({ type: 'model:sqlFiles', models: [...this.sqlPaths.keys()] });
+  }
+
   private pushHistory(entry: Parameters<typeof pushUndoEntry>[1]): void {
     this.journal = pushUndoEntry(this.journal, entry);
     this.publishHistory();
@@ -750,6 +793,14 @@ export class DiagramPanel {
     const entry = step.entry;
     if (entry.domain === 'layout') {
       this.postMessage({ type: 'history:applyLayout', layout: step.direction === 'undo' ? entry.before : entry.after });
+      return;
+    }
+    if (entry.domain === 'modelRename') {
+      const plan = step.direction === 'undo' ? reverseModelRenamePlan(entry.plan) : entry.plan;
+      for (const file of plan.textFiles) this.selfWrites.set(file.path, Date.now());
+      if (plan.sqlRename !== undefined) { this.selfWrites.set(plan.sqlRename.from, Date.now()); this.selfWrites.set(plan.sqlRename.to, Date.now()); }
+      await executeModelRename(vscodeModelRenameFiles, plan);
+      await this.reloadAfterRename();
       return;
     }
     if (entry.domain === 'modelYaml') {
@@ -815,6 +866,8 @@ export class DiagramPanel {
     this.panel.dispose();
   }
 }
+
+function sameFsPath(a: string, b: string): boolean { return path.resolve(a).toLowerCase() === path.resolve(b).toLowerCase(); }
 
 /** The first workspace folder, used as the root for VS Code-style file labels. */
 function workspaceRoot(): string | undefined {

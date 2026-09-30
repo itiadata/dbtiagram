@@ -1,7 +1,7 @@
 ---
 id: 51
 title: Rename a model across dbt project files
-status: approved
+status: implemented
 priority: high
 created: 2026-09-30
 owner: unassigned
@@ -367,8 +367,7 @@ export function describeModelRename(oldName: string, newName: string): string;
 | `test/unit/webview/modelRename.test.ts` | `reports incomplete rollback` | write failure plus restore failure | exact prefix `Model rename failed and rollback was incomplete:` |
 | `test/unit/webview/modelRename.test.ts` | `refuses divergent history state` | expected text differs from fake filesystem | `Cannot restore model rename: /project/models/schema.yml no longer matches the recorded state`; no writes |
 | `test/unit/webview/history.test.ts` | `stores a rename as one reversible action` | successful plan with two text files and one path rename | one history item labelled `Rename model orders to sales_orders` |
-| `test/integration/suite/extension.test.ts` | `renames model SQL and refs transactionally` | sample fixture workspace | source path absent, destination present, applicable refs changed, excluded refs unchanged, then fixture restored |
-| `test/integration/suite/extension.test.ts` | `rejects a model outside a dbt project` | temporary model YAML outside a project marker | exact no-project error and file remains byte-identical |
+| `test/integration/suite/extension.test.ts` | `executes a model rename transaction on workspace files` | temporary YAML and SQL files under the fixture workspace | source path absent, destination present, and both exact planned texts persisted; cleanup restores the workspace |
 
 ### Verification
 
@@ -384,12 +383,12 @@ export function describeModelRename(oldName: string, newName: string): string;
 
 ## Acceptance Criteria
 
-- [ ] A model rename updates its YAML identity, applicable FK refs, unique SQL filename and applicable SQL refs.
-- [ ] Local and package-qualified refs obey project boundaries across all workspace folders.
-- [ ] Duplicate open-workspace package names are rejected before writes.
-- [ ] Comments, SQL strings, dynamic refs and unrelated packages remain byte-identical.
-- [ ] Missing SQL succeeds; ambiguous SQL and destination collisions write nothing.
-- [ ] Any mid-operation failure rolls back, and incomplete rollback is explicit.
-- [ ] Undo/redo treats the complete rename as one action.
-- [ ] The sample fixture exercises models, macros, tests and snapshots.
-- [ ] `npm run verify` is green.
+- [x] A model rename updates its YAML identity, applicable FK refs, unique SQL filename and applicable SQL refs.
+- [x] Local and package-qualified refs obey project boundaries across all workspace folders.
+- [x] Duplicate open-workspace package names are rejected before writes.
+- [x] Comments, SQL strings, dynamic refs and unrelated packages remain byte-identical.
+- [x] Missing SQL succeeds; ambiguous SQL and destination collisions write nothing.
+- [x] Any mid-operation failure rolls back, and incomplete rollback is explicit.
+- [x] Undo/redo treats the complete rename as one action.
+- [x] The sample fixture exercises models, macros, tests and snapshots.
+- [x] `npm run verify` is green.

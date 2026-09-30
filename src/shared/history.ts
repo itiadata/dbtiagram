@@ -41,3 +41,7 @@ export function describeModelEdit(edit: ModelEdit): string {
     case 'applyAiPromptImport': return `Import AI changes for ${edit.model}`;
   }
 }
+
+export function describeModelRename(oldName: string, newName: string): string {
+  return `Rename model ${oldName} to ${newName}`;
+}

@@ -32,6 +32,9 @@ lines** under `test/unit/` (see `specs/features/17-modular-source-layout.md`).
 | `src/dbt/merge/order.ts` | pure | Key-insertion ordering used only when a key must be created; existing keys are never reordered. | `insertionIndex`, `KeyOrder`, `MODEL_KEY_ORDER`, `COLUMN_KEY_ORDER`, `FREE_KEY_ORDER` |
 | `src/dbt/locate.ts` | pure | Locate a model's `name:` declaration, or a specific column's `name:` entry within it, in model.yml text via the yaml package's node ranges (spec 15, extended by spec 25). | `findModelDeclaration`, `findColumnDeclaration`, `DeclarationPosition` |
 | `src/dbt/refs.ts` | pure | Parse and rewrite `ref('…')` targets inside model properties. | `parseRef`, `renameRefTarget`, `RefTarget` |
+| `src/dbt/sqlRefs.ts` | pure | Discover and surgically rewrite literal refs in executable Jinja while excluding SQL/Jinja comments and SQL strings (spec 51). | `findSqlRefs`, `rewriteSqlRefs`, `SqlRefOccurrence` |
+| `src/dbt/projectConfig.ts` | pure | Decode dbt project identity and configured/default code paths (spec 51). | `parseDbtProjectConfig`, `DbtProjectConfig` |
+| `src/dbt/modelRename.ts` | pure | Preflight and plan project-aware YAML/SQL model renames and reverse plans (spec 51). | `planModelRename`, `reverseModelRenamePlan`, `ModelRenameInput`, `ModelRenamePlan`, `RenameTextFile` |
 | `src/dbt/virtual.ts` | pure | Read/write the dbtiagram-managed virtual constraints block (PKs/FKs not expressed as dbt constraints). | `readVirtualConstraints`, `writeVirtualConstraints` |
 | `src/dbt/sourceTypes.ts` | pure | Source YAML domain types and qualified-table flattening. | `SourceYmlFile`, `SourceDefinition`, `SourceTableDefinition`, `flattenSourceTables` |
 | `src/dbt/sourceRefs.ts` | pure | Qualified source IDs and canonical dbt source references. | `sourceTableId`, `parseSourceRef`, `formatSourceRef` |
@@ -47,7 +50,7 @@ lines** under `test/unit/` (see `specs/features/17-modular-source-layout.md`).
 | `src/dbt/modelStore.ts` | pure | In-memory set of loaded model.yml files: upsert, text change, delete, rename, and redistribution of edited models. | `createModelStore`, `ModelStore`, `upsertRecord`, `applyTextChange`, `applyFileDeleted`, `applyFileRenamed`, `distributeEditedModels`, `replaceModelStore`, `ModelFileRecord`, `LoadedModelFile`, `FailedModelFile` |
 | `src/dbt/edit/index.ts` | pure | Single entry point that dispatches a `ModelEdit` to the right handler. **All mutations go through here.** | `applyEdit` |
 | `src/dbt/edit/types.ts` | pure | The discriminated union of every supported edit. | `ModelEdit` |
-| `src/dbt/edit/internal.ts` | pure | Shared helpers and the result/error shape used by the edit handlers. | `applyEdit` result types `ApplyEditResult`, `EditError`, `mapModel`, `mapNames`, `blankToUndefined`, `arraysEqual`, `isRecord` |
+| `src/dbt/edit/internal.ts` | pure | Shared helpers, result/error shape, and project-aware model rename scope used by edit handlers. | `ApplyEditResult`, `EditError`, `ModelRenameScope`, `mapModel`, `mapNames`, `blankToUndefined`, `arraysEqual`, `isRecord` |
 | `src/dbt/edit/model.ts` | pure | Model-level edits: rename, description. | `renameModel`, `applyDescription` |
 | `src/dbt/edit/column.ts` | pure | Column-level edits: rename, data type, description. | `renameColumn`, `setColumnDataType`, `setColumnDescription`, `mapColumn` |
 | `src/dbt/edit/primaryKey.ts` | pure | Primary key edits, including de-duplication of column names, and the opt-in model-level unique-combination test (spec 33). | `setPrimaryKeyOnModel`, `dedupeTrimmed`, `hasUniqueCombinationTest` |
@@ -102,7 +105,7 @@ show/hide, reorder, and merging with stored preferences. Used by both the webvie
 | `src/shared/sqlFiles.ts` | shared | Pure derivation of the `.sql` discovery glob from the model glob, the model name of a `.sql` path, and the name -> path index (spec 38). | `DEFAULT_SQL_GLOB`, `sqlGlobForModelGlob`, `modelNameFromSqlPath`, `indexSqlPaths` |
 | `src/shared/update.ts` | shared | Pure validation of the designated private GitHub Release, stable version comparison, user-facing messages, and update workflow/result against a host port (spec 39). | `UPDATE_REPOSITORY`, `LatestRelease`, `UpdateHost`, `UpdateCheckOutcome`, `decodeLatestRelease`, `isNewerVersion`, `updateAvailableMessage`, `updateInstalledMessage`, `runUpdateCheck` |
 | `src/shared/aiRenaming.ts` | shared | Project rules path, exact unavailable reason, and non-blank rules predicate (spec 45). | `AI_RENAMING_RULES_RELATIVE_PATH`, `AI_RENAMING_UNAVAILABLE_REASON`, `hasAiRenamingRules` |
-| `src/shared/history.ts` | shared | Safe history projection types, retention limit, and deterministic model-edit labels (spec 47). | `HistoryDomain`, `HistoryItem`, `HistoryState`, `HISTORY_LIMIT`, `describeModelEdit` |
+| `src/shared/history.ts` | shared | Safe history projection types, retention limit, and deterministic edit/transaction labels (specs 47/51). | `HistoryDomain`, `HistoryItem`, `HistoryState`, `HISTORY_LIMIT`, `describeModelEdit`, `describeModelRename` |
 | `src/shared/staticSite.ts` | shared | Static-site data schema, stable routes, deterministic menu derivation, and safe JSON embedding (spec 48). | `StaticSiteData`, `StaticDiagramUniverse`, `StaticLayoutEntry`, `StaticMenuEntry`, `staticLayoutRoute`, `parseStaticDiagramHash`, `buildStaticMenu`, `serializeStaticSiteData` |
 
 ## `src/static/` — static documentation generator
@@ -134,6 +137,8 @@ via `ExtensionContext.workspaceState` (spec 27). | `readMatrixColumnPrefs`, `wri
 | `src/vscode/groupPicker.ts` | vscode-facing | Native searchable multi-table picker and validated group-name input (spec 31). | `pickGroupTables`, `promptGroupName` |
 | `src/vscode/clipboard.ts` | vscode-facing | Reads/writes AI rename/type clipboard text and displays native import/export notifications (specs 42/43). | `vscodeAiPromptClipboard`, `showAiPromptCopied`, `vscodeAiPromptImportClipboard`, `vscodeAiPromptImportNotifier` |
 | `src/vscode/aiRenamingRules.ts` | vscode-facing | Reads AI rules from the nearest workspace-bounded dbt project and watches saved marker/rules changes (spec 45). | `readAiRenamingRules`, `registerAiRenamingRulesWatcher` |
+| `src/vscode/dbtProjects.ts` | vscode-facing | Discover containing/all workspace dbt projects and enumerate configured SQL code paths (spec 51). | `findContainingDbtProject`, `findWorkspaceDbtProjects`, `findProjectSqlFiles`, `WorkspaceDbtProject` |
+| `src/vscode/modelRename.ts` | vscode-facing | VS Code filesystem adapter for transactional model rename execution (spec 51). | `vscodeModelRenameFiles` |
 
 ## `src/webview/` — extension-host side of the panel
 
@@ -151,6 +156,7 @@ via `ExtensionContext.workspaceState` (spec 27). | `readMatrixColumnPrefs`, `wri
 | `src/webview/aiPromptProjectRules.ts` | pure | Traverses URI ancestors to load non-blank rules from the nearest workspace-bounded dbt project (spec 45). | `loadAiRenamingRulesFromProject`, `AiPromptProjectRulesHost` |
 | `src/webview/aiPromptAvailability.ts` | pure | Derives unique available model names from model files through an asynchronous rules loader (spec 45). | `availableAiRenamingModels`, `AiPromptModelFile`, `AiPromptRulesLoader` |
 | `src/webview/history.ts` | pure | Panel-local bounded mixed YAML/layout journal, changed-file deltas, and cursor travel (spec 47). | `createUndoJournal`, `pushUndoEntry`, `undo`, `redo`, `moveTo`, `clearUndoJournal`, `toHistoryState`, `modelFileDeltas`, `sourceFileDeltas` |
+| `src/webview/modelRename.ts` | pure | Preflighted raw-file transaction execution with reverse-order compensating rollback (spec 51). | `executeModelRename`, `ModelRenameFileHost` |
 | `src/extension.ts` | vscode-facing | `activate` / `deactivate` only — command registration and disposal. | `activate`, `deactivate` |
 
 ## `webview-ui/` — React front-end (webview)

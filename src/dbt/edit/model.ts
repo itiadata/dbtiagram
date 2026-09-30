@@ -5,7 +5,8 @@
 import { renameRefTarget } from '../refs';
 import { readVirtualConstraints, writeVirtualConstraints } from '../virtual';
 import type { ModelConstraint, ModelDefinition } from '../types';
-import { ApplyEditResult, EditError, blankToUndefined } from './internal';
+import { ApplyEditResult, EditError, blankToUndefined, type ModelRenameScope } from './internal';
+import { parseRef } from '../refs';
 
 /**
  * Renames a model and re-points every `foreign_key` constraint `to` ref that
@@ -18,12 +19,15 @@ export function renameModel(
   models: ModelDefinition[],
   oldName: string,
   newName: string,
+  scope?: ModelRenameScope,
 ): ApplyEditResult {
   let renamed = false;
-  const next = models.map((m) => {
-    if (m.name !== oldName) {
-      const constraints = renameFkTargets(m.constraints, oldName, newName);
-      const withVirtual = renameVirtualFkTargets(m, oldName, newName);
+  const next = models.map((m, index) => {
+    const shouldRenameModel = scope === undefined ? m.name === oldName : index === scope.targetModelIndex;
+    const packageAllowed = (target: ReturnType<typeof parseRef>) => target !== null && target.name === oldName && (scope === undefined || (target.package === undefined ? scope.modelProjectRoots[index] === scope.targetProjectRoot : target.package === scope.targetPackage));
+    if (!shouldRenameModel) {
+      const constraints = renameFkTargets(m.constraints, oldName, newName, packageAllowed);
+      const withVirtual = renameVirtualFkTargets(m, oldName, newName, packageAllowed);
       if (constraints === m.constraints && withVirtual === m) return m;
       return {
         ...withVirtual,
@@ -31,13 +35,13 @@ export function renameModel(
       };
     }
     renamed = true;
-    if (newName === m.name) return m; // no-op rename keeps object identity
+    if (newName === m.name) return m;
     const renamedModel: ModelDefinition = {
       ...m,
       name: newName,
-      constraints: renameFkTargets(m.constraints, oldName, newName),
+      constraints: renameFkTargets(m.constraints, oldName, newName, packageAllowed),
     };
-    return renameVirtualFkTargets(renamedModel, oldName, newName);
+    return renameVirtualFkTargets(renamedModel, oldName, newName, packageAllowed);
   });
   if (!renamed) throw new EditError(`No model named "${oldName}" exists in the workspace`);
   return { models: next, changed: true };
@@ -52,11 +56,13 @@ function renameFkTargets(
   constraints: ModelConstraint[] | undefined,
   oldName: string,
   newName: string,
+  allowed: (target: ReturnType<typeof parseRef>) => boolean = (target) => target?.name === oldName,
 ): ModelConstraint[] | undefined {
   if (constraints === undefined) return undefined;
   let changed = false;
   const next = constraints.map((constraint) => {
     if (constraint.type !== 'foreign_key' || constraint.to === undefined) return constraint;
+    if (!allowed(parseRef(constraint.to))) return constraint;
     const to = renameRefTarget(constraint.to, oldName, newName);
     if (to === null || to === constraint.to) return constraint;
     changed = true;
@@ -76,11 +82,13 @@ function renameVirtualFkTargets(
   model: ModelDefinition,
   oldName: string,
   newName: string,
+  allowed: (target: ReturnType<typeof parseRef>) => boolean = (target) => target?.name === oldName,
 ): ModelDefinition {
   const block = readVirtualConstraints(model);
   if (block.foreignKeys === undefined) return model;
   let changed = false;
   const next = block.foreignKeys.map((fk) => {
+    if (!allowed(parseRef(fk.to))) return fk;
     const to = renameRefTarget(fk.to, oldName, newName);
     if (to === null || to === fk.to) return fk;
     changed = true;

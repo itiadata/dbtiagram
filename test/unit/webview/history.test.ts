@@ -46,4 +46,10 @@ describe('undo journal', () => {
     expect(toHistoryState(first)).toEqual({ items: [{ id: 1, label: 'A', domain: 'layout' }], cursor: 1, truncated: false });
     expect(undo(first).journal.cursor).toBe(0); expect(second.cursor).toBe(1);
   });
+  it('stores a rename as one reversible action', () => {
+    const plan = { textFiles: [{ path: '/a.yml', before: 'old', after: 'new' }, { path: '/a.sql', before: 'old sql', after: 'new sql' }], sqlRename: { from: '/a.sql', to: '/b.sql' } };
+    const journal = pushUndoEntry(createUndoJournal(), { label: 'Rename model orders to sales_orders', domain: 'modelRename', plan });
+    expect(toHistoryState(journal)).toEqual({ items: [{ id: 1, label: 'Rename model orders to sales_orders', domain: 'yaml' }], cursor: 1, truncated: false });
+    expect(journal.entries).toHaveLength(1);
+  });
 });

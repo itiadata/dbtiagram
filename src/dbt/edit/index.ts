@@ -8,7 +8,7 @@
  * sibling module (`model`, `column`, `primaryKey`, `foreignKey`) sharing the
  * primitives in `internal`.
  */
-import { ApplyEditResult, EditError, mapModel } from './internal';
+import { ApplyEditResult, EditError, mapModel, type ModelRenameScope } from './internal';
 import { ModelEdit } from './types';
 import { applyDescription, renameModel } from './model';
 import { renameColumn, setColumnDataType, setColumnDescription, setColumnMetaArrayValue, setColumnMetaValue } from './column';
@@ -34,7 +34,7 @@ export type { ApplyEditResult, ModelEdit };
  * value writes return the original objects), which is what lets
  * `distributeEditedModels` skip untouched files on write-back (spec 06).
  */
-export function applyEdit(models: ModelDefinition[], edit: ModelEdit): ApplyEditResult {
+export function applyEdit(models: ModelDefinition[], edit: ModelEdit, renameScope?: ModelRenameScope): ApplyEditResult {
   switch (edit.kind) {
     case 'setModelName': {
       const name = edit.name.trim();
@@ -42,7 +42,7 @@ export function applyEdit(models: ModelDefinition[], edit: ModelEdit): ApplyEdit
       if (models.some((m) => m.name !== edit.model && m.name === name)) {
         throw new EditError(`A model named "${name}" already exists`);
       }
-      return renameModel(models, edit.model, name);
+      return renameModel(models, edit.model, name, renameScope);
     }
     case 'setModelDescription':
       return mapModel(models, edit.model, (m) => applyDescription(m, edit.description));

@@ -4,13 +4,15 @@ import type { SourceStore } from '../dbt/sourceStore';
 import type { SourceYmlFile } from '../dbt/sourceTypes';
 import type { DiagramLayout } from '../diagram/layoutFile';
 import { HISTORY_LIMIT, type HistoryState } from '../shared/history';
+import type { ModelRenamePlan } from '../dbt/modelRename';
 
 export type ModelFileDelta = { uri: string; before: ModelYmlFile; after: ModelYmlFile };
 export type SourceFileDelta = { uri: string; before: SourceYmlFile; after: SourceYmlFile };
 export type NewUndoEntry =
   | { label: string; domain: 'modelYaml'; files: ModelFileDelta[] }
   | { label: string; domain: 'sourceYaml'; files: SourceFileDelta[] }
-  | { label: string; domain: 'layout'; before: DiagramLayout; after: DiagramLayout };
+  | { label: string; domain: 'layout'; before: DiagramLayout; after: DiagramLayout }
+  | { label: string; domain: 'modelRename'; plan: ModelRenamePlan };
 export type UndoEntry = NewUndoEntry & { id: number };
 
 export interface UndoJournal {

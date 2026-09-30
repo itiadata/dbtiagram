@@ -13,6 +13,13 @@ export interface ApplyEditResult {
   changed: boolean;
 }
 
+export interface ModelRenameScope {
+  targetProjectRoot: string;
+  targetPackage: string;
+  targetModelIndex: number;
+  modelProjectRoots: readonly (string | null)[];
+}
+
 /** Maps a single named model; throws if the model does not exist. */
 export function mapModel(
   models: ModelDefinition[],

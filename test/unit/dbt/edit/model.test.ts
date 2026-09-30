@@ -116,6 +116,26 @@ describe('applyEdit', () => {
       expect(next[1].constraints?.[2].to).toBe("ref('customers')");
     });
 
+    it('uses project scope for qualified and unqualified FK refs', () => {
+      const withFks: ModelDefinition[] = [
+        { name: 'orders' },
+        { name: 'local', constraints: [{ type: 'foreign_key', columns: ['a'], to: "ref('orders')", toColumns: ['id'] }] },
+        { name: 'remote', constraints: [
+          { type: 'foreign_key', columns: ['a'], to: "ref('orders')", toColumns: ['id'] },
+          { type: 'foreign_key', columns: ['b'], to: "ref('sample', 'orders')", toColumns: ['id'] },
+          { type: 'foreign_key', columns: ['c'], to: "ref('other', 'orders')", toColumns: ['id'] },
+        ] },
+      ];
+      const { models: next } = applyEdit(withFks, { kind: 'setModelName', model: 'orders', name: 'sales_orders' }, {
+        targetProjectRoot: '/sample', targetPackage: 'sample', targetModelIndex: 0,
+        modelProjectRoots: ['/sample', '/sample', '/other'],
+      });
+      expect(next[1].constraints?.[0].to).toBe("ref('sales_orders')");
+      expect(next[2].constraints?.map((constraint) => constraint.to)).toEqual([
+        "ref('orders')", "ref('sample', 'sales_orders')", "ref('other', 'orders')",
+      ]);
+    });
+
     it('re-points virtual FK refs in the meta block (spec 08 fix (j))', () => {
       const withVirtual: ModelDefinition[] = [
         { name: 'orders' },

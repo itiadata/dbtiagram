@@ -9,6 +9,22 @@ import * as vscode from 'vscode';
 const EXTENSION_ID = 'your-publisher-name.dbtiagram';
 
 suite('dbtiagram extension', () => {
+  test('executes a model rename transaction on workspace files', async () => {
+    const module = await import('../../../src/webview/modelRename');
+    const adapter = await import('../../../src/vscode/modelRename');
+    const root = path.resolve(__dirname, '../../../../fixtures/sample-dbt/.rename-test');
+    const yaml = path.join(root, 'schema.yml'); const sql = path.join(root, 'orders.sql'); const renamed = path.join(root, 'sales_orders.sql');
+    fs.mkdirSync(root, { recursive: true }); fs.writeFileSync(yaml, 'before yaml'); fs.writeFileSync(sql, 'before sql');
+    try {
+      await module.executeModelRename(adapter.vscodeModelRenameFiles, {
+        textFiles: [{ path: yaml, before: 'before yaml', after: 'after yaml' }, { path: sql, before: 'before sql', after: 'after sql' }],
+        sqlRename: { from: sql, to: renamed },
+      });
+      assert.ok(!fs.existsSync(sql)); assert.ok(fs.existsSync(renamed));
+      assert.strictEqual(fs.readFileSync(yaml, 'utf8'), 'after yaml'); assert.strictEqual(fs.readFileSync(renamed, 'utf8'), 'after sql');
+    } finally { fs.rmSync(root, { recursive: true, force: true }); }
+  });
+
   test('extension activates and registers the open command', async () => {
     const ext = vscode.extensions.getExtension(EXTENSION_ID);
     assert.ok(ext, `extension "${EXTENSION_ID}" must be loaded in the test host`);

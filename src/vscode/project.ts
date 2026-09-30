@@ -38,6 +38,14 @@ export async function readFileText(uri: vscode.Uri): Promise<string> {
   return Buffer.from(await vscode.workspace.fs.readFile(uri)).toString('utf8');
 }
 
+export async function writeFileText(uri: vscode.Uri, text: string): Promise<void> {
+  await vscode.workspace.fs.writeFile(uri, Buffer.from(text, 'utf8'));
+}
+
+export async function fileExists(uri: vscode.Uri): Promise<boolean> {
+  try { await vscode.workspace.fs.stat(uri); return true; } catch { return false; }
+}
+
 export async function loadSourceYmlFiles(glob = '**/models/**/*.yml'): Promise<SourceYmlLoadResult> {
   const uris = await vscode.workspace.findFiles(glob, '**/node_modules/**');
   const records: SourceYmlRecord[] = []; const failures: SourceYmlFailure[] = [];
