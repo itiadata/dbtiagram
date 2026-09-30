@@ -150,6 +150,7 @@ Then they are three distinct cards despite overlapping visible names
 | `webview-ui/hooks/useHostMessages.ts` | modify | Dispatch domain-qualified scope and combined update messages. |
 | `webview-ui/hooks/useLayoutPersistence.ts` | modify | Build mode-free combined layouts. |
 | `webview-ui/hooks/useLineage.ts` | modify | Add local model/source lineage nodes through the combined filter and restore only external layout nodes locally. |
+| `webview-ui/hooks/useSelection.ts` | modify | Keep selected namespaced model IDs stable when a model is renamed. |
 | `webview-ui/App.tsx` | modify | Remove mode branching and compose domain behavior from each selected node's kind. |
 | `webview-ui/FilterSidebar.tsx` | modify | Render separate model/source file and table sections together. |
 | `webview-ui/DetailsSidebar.tsx` | modify | Select edit capabilities by entity kind rather than panel mode. |
