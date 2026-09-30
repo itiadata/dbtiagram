@@ -138,7 +138,7 @@ via `ExtensionContext.workspaceState` (spec 27). | `readMatrixColumnPrefs`, `wri
 | `src/vscode/clipboard.ts` | vscode-facing | Reads/writes AI rename/type clipboard text and displays native import/export notifications (specs 42/43). | `vscodeAiPromptClipboard`, `showAiPromptCopied`, `vscodeAiPromptImportClipboard`, `vscodeAiPromptImportNotifier` |
 | `src/vscode/aiRenamingRules.ts` | vscode-facing | Reads AI rules from the nearest workspace-bounded dbt project and watches saved marker/rules changes (spec 45). | `readAiRenamingRules`, `registerAiRenamingRulesWatcher` |
 | `src/vscode/dbtProjects.ts` | vscode-facing | Discover containing/all workspace dbt projects and enumerate configured SQL code paths (spec 51). | `findContainingDbtProject`, `findWorkspaceDbtProjects`, `findProjectSqlFiles`, `WorkspaceDbtProject` |
-| `src/vscode/modelRename.ts` | vscode-facing | VS Code filesystem adapter for transactional model rename execution (spec 51). | `vscodeModelRenameFiles` |
+| `src/vscode/modelRename.ts` | vscode-facing | VS Code filesystem adapter and successful-impact dialog for transactional model renames (spec 51). | `vscodeModelRenameFiles`, `showModelRenameImpact` |
 
 ## `src/webview/` — extension-host side of the panel
 
@@ -156,7 +156,7 @@ via `ExtensionContext.workspaceState` (spec 27). | `readMatrixColumnPrefs`, `wri
 | `src/webview/aiPromptProjectRules.ts` | pure | Traverses URI ancestors to load non-blank rules from the nearest workspace-bounded dbt project (spec 45). | `loadAiRenamingRulesFromProject`, `AiPromptProjectRulesHost` |
 | `src/webview/aiPromptAvailability.ts` | pure | Derives unique available model names from model files through an asynchronous rules loader (spec 45). | `availableAiRenamingModels`, `AiPromptModelFile`, `AiPromptRulesLoader` |
 | `src/webview/history.ts` | pure | Panel-local bounded mixed YAML/layout journal, changed-file deltas, and cursor travel (spec 47). | `createUndoJournal`, `pushUndoEntry`, `undo`, `redo`, `moveTo`, `clearUndoJournal`, `toHistoryState`, `modelFileDeltas`, `sourceFileDeltas` |
-| `src/webview/modelRename.ts` | pure | Preflighted raw-file transaction execution with reverse-order compensating rollback (spec 51). | `executeModelRename`, `ModelRenameFileHost` |
+| `src/webview/modelRename.ts` | pure | Preflighted raw-file transaction execution, reverse-order compensating rollback, and impact formatting (spec 51). | `executeModelRename`, `formatModelRenameImpact`, `ModelRenameFileHost` |
 | `src/extension.ts` | vscode-facing | `activate` / `deactivate` only — command registration and disposal. | `activate`, `deactivate` |
 
 ## `webview-ui/` — React front-end (webview)

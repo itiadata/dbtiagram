@@ -7,6 +7,14 @@ export interface ModelRenameFileHost {
   rename(from: string, to: string): Promise<void>;
 }
 
+export function formatModelRenameImpact(plan: ModelRenamePlan): string {
+  const paths = plan.textFiles.map((file) => file.path).join('\n');
+  const rename = plan.sqlRename === undefined
+    ? 'No model SQL file was renamed'
+    : `Renamed: ${plan.sqlRename.from} -> ${plan.sqlRename.to}`;
+  return `Updated files:\n${paths}\n\n${rename}`;
+}
+
 export async function executeModelRename(host: ModelRenameFileHost, plan: ModelRenamePlan): Promise<void> {
   const files = [...plan.textFiles].sort((a, b) => a.path.localeCompare(b.path));
   for (const file of files) if (await currentOrMissing(host, file.path) !== file.before) throw divergent(file.path);

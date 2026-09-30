@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { executeModelRename, type ModelRenameFileHost } from '../../../src/webview/modelRename';
+import { executeModelRename, formatModelRenameImpact, type ModelRenameFileHost } from '../../../src/webview/modelRename';
 import type { ModelRenamePlan } from '../../../src/dbt/modelRename';
 
 function fake(initial: Record<string, string>, failWrite?: number, failRestore = false): { host: ModelRenameFileHost; files: Map<string, string>; log: string[] } {
@@ -14,6 +14,20 @@ function fake(initial: Record<string, string>, failWrite?: number, failRestore =
 const plan: ModelRenamePlan = { textFiles: [{ path: '/b', before: 'b0', after: 'b1' }, { path: '/a', before: 'a0', after: 'a1' }], sqlRename: { from: '/orders.sql', to: '/sales_orders.sql' } };
 
 describe('model rename transaction', () => {
+  it('formats renamed-file impact', () => {
+    expect(formatModelRenameImpact({
+      textFiles: [
+        { path: '/project/models/a.yml', before: 'a', after: 'b' },
+        { path: '/project/models/orders.sql', before: 'a', after: 'b' },
+      ],
+      sqlRename: { from: '/project/models/orders.sql', to: '/project/models/sales_orders.sql' },
+    })).toBe('Updated files:\n/project/models/a.yml\n/project/models/orders.sql\n\nRenamed: /project/models/orders.sql -> /project/models/sales_orders.sql');
+  });
+  it('formats YAML-only impact', () => {
+    expect(formatModelRenameImpact({ textFiles: [{ path: '/project/models/schema.yml', before: 'a', after: 'b' }] })).toBe(
+      'Updated files:\n/project/models/schema.yml\n\nNo model SQL file was renamed',
+    );
+  });
   it('writes text in path order then renames the SQL path', async () => {
     const f = fake({ '/a': 'a0', '/b': 'b0', '/orders.sql': 'sql' }); await executeModelRename(f.host, plan);
     expect(f.log).toEqual(['write:/a', 'write:/b', 'rename:/orders.sql->/sales_orders.sql']);

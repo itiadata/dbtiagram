@@ -64,7 +64,7 @@ import { clearUndoJournal, createUndoJournal, modelFileDeltas, moveTo, pushUndoE
 import { describeModelRename } from '../shared/history';
 import { planModelRename, reverseModelRenamePlan, type ModelRenameInput } from '../dbt/modelRename';
 import { executeModelRename } from './modelRename';
-import { vscodeModelRenameFiles } from '../vscode/modelRename';
+import { showModelRenameImpact, vscodeModelRenameFiles } from '../vscode/modelRename';
 import { findContainingDbtProject, findProjectSqlFiles, findWorkspaceDbtProjects } from '../vscode/dbtProjects';
 import { fileExists } from '../vscode/project';
 import * as path from 'path';
@@ -751,6 +751,7 @@ export class DiagramPanel {
     try { await executeModelRename(vscodeModelRenameFiles, plan); } catch (error) { await this.reloadAfterRename(); throw error; }
     await this.reloadAfterRename();
     this.pushHistory({ label: describeModelRename(oldName, newName), domain: 'modelRename', plan });
+    await showModelRenameImpact(oldName, newName, plan);
   }
 
   private async reloadAfterRename(): Promise<void> {
