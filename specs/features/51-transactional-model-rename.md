@@ -50,6 +50,9 @@ filename and in Jinja `ref()` calls in models, macros, tests and snapshots.
 - Roll back YAML text, SQL text and the SQL path on any failure.
 - Record the successful operation as one undo/redo action, including SQL text
   changes and the SQL file rename.
+- After a user-initiated rename succeeds, show a native VS Code information
+  dialog listing every changed file and the SQL path rename; the user dismisses
+  it with an `OK` button.
 - Add fixture model, macro, test and snapshot refs for manual verification.
 
 **Out of scope**
@@ -101,6 +104,24 @@ Given model "legacy_orders" has no matching SQL file
 When it is renamed to "archived_orders"
 Then its YAML and applicable refs are renamed successfully
 And no SQL file is created
+```
+
+### Report the successful rename impact
+
+```
+Given a model rename changes YAML and SQL text and renames the model SQL file
+When the complete transaction succeeds
+Then a native information dialog says "Renamed orders to sales_orders"
+And its detail lists each changed file on its own line
+And its detail lists "Renamed: <old SQL path> -> <new SQL path>"
+And the dialog has an "OK" button
+```
+
+```
+Given a YAML-only model rename succeeds
+When the impact dialog is shown
+Then its detail lists each changed file
+And its detail lists "No model SQL file was renamed"
 ```
 
 ### Reject ambiguous or colliding SQL paths
@@ -293,6 +314,10 @@ export interface ModelRenameFileHost {
   rename(from: string, to: string): Promise<void>;
 }
 export function executeModelRename(host: ModelRenameFileHost, plan: ModelRenamePlan): Promise<void>;
+export function formatModelRenameImpact(plan: ModelRenamePlan): string;
+
+// src/vscode/modelRename.ts (vscode-facing)
+export function showModelRenameImpact(oldName: string, newName: string, plan: ModelRenamePlan): Promise<void>;
 
 // src/webview/history.ts (pure orchestration — must not import `vscode`)
 export type NewUndoEntry =
@@ -346,6 +371,13 @@ export function describeModelRename(oldName: string, newName: string): string;
   rename is one history row.
 - `dbt_project.yml` is read for configuration only and is never included in ref
   rewriting.
+- After a successful user-initiated rename, the panel awaits a native modal
+  information message with title `Renamed <oldName> to <newName>`, detail headed
+  `Updated files:` followed by every `plan.textFiles` path in stable plan order,
+  then either `Renamed: <from> -> <to>` or `No model SQL file was renamed`.
+  Paths are shown as captured absolute filesystem paths so similarly named files
+  remain unambiguous. The sole action is `OK`. Undo, redo and failed operations
+  do not show this impact dialog.
 
 ### Tests
 
@@ -366,6 +398,8 @@ export function describeModelRename(oldName: string, newName: string): string;
 | `test/unit/webview/modelRename.test.ts` | `rolls back every completed operation` | failure on second text write | first text restored exactly and operation rejects with original failure |
 | `test/unit/webview/modelRename.test.ts` | `reports incomplete rollback` | write failure plus restore failure | exact prefix `Model rename failed and rollback was incomplete:` |
 | `test/unit/webview/modelRename.test.ts` | `refuses divergent history state` | expected text differs from fake filesystem | `Cannot restore model rename: /project/models/schema.yml no longer matches the recorded state`; no writes |
+| `test/unit/webview/modelRename.test.ts` | `formats renamed-file impact` | two changed files and `/project/models/orders.sql` -> `/project/models/sales_orders.sql` | `Updated files:\n/project/models/a.yml\n/project/models/orders.sql\n\nRenamed: /project/models/orders.sql -> /project/models/sales_orders.sql` |
+| `test/unit/webview/modelRename.test.ts` | `formats YAML-only impact` | one changed file and no SQL rename | `Updated files:\n/project/models/schema.yml\n\nNo model SQL file was renamed` |
 | `test/unit/webview/history.test.ts` | `stores a rename as one reversible action` | successful plan with two text files and one path rename | one history item labelled `Rename model orders to sales_orders` |
 | `test/integration/suite/extension.test.ts` | `executes a model rename transaction on workspace files` | temporary YAML and SQL files under the fixture workspace | source path absent, destination present, and both exact planned texts persisted; cleanup restores the workspace |
 
@@ -391,4 +425,6 @@ export function describeModelRename(oldName: string, newName: string): string;
 - [x] Any mid-operation failure rolls back, and incomplete rollback is explicit.
 - [x] Undo/redo treats the complete rename as one action.
 - [x] The sample fixture exercises models, macros, tests and snapshots.
+- [ ] A successful user rename shows all affected paths in a native dialog with
+      an `OK` button; failures and history replay show no impact dialog.
 - [x] `npm run verify` is green.
