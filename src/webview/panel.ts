@@ -590,7 +590,7 @@ export class DiagramPanel {
           ? await expandUpstream(host, message.requestId, message.root)
           : await expandDownstream(host, message.requestId, message.root);
         if (result !== null) {
-          this.lineageNodes = mergeLineageNodes(this.lineageNodes, result.nodes);
+          this.lineageNodes = mergeLineageNodes(this.lineageNodes, result.nodes.filter((node) => node.readOnly === true));
           this.lineageEdges = mergeLineageEdges(this.lineageEdges, result.edges);
         }
         this.postMessage({ type: 'lineage:result', result });

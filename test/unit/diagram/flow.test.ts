@@ -54,6 +54,20 @@ describe('buildFlowElements', () => {
     });
     expect(flow.edges.find((edge) => edge.type === FK_EDGE_TYPE)?.data.kind).toBe('foreignKey');
   });
+
+  it('makes lineage handles face the opposite table after movement', () => {
+    const graph = buildDiagram([{ name: 'parent' }, { name: 'child' }]);
+    graph.lineageEdges = [{ parent: 'parent', child: 'child' }];
+    const built = buildFlowElements(graph, layoutDiagram(graph), () => 'all');
+    const lineage = built.edges.find((edge) => edge.type === LINEAGE_EDGE_TYPE)!;
+    const routed = routeEdges(lineage === undefined ? [] : [lineage], [
+      { id: 'parent', x: 500, y: 0, width: 240, height: 44 },
+      { id: 'child', x: 0, y: 0, width: 240, height: 44 },
+    ], () => undefined, () => undefined).edges[0];
+    expect(routed.sourceHandle).toBe(columnSourceHandle(LINEAGE_HEADER_ANCHOR, 'left'));
+    expect(routed.targetHandle).toBe(columnTargetHandle(LINEAGE_HEADER_ANCHOR, 'right'));
+    expect(routed.markerEnd).toMatchObject({ color: 'var(--vscode-charts-blue)' });
+  });
   it('maps every model to a table node positioned by the layout', () => {
     const { flow, layout } = flowFor([
       { name: 'a', columns: [{ name: 'x1' }, { name: 'x2' }] },

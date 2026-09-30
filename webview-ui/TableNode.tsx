@@ -142,6 +142,8 @@ function TableNodeComponent({ id, data }: NodeProps<FlowNode>): JSX.Element {
       {renderHandle(HEADER_ANCHOR, 'left', 'source')}
       {renderHandle(HEADER_ANCHOR, 'right', 'source')}
       {renderHandle(LINEAGE_HEADER_ANCHOR, 'left', 'target')}
+      {renderHandle(LINEAGE_HEADER_ANCHOR, 'right', 'target')}
+      {renderHandle(LINEAGE_HEADER_ANCHOR, 'left', 'source')}
       {renderHandle(LINEAGE_HEADER_ANCHOR, 'right', 'source')}
       <div
         className={`table-node__title${selectedTable ? ' table-node__title--selected' : ''}`}

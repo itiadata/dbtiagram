@@ -263,6 +263,9 @@ export function refreshDisplayedLineage(
   previous: readonly LineageEdge[],
 ): Promise<LineageEdge[]>;
 
+// webview-ui/hooks/useLineage.ts (webview pure helper)
+export function canvasOnlyLineageNodes(nodes: readonly TableNode[]): TableNode[];
+
 // additions in src/shared/protocol.ts (shared)
 // MessageToExtension:
 | { type: 'lineage:setDisplayed'; models: string[] }
@@ -316,12 +319,39 @@ export function refreshDisplayedLineage(
   details/matrix/FK actions, and no Reveal/Open SQL actions. They retain Remove
   from diagram and Add lineage actions.
 - Lineage edges attach at header-centre left/right handles, carry an arrow marker
-  at the child, use a 2.5px themed stroke, and coexist with FK edges.
+  at the child, use a 2.5px themed stroke, and coexist with FK edges. Their
+  source and target sides are recalculated from the current table positions:
+  the parent uses the side facing the child and the child uses the side facing
+  the parent. The arrowhead uses exactly the same themed colour as the line.
 - During addition, existing positions remain exact. New upstream generations
   are placed left of their nearest retained children; downstream generations
   right of parents; collisions nudge vertically. Auto-layout ignores retained
   positions and gives lineage edges parent→child rank precedence. An FK between
   the same pair does not add an opposing rank constraint.
+- Local lineage-added tables participate only in the ordinary model filter.
+  Unchecking one or choosing `Remove from diagram` removes its card immediately;
+  the separate canvas-only lineage-node state contains read-only external and
+  unknown cards only and therefore cannot re-add a removed local table.
+
+### Lineage handles follow table positions
+
+```
+Given a lineage parent is positioned to the right of its child
+When lineage edge geometry is calculated
+Then the arrow starts at the parent's left header handle
+And arrives at the child's right header handle
+And the arrowhead colour matches the lineage line colour
+```
+
+### Remove a lineage-added local table
+
+```
+Given downstream expansion added a local model table
+When the user chooses Remove from diagram on that table
+Then its model filter checkbox is unchecked
+And its card disappears from the canvas
+And lineage state does not add the card back
+```
 
 ### Tests
 
@@ -335,8 +365,10 @@ export function refreshDisplayedLineage(
 | `test/unit/webview/lineage.test.ts` | `cancels downstream atomically` | cancellation after first of three reads | result `null`; no expansion nodes/edges published |
 | `test/unit/webview/lineage.test.ts` | `refresh never adds a referenced hidden node` | displayed child gains hidden parent ref | returned displayed edge set excludes it; expansion availability includes it |
 | `test/unit/webview/lineage.test.ts` | `refresh removes an obsolete edge but keeps displayed nodes` | displayed `items` and `report`; previous `items->report`; refreshed report SQL has no ref | edges `[]`; displayed IDs remain `['items','report']` |
+| `test/unit/webview/lineage.test.ts` | `retains only canvas-only lineage nodes` | one local and one external expansion node | only the external node remains in lineage-owned canvas state |
 | `test/unit/diagram/layoutFile.test.ts` | `round-trips lineage-added table IDs without edge data` | layout tables `model:sample:report`, `external:finance_pkg:currency` with positions | same two table entries and positions; serialized YAML has no lineage key |
 | `test/unit/diagram/flow.test.ts` | `builds header lineage and column FK together` | same node pair has one lineage and one FK | two edges; lineage uses header anchors and arrow; FK retains column handles |
+| `test/unit/diagram/flow.test.ts` | `lineage handles face the opposite table after movement` | parent positioned right of child | parent uses left header handle; child uses right header handle; marker colour equals line colour |
 | `test/unit/diagram/layout.test.ts` | `ranks lineage left to right` | parent→child→grandchild | `parent.x < child.x < grandchild.x` |
 | `test/unit/diagram/positions.test.ts` | `adds upstream without moving retained cards` | retained child at `{x:500,y:100}`, new parent | child unchanged; parent right edge is left of child x |
 | `test/integration/suite/extension.test.ts` | `watches only displayed model SQL files` | two displayed and 100 hidden model SQL paths | exact watchers registered for two paths only |

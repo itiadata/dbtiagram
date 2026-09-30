@@ -236,7 +236,7 @@ export function buildFlowElements(
       targetHandle,
       type: LINEAGE_EDGE_TYPE,
       interactionWidth: EDGE_INTERACTION_WIDTH,
-      markerEnd: { type: MarkerType.ArrowClosed },
+      markerEnd: { type: MarkerType.ArrowClosed, color: 'var(--vscode-charts-blue)' },
       data: { title: `${edge.parent} -> ${edge.child}`, kind: 'lineage' },
     });
   }
@@ -327,10 +327,17 @@ export function routeEdges(
 
   const rebuilt: FlowEdge[] = edges.map((edge) => {
     if (edge.data.kind === 'lineage') {
-      const sourceHandle = columnSourceHandle(LINEAGE_HEADER_ANCHOR, 'right');
-      const targetHandle = columnTargetHandle(LINEAGE_HEADER_ANCHOR, 'left');
-      addHandle(edge.source, sourceHandle, 'right');
-      addHandle(edge.target, targetHandle, 'left');
+      const sourceRect = byId.get(edge.source);
+      const targetRect = byId.get(edge.target);
+      if (sourceRect === undefined || targetRect === undefined) return edge;
+      const sourceCenter = sourceRect.x + sourceRect.width / 2;
+      const targetCenter = targetRect.x + targetRect.width / 2;
+      const sourceSide: HandleSide = targetCenter < sourceCenter ? 'left' : 'right';
+      const targetSide: HandleSide = sourceSide === 'right' ? 'left' : 'right';
+      const sourceHandle = columnSourceHandle(LINEAGE_HEADER_ANCHOR, sourceSide);
+      const targetHandle = columnTargetHandle(LINEAGE_HEADER_ANCHOR, targetSide);
+      addHandle(edge.source, sourceHandle, sourceSide);
+      addHandle(edge.target, targetHandle, targetSide);
       return { ...edge, sourceHandle, targetHandle };
     }
     const sourceColumn = edge.data.sourceColumn;

@@ -33,7 +33,7 @@ export function useLineage(addLocalModels: (names: readonly string[]) => void): 
     if (progress !== null) postToHost({ type: 'lineage:cancel', requestId: progress.requestId });
   }, [progress]);
   const applyState = useCallback((nextNodes: TableNode[], nextEdges: LineageEdge[]): void => {
-    setNodes(nextNodes);
+    setNodes(canvasOnlyLineageNodes(nextNodes));
     setEdges(nextEdges);
   }, []);
   const applyProgress = useCallback((requestId: string, scanned: number, total: number): void => {
@@ -44,7 +44,7 @@ export function useLineage(addLocalModels: (names: readonly string[]) => void): 
     if (result === null) return;
     setPlacementDirection(result.direction);
     addLocalModels(result.nodes.filter((node) => node.lineageKind === 'local').map((node) => node.id));
-    setNodes((current) => mergeNodes(current, result.nodes.filter((node) => node.readOnly === true)));
+    setNodes((current) => mergeNodes(current, canvasOnlyLineageNodes(result.nodes)));
     setEdges((current) => mergeEdges(current, result.edges));
   }, [addLocalModels]);
   const restoreLayoutNodes = useCallback((ids: readonly string[]): void => {
@@ -67,4 +67,8 @@ function mergeEdges(current: readonly LineageEdge[], added: readonly LineageEdge
 function parseExternalNode(id: string): TableNode | null {
   const match = /^external:([^:]+):(.+)$/.exec(id);
   return match === null ? null : { id, label: match[2], columns: [], foreignKeys: [], foreignKeyColumns: [], readOnly: true, lineageKind: 'external', packageName: match[1] };
+}
+
+export function canvasOnlyLineageNodes(nodes: readonly TableNode[]): TableNode[] {
+  return nodes.filter((node) => node.readOnly === true);
 }

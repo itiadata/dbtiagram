@@ -30,6 +30,20 @@ function host(sql: Record<string, string>, progress: LineageProgress[] = [], can
 }
 
 describe('lineage orchestration', () => {
+  it('retains only canvas-only lineage nodes', async () => {
+    const posted: unknown[] = [];
+    const previousWindow = globalThis.window;
+    Object.defineProperty(globalThis, 'window', {
+      configurable: true,
+      value: { acquireVsCodeApi: () => ({ postMessage: (message: unknown) => posted.push(message), getState: () => undefined, setState: () => undefined }) },
+    });
+    const { canvasOnlyLineageNodes } = await import('../../../webview-ui/hooks/useLineage');
+    expect(canvasOnlyLineageNodes([
+      { ...node('orders'), lineageKind: 'local', packageName: 'sample' },
+      { ...node('external:pkg:currency', 'currency'), readOnly: true, lineageKind: 'external', packageName: 'pkg' },
+    ]).map((item) => item.id)).toEqual(['external:pkg:currency']);
+    Object.defineProperty(globalThis, 'window', { configurable: true, value: previousWindow });
+  });
   it('expands upstream transitively and represents external and unknown refs', async () => {
     const result = await expandUpstream(host({
       report: "select * from {{ ref('items') }} union all select * from {{ ref('finance_pkg', 'currency') }} union all select * from {{ ref('missing') }}",
