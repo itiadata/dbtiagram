@@ -67,7 +67,7 @@ up-to-date spec in `specs/features/`.
 | 47  | Undo, redo, and action history | Done |
 | 48  | Generate static documentation diagrams | Done |
 | 49  | Edit source columns in the fields matrix | Done |
-| 50  | Edit array meta values in the fields matrix | Implemented |
+| 50  | Edit array meta values in the fields matrix | Done |
 
 Status values: `draft` → `approved` → `implemented` → `done`.
 
