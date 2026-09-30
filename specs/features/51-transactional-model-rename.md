@@ -232,6 +232,7 @@ export function parseDbtProjectConfig(text: string): DbtProjectConfig;
 export interface ModelRenameScope {
   targetProjectRoot: string;
   targetPackage: string;
+  targetModelIndex: number;
   modelProjectRoots: readonly (string | null)[];
 }
 
@@ -240,6 +241,14 @@ export function applyEdit(
   models: ModelDefinition[],
   edit: ModelEdit,
   renameScope?: ModelRenameScope,
+): ApplyEditResult;
+
+// src/dbt/edit/model.ts (pure — must not import `vscode`)
+export function renameModel(
+  models: ModelDefinition[],
+  oldName: string,
+  newName: string,
+  scope?: ModelRenameScope,
 ): ApplyEditResult;
 
 // src/dbt/modelRename.ts (pure — must not import `vscode`)
@@ -251,6 +260,7 @@ export interface ModelRenamePlan {
 export interface ModelRenameInput {
   oldName: string;
   newName: string;
+  targetModelFilePath: string;
   targetProjectRoot: string;
   targetPackage: string;
   modelFiles: readonly { path: string; projectRoot: string | null; text: string }[];
@@ -299,6 +309,10 @@ export function describeModelRename(oldName: string, newName: string): string;
 ### Behavior notes
 
 - Paths are normalized for comparison, but original filesystem casing is kept.
+- `targetModelFilePath` is the declaring YAML file selected by the panel's
+  existing first-match model lookup. Its matching flattened model index is the
+  only declaration renamed, so same-named models in other projects are not
+  renamed accidentally.
 - Project ownership is the nearest ancestor `dbt_project.yml`; walking stops at
   the containing workspace root. No marker produces the literal rejection in
   the scenario.
