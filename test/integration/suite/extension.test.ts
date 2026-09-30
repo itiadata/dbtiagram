@@ -41,6 +41,50 @@ suite('dbtiagram extension', () => {
     assert.ok(commands.includes('dbtiagram.openSource'), 'the source-open command must be registered');
   });
 
+  test('discovers project model SQL for lineage', async () => {
+    const { findProjectModelSql } = await import('../../../src/vscode/lineageFiles');
+    const model = vscode.Uri.file(path.resolve(__dirname, '../../../../fixtures/sample-dbt/models/order_summary.sql'));
+    const root = vscode.Uri.file(path.resolve(__dirname, '../../../../fixtures/sample-dbt'));
+    const files = await findProjectModelSql({ root, config: { name: 'sample', modelPaths: ['models'], macroPaths: ['macros'], testPaths: ['tests'], snapshotPaths: ['snapshots'] } });
+    assert.ok(files.some((file) => file.modelId === 'order_summary' && file.uri.fsPath === model.fsPath));
+  });
+
+  test('lineage watcher watches only its exact SQL files', async () => {
+    const { watchLineageSqlFiles } = await import('../../../src/vscode/lineageFiles');
+    const root = path.resolve(__dirname, '../../../../fixtures/sample-dbt/.lineage-watch-test');
+    const displayed = path.join(root, 'displayed.sql');
+    const hidden = path.join(root, 'hidden.sql');
+    fs.mkdirSync(root, { recursive: true });
+    fs.writeFileSync(displayed, 'select 1');
+    fs.writeFileSync(hidden, 'select 1');
+    const changed: string[] = [];
+    const watcher = watchLineageSqlFiles([vscode.Uri.file(displayed)], (uri) => changed.push(uri.fsPath));
+    try {
+      fs.writeFileSync(hidden, 'select 2');
+      await new Promise((resolve) => setTimeout(resolve, 400));
+      assert.strictEqual(changed.length, 0);
+      fs.writeFileSync(displayed, 'select 2');
+      const observed = await waitFor(() => changed.includes(displayed), 5_000);
+      assert.ok(observed, 'the exact displayed SQL file should be watched');
+    } finally {
+      watcher.dispose();
+      fs.rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  test('cancels a downstream lineage scan atomically', async () => {
+    const { expandDownstream } = await import('../../../src/webview/lineage');
+    let reads = 0;
+    const result = await expandDownstream({
+      readModelSql: async () => { reads += 1; return "{{ ref('root') }}"; },
+      allProjectModelIds: async () => ['a', 'b', 'c'],
+      resolveNode: async (_packageName, name) => ({ id: name, label: name, columns: [], foreignKeys: [], foreignKeyColumns: [], lineageKind: 'local', packageName: 'sample' }),
+      progress: () => undefined,
+      isCancelled: () => reads >= 1,
+    }, 'cancel-test', 'root');
+    assert.strictEqual(result, null);
+  });
+
   test('source command opens an independent source diagram', async () => {
     const sourceUri = vscode.Uri.file(
       path.resolve(__dirname, '../../../../fixtures/sample-dbt/models/sources/finops.yml'),

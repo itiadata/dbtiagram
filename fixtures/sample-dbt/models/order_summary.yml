@@ -1,0 +1,9 @@
+version: 2
+models:
+  - name: order_summary
+    description: Summary model used to exercise SQL-derived lineage
+    columns:
+      - name: order_id
+        data_type: integer
+      - name: item_count
+        data_type: integer

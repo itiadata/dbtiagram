@@ -129,5 +129,8 @@ export function filterGraph(
   const edges = graph.edges.filter(
     (edge) => visible.has(edge.source) && visible.has(edge.target),
   );
-  return { nodes, edges };
+  const lineageEdges = graph.lineageEdges.filter(
+    (edge) => visible.has(edge.parent) && visible.has(edge.child),
+  );
+  return { nodes, edges, lineageEdges };
 }

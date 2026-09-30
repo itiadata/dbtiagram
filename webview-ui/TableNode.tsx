@@ -25,6 +25,7 @@ import {
   columnTargetHandle,
   CARD_ANCHOR,
   HEADER_ANCHOR,
+  LINEAGE_HEADER_ANCHOR,
   type HandleSide,
   type FlowNode,
 } from '../src/diagram/flow';
@@ -46,7 +47,8 @@ type EditingCell =
 
 function TableNodeComponent({ id, data }: NodeProps<FlowNode>): JSX.Element {
   const interaction = useContext(DiagramInteractionContext);
-  const readOnly = useDiagramPresentationMode() === 'readonly';
+  const presentationReadOnly = useDiagramPresentationMode() === 'readonly';
+  const readOnly = presentationReadOnly || data.readOnly === true;
   const highlighted = interaction?.highlightedColumns.get(id) ?? EMPTY_COLUMNS;
   const selectedTable = interaction?.selectedTableId === id;
   const selectedColumnRef = interaction?.selectedColumnRef ?? null;
@@ -101,7 +103,7 @@ function TableNodeComponent({ id, data }: NodeProps<FlowNode>): JSX.Element {
     const used = usedHandles?.[handleId] !== undefined;
     const position = side === 'right' ? Position.Right : Position.Left;
     const broken = column === CARD_ANCHOR && used;
-    const isHeaderAnchor = column === HEADER_ANCHOR;
+    const isHeaderAnchor = column === HEADER_ANCHOR || column === LINEAGE_HEADER_ANCHOR;
     // Every handle sits at the row's exact vertical center, so all edges
     // attaching to the same (column, side) — however many, in either
     // direction — converge on ONE shared dot (spec 12, section 9). A
@@ -127,7 +129,7 @@ function TableNodeComponent({ id, data }: NodeProps<FlowNode>): JSX.Element {
 
   return (
     <div
-      className={`table-node${selectedTable ? ' table-node--selected' : ''}`}
+      className={`table-node${selectedTable ? ' table-node--selected' : ''}${data.readOnly === true ? ' table-node--readonly' : ''}`}
       onDragOver={readOnly ? undefined : (event) => { event.preventDefault(); interaction?.onColumnDragOver({ model: id }); }}
       onDrop={readOnly ? undefined : (event) => { event.preventDefault(); interaction?.onColumnDrop({ model: id }, event.ctrlKey); }}
     >
@@ -139,12 +141,14 @@ function TableNodeComponent({ id, data }: NodeProps<FlowNode>): JSX.Element {
       {renderHandle(HEADER_ANCHOR, 'right', 'target')}
       {renderHandle(HEADER_ANCHOR, 'left', 'source')}
       {renderHandle(HEADER_ANCHOR, 'right', 'source')}
+      {renderHandle(LINEAGE_HEADER_ANCHOR, 'left', 'target')}
+      {renderHandle(LINEAGE_HEADER_ANCHOR, 'right', 'source')}
       <div
         className={`table-node__title${selectedTable ? ' table-node__title--selected' : ''}`}
         title={data.description === undefined ? data.label : `${data.label}\n${data.description}`}
         onClick={() => interaction?.onTableSelect(id)}
         onContextMenu={(event) => {
-          if (readOnly) return;
+           if (presentationReadOnly) return;
           event.preventDefault();
           event.stopPropagation();
           interaction?.onColumnContextMenu(id, '', event);

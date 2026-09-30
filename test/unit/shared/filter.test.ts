@@ -105,12 +105,14 @@ describe('filterGraph', () => {
         virtual: false,
       },
     ],
+    lineageEdges: [{ parent: 'products', child: 'orders' }],
   };
 
   it('keeps nodes whose id is visible', () => {
     const filtered = filterGraph(graph, new Set(['orders']));
     expect(filtered.nodes.map((node) => node.id)).toEqual(['orders']);
     expect(filtered.edges).toEqual([]);
+    expect(filtered.lineageEdges).toEqual([]);
   });
 
   it('drops an edge when either endpoint is hidden', () => {
@@ -124,6 +126,7 @@ describe('filterGraph', () => {
     expect(filtered.edges).toHaveLength(1);
     expect(filtered.edges[0].source).toBe('orders');
     expect(filtered.edges[0].target).toBe('products');
+    expect(filtered.lineageEdges).toEqual([{ parent: 'products', child: 'orders' }]);
   });
 
   it('does not mutate the input graph', () => {

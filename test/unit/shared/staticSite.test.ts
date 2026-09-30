@@ -3,7 +3,7 @@ import { buildStaticMenu, parseStaticDiagramHash, serializeStaticSiteData, stati
 import { buildLayout } from '../../../src/diagram/layoutFile';
 
 const layout = (path: string, title: string) => ({ route: staticLayoutRoute(path), relativePath: path, title, layout: buildLayout(title, 'model', []), missing: [] });
-const data: StaticSiteData = { schemaVersion: STATIC_SITE_SCHEMA_VERSION, initialSelectionLimit: 100, model: { mode: 'model', graph: { nodes: [], edges: [] }, files: [] }, layouts: [layout('diagrams/a.dbtiagram.yml', 'Orders'), layout('archive/a.dbtiagram.yml', 'Orders')] };
+const data: StaticSiteData = { schemaVersion: STATIC_SITE_SCHEMA_VERSION, initialSelectionLimit: 100, model: { mode: 'model', graph: { nodes: [], edges: [], lineageEdges: [] }, files: [] }, layouts: [layout('diagrams/a.dbtiagram.yml', 'Orders'), layout('archive/a.dbtiagram.yml', 'Orders')] };
 
 describe('static site contract', () => {
   it('builds deterministic grouped menu entries and routes', () => expect(buildStaticMenu(data).map((entry) => entry.route)).toEqual(['models', 'diagram/archive/a.dbtiagram.yml', 'diagram/diagrams/a.dbtiagram.yml']));

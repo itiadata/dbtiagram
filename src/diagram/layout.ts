@@ -74,7 +74,12 @@ export function layoutDiagram(
   for (const node of nodes) {
     dagreGraph.setNode(node.id, { width: node.width, height: node.height });
   }
+  const lineagePairs = new Set(graph.lineageEdges.map((edge) => `${edge.parent}\u0000${edge.child}`));
+  for (const edge of graph.lineageEdges) {
+    dagreGraph.setEdge(edge.parent, edge.child, { weight: 10 });
+  }
   for (const edge of graph.edges) {
+    if (lineagePairs.has(`${edge.target}\u0000${edge.source}`)) continue;
     dagreGraph.setEdge(edge.source, edge.target);
   }
 

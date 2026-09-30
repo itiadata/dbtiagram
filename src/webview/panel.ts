@@ -68,6 +68,10 @@ import { vscodeModelRenameFiles } from '../vscode/modelRename';
 import { findContainingDbtProject, findProjectSqlFiles, findWorkspaceDbtProjects } from '../vscode/dbtProjects';
 import { fileExists } from '../vscode/project';
 import * as path from 'path';
+import { expandDownstream, expandUpstream, refreshDisplayedLineage, type LineageHost } from './lineage';
+import type { LineageEdge } from '../diagram/lineage';
+import type { TableNode } from '../diagram/graph';
+import { findProjectModelSql, watchLineageSqlFiles } from '../vscode/lineageFiles';
 
 /** Ignore text-change echoes of our own disk writes within this window. */
 const SELF_WRITE_IGNORE_MS = 250;
@@ -109,6 +113,11 @@ export class DiagramPanel {
   private sqlPaths: Map<string, string> = new Map();
   private journal: UndoJournal = createUndoJournal();
   private messageQueue: Promise<void> = Promise.resolve();
+  private lineageNodes: TableNode[] = [];
+  private lineageEdges: LineageEdge[] = [];
+  private displayedLineageModels = new Set<string>();
+  private cancelledLineageRequests = new Set<string>();
+  private lineageWatcher: vscode.Disposable | undefined;
 
   private constructor(
     panel: vscode.WebviewPanel,
@@ -149,6 +158,10 @@ export class DiagramPanel {
 
     panel.webview.onDidReceiveMessage(
       (message: MessageToExtension) => {
+        if (message.type === 'lineage:cancel') {
+          this.cancelledLineageRequests.add(message.requestId);
+          return;
+        }
         this.messageQueue = this.messageQueue.then(() => this.onMessage(message)).catch((error: unknown) => {
           this.postMessage({ type: 'diagram:error', message: error instanceof Error ? error.message : String(error) });
         });
@@ -288,7 +301,10 @@ export class DiagramPanel {
       promptForLayoutPath: async (defaultName) =>
         (await promptForLayoutPath(defaultName))?.fsPath,
       mode: this.mode,
-      knownEntityNames: () => new Set(this.mode === 'model' ? this.store.records.flatMap((record) => record.file.models.map((model) => model.name)) : this.sourceStore.records.flatMap((record) => record.file.sources.flatMap((source) => source.tables.map((table) => `${source.name}.${table.name}`)))),
+      knownEntityNames: () => new Set([
+        ...(this.mode === 'model' ? this.store.records.flatMap((record) => record.file.models.map((model) => model.name)) : this.sourceStore.records.flatMap((record) => record.file.sources.flatMap((source) => source.tables.map((table) => `${source.name}.${table.name}`)))),
+        ...(this.pendingLayout?.tables.map((table) => table.name).filter((name) => name.startsWith('external:')) ?? []),
+      ]),
       onLayoutOpened: (name) => {
         if (this.source.kind === 'layout') {
           // The stored `name` can differ from the file's base name.
@@ -553,9 +569,37 @@ export class DiagramPanel {
         case 'diagram:openSource':
           await openDiagramSource(this.openSourceHost, { mode: this.mode, entity: message.entity, column: message.column });
           return;
-        case 'model:openSql':
+      case 'model:openSql':
           await openModelSql(this.openSqlHost, message.model);
           return;
+      case 'lineage:setDisplayed':
+        if (this.mode !== 'model') return;
+        this.displayedLineageModels = new Set(message.models);
+        this.lineageNodes = mergeLineageNodes(
+          this.lineageNodes.filter((node) => this.displayedLineageModels.has(node.id)),
+          message.models.map(externalNodeFromId).filter((node): node is TableNode => node !== null),
+        );
+        await this.syncLineageWatcher();
+        await this.refreshLineage();
+        return;
+      case 'lineage:expand': {
+        if (this.mode !== 'model') return;
+        this.cancelledLineageRequests.delete(message.requestId);
+        const host = await this.lineageHost(message.requestId);
+        const result = message.direction === 'upstream'
+          ? await expandUpstream(host, message.requestId, message.root)
+          : await expandDownstream(host, message.requestId, message.root);
+        if (result !== null) {
+          this.lineageNodes = mergeLineageNodes(this.lineageNodes, result.nodes);
+          this.lineageEdges = mergeLineageEdges(this.lineageEdges, result.edges);
+        }
+        this.postMessage({ type: 'lineage:result', result });
+        return;
+      }
+      case 'lineage:cancel':
+        // Handled synchronously before the serialized message queue so it can
+        // interrupt an in-flight downstream scan.
+        return;
       case 'settings:setOpenBehavior':
         await vscode.workspace
           .getConfiguration('dbtiagram')
@@ -565,6 +609,58 @@ export class DiagramPanel {
         await writeMatrixColumnPrefs(this.workspaceState, message.scope, message.columns);
         return;
     }
+  }
+
+  private async lineageHost(requestId: string): Promise<LineageHost> {
+    const firstRecord = this.store.records[0];
+    const project = firstRecord === undefined ? null : await findContainingDbtProject(vscode.Uri.file(firstRecord.uri));
+    const packageName = project?.config.name ?? 'unknown';
+    const localNames = new Set(this.store.records.flatMap((record) => record.file.models.map((model) => model.name)));
+    return {
+      readModelSql: async (modelId) => {
+        const external = /^external:([^:]+):/.exec(modelId);
+        if (external !== null && external[1] !== packageName) return null;
+        const name = lineageModelName(modelId);
+        const fsPath = this.sqlPaths.get(name);
+        if (fsPath === undefined) return null;
+        try { return await readFileText(vscode.Uri.file(fsPath)); } catch { return null; }
+      },
+      allProjectModelIds: async () => {
+        if (project === null) return [...this.sqlPaths.keys()];
+        return (await findProjectModelSql(project)).map((file) => file.modelId);
+      },
+      resolveNode: async (targetPackage, modelName) => {
+        const effectivePackage = targetPackage === '' ? packageName : targetPackage;
+        if (effectivePackage === packageName && localNames.has(modelName)) {
+          const existing = buildDiagram(this.store.records.flatMap((record) => record.file.models)).nodes.find((node) => node.id === modelName);
+          return { ...(existing ?? emptyLineageNode(modelName, modelName)), lineageKind: 'local', packageName };
+        }
+        return {
+          ...emptyLineageNode(`external:${effectivePackage}:${modelName}`, modelName),
+          readOnly: true,
+          lineageKind: effectivePackage === packageName ? 'unknown' : 'external',
+          packageName: effectivePackage,
+        };
+      },
+      progress: ({ scanned, total }) => this.postMessage({ type: 'lineage:progress', requestId, scanned, total }),
+      isCancelled: () => this.cancelledLineageRequests.has(requestId),
+    };
+  }
+
+  private async refreshLineage(): Promise<void> {
+    const host = await this.lineageHost('refresh');
+    this.lineageEdges = await refreshDisplayedLineage(host, this.displayedLineageModels, this.lineageEdges);
+    this.postMessage({ type: 'lineage:state', nodes: this.lineageNodes, edges: this.lineageEdges });
+  }
+
+  private async syncLineageWatcher(): Promise<void> {
+    this.lineageWatcher?.dispose();
+    const uris = [...this.displayedLineageModels]
+      .map(lineageModelName)
+      .map((name) => this.sqlPaths.get(name))
+      .filter((value): value is string => value !== undefined)
+      .map((fsPath) => vscode.Uri.file(fsPath));
+    this.lineageWatcher = watchLineageSqlFiles(uris, () => void this.refreshLineage());
   }
 
   /** Sends the currently stored grid column preferences for one matrix scope (spec 27). */
@@ -864,6 +960,7 @@ export class DiagramPanel {
     for (const disposable of this.disposables) {
       disposable.dispose();
     }
+    this.lineageWatcher?.dispose();
     this.panel.dispose();
   }
 }
@@ -879,4 +976,41 @@ function workspaceRoot(): string | undefined {
 function fallbackLabel(uri: string): string {
   const parts = uri.split(/[\\/]/);
   return parts[parts.length - 1] ?? uri;
+}
+
+function lineageModelName(id: string): string {
+  const match = /^(?:model|external):[^:]+:(.+)$/.exec(id);
+  return match?.[1] ?? id;
+}
+
+function emptyLineageNode(id: string, label: string): TableNode {
+  return { id, label, columns: [], foreignKeys: [], foreignKeyColumns: [] };
+}
+
+function externalNodeFromId(id: string): TableNode | null {
+  const match = /^external:([^:]+):(.+)$/.exec(id);
+  if (match === null) return null;
+  return {
+    ...emptyLineageNode(id, match[2]),
+    readOnly: true,
+    lineageKind: 'external',
+    packageName: match[1],
+  };
+}
+
+function mergeLineageNodes(current: readonly TableNode[], added: readonly TableNode[]): TableNode[] {
+  const result = [...current];
+  for (const node of added) {
+    const index = result.findIndex((item) => item.id === node.id);
+    if (index < 0) result.push(node); else result[index] = node;
+  }
+  return result;
+}
+
+function mergeLineageEdges(current: readonly LineageEdge[], added: readonly LineageEdge[]): LineageEdge[] {
+  const result = [...current];
+  for (const edge of added) {
+    if (!result.some((item) => item.parent === edge.parent && item.child === edge.child)) result.push(edge);
+  }
+  return result;
 }

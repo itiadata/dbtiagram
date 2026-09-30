@@ -14,6 +14,7 @@ import {
 } from '../../../src/diagram/flow';
 import type { ModelDefinition } from '../../../src/dbt/types';
 import type { ColumnDisplayMode } from '../../../src/diagram/columnDisplay';
+import { LINEAGE_EDGE_TYPE, LINEAGE_HEADER_ANCHOR } from '../../../src/diagram/flow';
 
 function flowFor(models: ModelDefinition[], columnDisplayMode?: (nodeId: string) => ColumnDisplayMode) {
   const graph = buildDiagram(models);
@@ -36,6 +37,23 @@ function routeEdgesFor(
 }
 
 describe('buildFlowElements', () => {
+  it('builds header lineage and a column FK together', () => {
+    const graph = buildDiagram([
+      { name: 'child', columns: [{ name: 'parent_id' }], constraints: [{ type: 'foreign_key', columns: ['parent_id'], to: "ref('parent')", toColumns: ['id'] }] },
+      { name: 'parent', columns: [{ name: 'id' }] },
+    ]);
+    graph.lineageEdges = [{ parent: 'parent', child: 'child' }];
+    const flow = buildFlowElements(graph, layoutDiagram(graph), () => 'all');
+    expect(flow.edges).toHaveLength(2);
+    const lineage = flow.edges.find((edge) => edge.type === LINEAGE_EDGE_TYPE)!;
+    expect(lineage).toMatchObject({
+      source: 'parent', target: 'child',
+      sourceHandle: columnSourceHandle(LINEAGE_HEADER_ANCHOR, 'right'),
+      targetHandle: columnTargetHandle(LINEAGE_HEADER_ANCHOR, 'left'),
+      data: { kind: 'lineage' },
+    });
+    expect(flow.edges.find((edge) => edge.type === FK_EDGE_TYPE)?.data.kind).toBe('foreignKey');
+  });
   it('maps every model to a table node positioned by the layout', () => {
     const { flow, layout } = flowFor([
       { name: 'a', columns: [{ name: 'x1' }, { name: 'x2' }] },

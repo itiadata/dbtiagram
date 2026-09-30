@@ -139,4 +139,17 @@ describe('layoutDiagram', () => {
     expect(layout.nodes[0].height).toBe(nodeHeight(1));
     expect(layout.nodes[0].height).not.toBe(nodeHeight(3));
   });
+
+  it('ranks lineage parent to child from left to right', () => {
+    const graph = buildDiagram([
+      { name: 'parent' }, { name: 'child' }, { name: 'grandchild' },
+    ]);
+    graph.lineageEdges = [
+      { parent: 'parent', child: 'child' },
+      { parent: 'child', child: 'grandchild' },
+    ];
+    const nodes = byId(layoutDiagram(graph));
+    expect(nodes.get('parent')!.x).toBeLessThan(nodes.get('child')!.x);
+    expect(nodes.get('child')!.x).toBeLessThan(nodes.get('grandchild')!.x);
+  });
 });

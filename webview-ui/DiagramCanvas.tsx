@@ -30,6 +30,7 @@ import {
 } from '@xyflow/react';
 import {
   FK_EDGE_TYPE,
+  LINEAGE_EDGE_TYPE,
   routeEdges,
   type ColumnRowIndexLookup,
   type FlowElements,
@@ -40,7 +41,8 @@ import { chooseSide } from '../src/diagram/routing';
 import { COLUMN_DISPLAY_OPTIONS, type ColumnDisplayMode } from '../src/diagram/columnDisplay';
 import type { DiagramLayoutTable } from '../src/diagram/layoutFile';
 import type { GroupTableRect } from '../src/diagram/layoutGroups';
-import { mergeFlowNodes, type NodePosition } from '../src/diagram/positions';
+import { mergeFlowNodes, placeLineageNodes, type NodePosition } from '../src/diagram/positions';
+import type { LineageEdge as LineageRelationship } from '../src/diagram/lineage';
 import { FkEdge } from './FkEdge';
 import { StickyNotePlus, Cable, Grid3x3, Network, Import, Group } from './icons';
 import type { RevealTarget } from './hooks/useRevealModel';
@@ -48,11 +50,12 @@ import { shouldRunInitialFit, shouldRunPendingFit } from './initial-fit';
 import { NoteNode } from './NoteNode';
 import { TableNode } from './TableNode';
 import { GroupNode } from './GroupNode';
+import { LineageEdge } from './LineageEdge';
 import { useDiagramPresentationMode } from './presentation-mode';
 
 const nodeTypes: NodeTypes = { table: TableNode, note: NoteNode, group: GroupNode };
 // The obstacle-aware FK edge (spec 12) — it draws the routed polyline.
-const edgeTypes: EdgeTypes = { [FK_EDGE_TYPE]: FkEdge };
+const edgeTypes: EdgeTypes = { [FK_EDGE_TYPE]: FkEdge, [LINEAGE_EDGE_TYPE]: LineageEdge };
 
 // Upper bound on how many frames the spec 32 owed fit waits for React Flow to
 // measure every card before fitting anyway (~2s at 60fps).
@@ -110,6 +113,8 @@ export interface DiagramCanvasProps {
   onCancelFkCreate: () => void;
   onLayoutGestureStart: (label: string) => void;
   onLayoutGestureFinish: () => void;
+  lineageEdges?: readonly LineageRelationship[];
+  lineagePlacementDirection?: 'upstream' | 'downstream' | null;
 }
 
 export function DiagramCanvas({
@@ -150,6 +155,8 @@ export function DiagramCanvas({
   onCancelFkCreate,
   onLayoutGestureStart,
   onLayoutGestureFinish,
+  lineageEdges = [],
+  lineagePlacementDirection = null,
 }: DiagramCanvasProps): JSX.Element {
   const readOnly = useDiagramPresentationMode() === 'readonly';
   const { fitView, setCenter, getZoom, getNodes, screenToFlowPosition } = useReactFlow();
@@ -210,9 +217,9 @@ export function DiagramCanvas({
             return stored === undefined ? node : { ...node, position: { ...stored } };
           })
         : flow.nodes;
-    setRfNodes((current) =>
-      reset ? flow.nodes : seeded ? seededNodes : mergeFlowNodes(flow.nodes, current),
-    );
+    setRfNodes((current) => reset ? flow.nodes : seeded ? seededNodes : lineagePlacementDirection === null
+      ? mergeFlowNodes(flow.nodes, current)
+      : placeLineageNodes(flow.nodes, current, lineageEdges, lineagePlacementDirection));
 
     const ids = flow.nodes.map((node) => node.id);
     // Fit only when the node set actually grows (net count up); a rename swaps
@@ -223,7 +230,7 @@ export function DiagramCanvas({
     if (added || reset || filterChanged || seeded) {
       pendingFitRef.current = true;
     }
-  }, [flow, layoutTick, filterTick, seedTick, seedPositions, fitView]);
+  }, [flow, layoutTick, filterTick, seedTick, seedPositions, fitView, lineageEdges, lineagePlacementDirection]);
 
   // Spec 32: deferred fit — the adopt effect sets `pendingFitRef` instead of
   // calling `fitView` inline.

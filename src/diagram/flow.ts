@@ -15,7 +15,7 @@
  * dragged. Each node's `data.handles` records exactly which handles its edges
  * use (the webview mounts a dot for those and nothing else).
  */
-import type { Edge, Node } from '@xyflow/react';
+import { MarkerType, type Edge, type Node } from '@xyflow/react';
 import { displayedColumns } from './columnDisplay';
 import type { ColumnDisplayMode } from './columnDisplay';
 import type { DiagramGraph, TableNodeColumn, TablePrimaryKey } from './graph';
@@ -43,6 +43,9 @@ export type FlowNodeData = {
    * (spec 09 merged).
    */
   handles?: Record<string, HandleSide>;
+  readOnly?: boolean;
+  lineageKind?: import('./lineage').LineageNodeKind;
+  packageName?: string;
 };
 
 /** Node descriptor for a custom `table` node. */
@@ -67,6 +70,7 @@ export type FlowEdgeData = {
    * missing-rect render) the edge falls back to a straight path.
    */
   points?: Point[];
+  kind?: 'foreignKey' | 'lineage';
 };
 
 /** An edge that is guaranteed to carry its `FlowEdgeData` payload. */
@@ -115,6 +119,8 @@ export type ColumnRowIndexLookup = (nodeId: string, column: string) => number | 
 
 /** Edge type id of the custom obstacle-aware FK edge (spec 12). */
 export const FK_EDGE_TYPE = 'fk';
+export const LINEAGE_EDGE_TYPE = 'lineage';
+export const LINEAGE_HEADER_ANCHOR = '\u0000lineage-header';
 
 /**
  * Pseudo-column name used to build the card-level fallback handle ids that a
@@ -196,6 +202,7 @@ export function buildFlowElements(
           sourceColumn,
           targetColumn,
           title: missing.length > 0 ? `${title} (missing column: ${missing.join(', ')})` : title,
+          kind: 'foreignKey',
           ...(edge.virtual ? { virtual: true } : {}),
           ...(missing.length > 0 ? { unresolved: { source: sourceMissing, target: targetMissing } } : {}),
         },
@@ -211,6 +218,28 @@ export function buildFlowElements(
     height: placement.height,
   }));
   const { edges, nodeHandles } = routeEdges(rawEdges, nodeRects, columnIndexOf, columnExists);
+  for (const edge of graph.lineageEdges) {
+    const sourceHandle = columnSourceHandle(LINEAGE_HEADER_ANCHOR, 'right');
+    const targetHandle = columnTargetHandle(LINEAGE_HEADER_ANCHOR, 'left');
+    const add = (nodeId: string, handle: string, side: HandleSide): void => {
+      const current = nodeHandles.get(nodeId) ?? new Map<string, HandleSide>();
+      current.set(handle, side);
+      nodeHandles.set(nodeId, current);
+    };
+    add(edge.parent, sourceHandle, 'right');
+    add(edge.child, targetHandle, 'left');
+    edges.push({
+      id: uniqueId(usedIds, `lineage:${edge.parent}->${edge.child}`),
+      source: edge.parent,
+      target: edge.child,
+      sourceHandle,
+      targetHandle,
+      type: LINEAGE_EDGE_TYPE,
+      interactionWidth: EDGE_INTERACTION_WIDTH,
+      markerEnd: { type: MarkerType.ArrowClosed },
+      data: { title: `${edge.parent} -> ${edge.child}`, kind: 'lineage' },
+    });
+  }
 
   const nodes: FlowNode[] = graph.nodes.map((node) => {
     const placement = placementOf(node.id);
@@ -226,6 +255,9 @@ export function buildFlowElements(
         description: node.description,
         columns: displayedColumns(node, columnDisplayMode(node.id)),
         ...(node.primaryKey !== undefined ? { primaryKey: node.primaryKey } : {}),
+        ...(node.readOnly !== undefined ? { readOnly: node.readOnly } : {}),
+        ...(node.lineageKind !== undefined ? { lineageKind: node.lineageKind } : {}),
+        ...(node.packageName !== undefined ? { packageName: node.packageName } : {}),
         ...(handles !== undefined ? { handles: Object.fromEntries(handles) } : {}),
       },
     };
@@ -294,6 +326,13 @@ export function routeEdges(
   };
 
   const rebuilt: FlowEdge[] = edges.map((edge) => {
+    if (edge.data.kind === 'lineage') {
+      const sourceHandle = columnSourceHandle(LINEAGE_HEADER_ANCHOR, 'right');
+      const targetHandle = columnTargetHandle(LINEAGE_HEADER_ANCHOR, 'left');
+      addHandle(edge.source, sourceHandle, 'right');
+      addHandle(edge.target, targetHandle, 'left');
+      return { ...edge, sourceHandle, targetHandle };
+    }
     const sourceColumn = edge.data.sourceColumn;
     const targetColumn = edge.data.targetColumn;
     // Every edge from buildFlowElements is a column-pair edge, so the columns

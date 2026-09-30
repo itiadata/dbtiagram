@@ -66,12 +66,12 @@ one `config.meta` key at a time (spec 27). | `mapColumn`, `setColumnDataType`, `
 
 | Path | Layer | Responsibility | Key exports |
 |------|-------|----------------|-------------|
-| `src/diagram/graph.ts` | pure | Turn model definitions into an abstract diagram graph of table nodes and relation edges. | `buildDiagram`, `DiagramGraph`, `TableNode`, `TableNodeColumn`, `TablePrimaryKey`, `RelationEdge` |
-| `src/diagram/layout.ts` | pure | Automatic node placement and the node geometry constants the webview mirrors; accepts an optional per-node displayed-column-count override so cards size by what they actually show (spec 24). | `layoutDiagram`, `DiagramLayout`, `NodePlacement`, `nodeHeight`, `columnRowCenterY`, `NODE_WIDTH`, `HEADER_HEIGHT`, `ROW_HEIGHT` |
-| `src/diagram/positions.ts` | pure | Position bookkeeping: overlap avoidance and merging user-moved positions into freshly built nodes. | `avoidOverlap`, `mergeFlowNodes`, `rectsOverlap`, `NodePosition`, `NodeRect`, `OVERLAP_PADDING`, `OVERLAP_STEP_Y` |
+| `src/diagram/graph.ts` | pure | Turn model definitions into an abstract diagram graph of table nodes, FK edges, and separately supplied SQL-lineage edges/read-only nodes (spec 52). | `buildDiagram`, `DiagramGraph`, `TableNode`, `TableNodeColumn`, `TablePrimaryKey`, `RelationEdge` |
+| `src/diagram/layout.ts` | pure | Automatic node placement and geometry; lineage ranks parent-to-child with precedence over opposing FKs (spec 52). | `layoutDiagram`, `DiagramLayout`, `NodePlacement`, `nodeHeight`, `columnRowCenterY`, `NODE_WIDTH`, `HEADER_HEIGHT`, `ROW_HEIGHT` |
+| `src/diagram/positions.ts` | pure | Position bookkeeping, including directional placement of new lineage generations around retained cards (spec 52). | `avoidOverlap`, `mergeFlowNodes`, `placeLineageNodes`, `rectsOverlap`, `NodePosition`, `NodeRect`, `OVERLAP_PADDING`, `OVERLAP_STEP_Y` |
 | `src/diagram/routing.ts` | pure | Obstacle-aware orthogonal edge routing with free side choice; `chooseSide` also picks the FK-draw preview line's anchor side (spec 26). | `routeEdge`, `Route`, `RouteRequest`, `RouteEndpoint`, `RouteSide`, `Point`, `STUB_PX`, `ROUTE_MARGIN`, `OBSTACLE_PENALTY`, `BEND_PENALTY`, `ROUTING_NODE_LIMIT`, `chooseSide` |
 | `src/diagram/columnDisplay.ts` | pure | The four per-table column display modes and which columns each mode shows (spec 24). | `ColumnDisplayMode`, `DEFAULT_COLUMN_DISPLAY`, `ColumnDisplayOption`, `COLUMN_DISPLAY_OPTIONS`, `isColumnDisplayMode`, `displayedColumns` |
-| `src/diagram/flow.ts` | pure | Convert the diagram graph into React Flow nodes/edges and route them; owns handle-id conventions; anchors FKs naming a missing column to the card and marks them `unresolved` (spec 20); anchors a hidden-but-existing FK column at the header instead, without `unresolved` (spec 24). | `buildFlowElements`, `routeEdges`, `columnSourceHandle`, `columnTargetHandle`, `columnRowIndexLookup`, `displayedColumnRowIndexLookup`, `FlowNode`, `FlowEdge`, `FlowElements`, `HandleSide`, `FK_EDGE_TYPE`, `EDGE_INTERACTION_WIDTH`, `CARD_ANCHOR`, `HEADER_ANCHOR` |
+| `src/diagram/flow.ts` | pure | Convert the graph into React Flow nodes/edges, including routed column FKs and header-anchored lineage arrows (spec 52). | `buildFlowElements`, `routeEdges`, `columnSourceHandle`, `columnTargetHandle`, `columnRowIndexLookup`, `displayedColumnRowIndexLookup`, `FlowNode`, `FlowEdge`, `FlowElements`, `HandleSide`, `FK_EDGE_TYPE`, `LINEAGE_EDGE_TYPE`, `LINEAGE_HEADER_ANCHOR`, `EDGE_INTERACTION_WIDTH`, `CARD_ANCHOR`, `HEADER_ANCHOR` |
 | `src/diagram/layoutFile.ts` | pure | The saved `.dbtiagram` layout file format: build, serialize, parse, apply, 
 including sticky notes (spec 16) and per-table/diagram-wide column-display modes (spec 24). | `buildLayout`, 
 `serializeDiagramLayout`, `parseDiagramLayout`, `applyLayout`, `createNote`, `isLayoutFilePath`, `defaultLayoutName`, 
@@ -81,6 +81,7 @@ including sticky notes (spec 16) and per-table/diagram-wide column-display modes
 | `src/diagram/layoutGroups.ts` | pure | Layout-only named/coloured groups: validation, normalization, exclusive membership mutations, palette choice, and rectangles derived from member tables (spec 31). | `DiagramGroup`, `GroupColor`, `GroupRect`, `GroupTableRect`, `GROUP_COLORS`, `groupRect`, `groupForModel`, `replaceGroupModels`, `addModelToGroup`, `removeModelFromGroup` |
 | `src/diagram/layoutFileNames.ts` | pure | Saved-layout suffix and filename helpers extracted from `layoutFile.ts` (spec 31). | `LAYOUT_FILE_SUFFIX`, `isLayoutFilePath`, `defaultLayoutName`, `stripLayoutSuffix` |
 | `src/diagram/matrix.ts` | pure | Derives "fields matrix" rows, retaining raw scalar/array meta values (specs 27/50): one row per `(model, column)` pair, plus meta-key discovery. | `MatrixRow`, `discoverMetaKeys`, `buildMatrixRows` |
+| `src/diagram/lineage.ts` | pure | Package-qualified SQL-lineage identities plus stable ancestor/descendant traversal (spec 52). | `LineageNodeKind`, `LineageNodeId`, `LineageEdge`, `lineageId`, `lineageAncestors`, `lineageDescendants` |
 
 > Feature 50 update: `src/diagram/matrix.ts` retains raw scalar/array meta values in `MatrixRow.meta`.
 
@@ -88,9 +89,9 @@ including sticky notes (spec 16) and per-table/diagram-wide column-display modes
 
 | Path | Layer | Responsibility | Key exports |
 |------|-------|----------------|-------------|
-| `src/shared/protocol.ts` | shared | The **only** message contract between extension host and webview, including source-import, model-rename impact, and history requests/results. | `MessageToWebview`, `MessageToExtension`, `DiagramModelFile`, `DiagramPendingError`, `SourceImportReport`, `ModelRenameImpact` |
+| `src/shared/protocol.ts` | shared | The **only** host/webview message contract, including lineage display, expansion, progress, result, and cancellation messages (spec 52). | `MessageToWebview`, `MessageToExtension`, `DiagramModelFile`, `DiagramPendingError`, `SourceImportReport`, `ModelRenameImpact` |
 | `src/shared/diagramMode.ts` | shared | Diagram mode and mode-specific UI nouns. | `DiagramMode`, `diagramModeLabels` |
-| `src/shared/filter.ts` | shared | File/model filtering and selection reconciliation for the filter sidebar, the initial model-selection cap for large workspaces (spec 35), and the pure `removeModels` unchecking helper for table removal (spec 36). | `filterGraph`, `computeVisibleModels`, `reconcileSelection`, `scopeSelectionToFile`, `matchesSearch`, `capInitialSelection`, `INITIAL_MODEL_SELECTION_LIMIT`, `removeModels` |
+| `src/shared/filter.ts` | shared | File/model filtering and selection reconciliation; filters FK and lineage edges to visible endpoints (spec 52). | `filterGraph`, `computeVisibleModels`, `reconcileSelection`, `scopeSelectionToFile`, `matchesSearch`, `capInitialSelection`, `INITIAL_MODEL_SELECTION_LIMIT`, `removeModels` |
 | `src/shared/glob.ts` | shared | Minimal glob matching used for model file discovery patterns. | `matchesGlob`, `globToRegExp`, `normalizePathForGlob` |
 | `src/shared/relations.ts` | shared | Pure one-hop neighbour lookup over a `DiagramGraph`, and the file set declaring a group of models, for "Add related tables" (spec 37). | `relatedModels`, `filesDeclaring` |
 | `src/shared/labels.ts` | shared | Disambiguate display labels for files that share a base name. | `disambiguateFileLabels`, `FileLabelMap` |
@@ -139,12 +140,13 @@ via `ExtensionContext.workspaceState` (spec 27). | `readMatrixColumnPrefs`, `wri
 | `src/vscode/aiRenamingRules.ts` | vscode-facing | Reads AI rules from the nearest workspace-bounded dbt project and watches saved marker/rules changes (spec 45). | `readAiRenamingRules`, `registerAiRenamingRulesWatcher` |
 | `src/vscode/dbtProjects.ts` | vscode-facing | Discover containing/all workspace dbt projects and enumerate configured SQL code paths (spec 51). | `findContainingDbtProject`, `findWorkspaceDbtProjects`, `findProjectSqlFiles`, `WorkspaceDbtProject` |
 | `src/vscode/modelRename.ts` | vscode-facing | VS Code filesystem adapter for transactional model rename execution (spec 51). | `vscodeModelRenameFiles` |
+| `src/vscode/lineageFiles.ts` | vscode-facing | Enumerates project model SQL and creates exact-file watchers for displayed lineage models (spec 52). | `LineageSqlFile`, `findProjectModelSql`, `watchLineageSqlFiles` |
 
 ## `src/webview/` — extension-host side of the panel
 
 | Path | Layer | Responsibility | Key exports |
 |------|-------|----------------|-------------|
-| `src/webview/panel.ts` | vscode-facing | The diagram panel: lifecycle, serialized message pump, stores, write-back, panel-local history, source import, layout cache, SQL paths, update status, and project AI-rules availability/guards. | `DiagramPanel`, `DiagramPanel.setUpdateStatus`, `DiagramPanel.setUpdateCheckHandler` |
+| `src/webview/panel.ts` | vscode-facing | The diagram panel lifecycle and message pump, including lineage cache, displayed-model synchronization, exact SQL watchers, and expansion progress/cancellation (spec 52). | `DiagramPanel`, `DiagramPanel.setUpdateStatus`, `DiagramPanel.setUpdateCheckHandler` |
 | `src/webview/html.ts` | vscode-facing | Build the webview HTML shell (CSP, nonce, asset URIs). | `buildWebviewHtml` |
 | `src/webview/panelKey.ts` | pure | One panel per source file: key and title derivation. | `diagramPanelKey`, `diagramPanelTitle`, `DiagramSource`, `defaultCaseInsensitive` |
 | `src/webview/openSource.ts` | pure | Orchestrates "Reveal in model.yml" against a host port: resolve, read, locate (model or a specific column, falling back to the model), reveal or report (spec 15, extended by spec 25). | `openModelSource`, `OpenSourceHost` |
@@ -157,6 +159,7 @@ via `ExtensionContext.workspaceState` (spec 27). | `readMatrixColumnPrefs`, `wri
 | `src/webview/aiPromptAvailability.ts` | pure | Derives unique available model names from model files through an asynchronous rules loader (spec 45). | `availableAiRenamingModels`, `AiPromptModelFile`, `AiPromptRulesLoader` |
 | `src/webview/history.ts` | pure | Panel-local bounded mixed YAML/layout journal, changed-file deltas, and cursor travel (spec 47). | `createUndoJournal`, `pushUndoEntry`, `undo`, `redo`, `moveTo`, `clearUndoJournal`, `toHistoryState`, `modelFileDeltas`, `sourceFileDeltas` |
 | `src/webview/modelRename.ts` | pure | Preflighted raw-file transaction execution, reverse-order compensating rollback, and impact formatting (spec 51). | `executeModelRename`, `formatModelRenameImpact`, `ModelRenameFileHost` |
+| `src/webview/lineage.ts` | pure | Transitive upstream/downstream SQL-ref traversal, progress/cancellation, and displayed-only refresh (spec 52). | `LineageProgress`, `LineageExpansionResult`, `LineageHost`, `expandUpstream`, `expandDownstream`, `refreshDisplayedLineage` |
 | `src/extension.ts` | vscode-facing | `activate` / `deactivate` only — command registration and disposal. | `activate`, `deactivate` |
 
 ## `webview-ui/` — React front-end (webview)
@@ -164,7 +167,7 @@ via `ExtensionContext.workspaceState` (spec 27). | `readMatrixColumnPrefs`, `wri
 | Path | Layer | Responsibility | Key exports |
 |------|-------|----------------|-------------|
 | `webview-ui/index.tsx` | webview | Mount point: renders `App` into the webview document. | — |
-| `webview-ui/App.tsx` | webview | Top-level composition: state hooks, sidebars, canvas, history controls/restoration, and model/source matrix entry points; routes column clicks through the mouse-drawn FK gesture. | `App` |
+| `webview-ui/App.tsx` | webview | Top-level composition, including lineage graph/state, context-menu expansion actions, and progress UI (spec 52). | `App` |
 | `webview-ui/ProductTitle.tsx` | webview | The stacked dbt Diagram header, running extension version/status, and manual update-check button (spec 39). | `ProductTitle`, `ProductTitleProps` |
 | `webview-ui/DiagramCanvas.tsx` | webview | React Flow canvas: nodes, edges, pan/zoom, node drag; top-right toolbar groups Auto-layout with the diagram-wide column-display selector (spec 24); top-left toolbar hosts Add note/Add foreign key and the model-only Fields Matrix action, plus the FK-draw mouse-follow preview line and crosshair cursor (spec 26/40). | `DiagramCanvas`, `DiagramCanvasProps` |
 | `webview-ui/TableNode.tsx` | webview | Custom React Flow node rendering a table with its column rows and handles, including the header-positioned `HEADER_ANCHOR` handle for a hidden FK column (spec 24). | `TableNode` |
@@ -237,6 +240,9 @@ filter text for the fields matrix (spec 27). | `useFieldsMatrix`, `FieldsMatrixS
 | `webview-ui/UndoRedoControls.tsx` | webview | Compact header Undo, Redo, and History controls (spec 47). | `UndoRedoControls`, `UndoRedoControlsProps` |
 | `webview-ui/HistoryPanel.tsx` | webview | Selectable chronological retained-state overlay with domain badges (spec 47). | `HistoryPanel`, `HistoryPanelProps` |
 | `webview-ui/presentation-mode.tsx` | webview | Defaults shared diagram presentation to editable and lets the static viewer suppress mutation affordances (spec 48). | `DiagramPresentationMode`, `DiagramPresentationProvider`, `useDiagramPresentationMode` |
+| `webview-ui/LineageEdge.tsx` | webview | Renders thick parent-to-child lineage arrows (spec 52). | `LineageEdge` |
+| `webview-ui/LineageProgress.tsx` | webview | Downstream scan progress modal and cancellation action (spec 52). | `LineageProgress` |
+| `webview-ui/hooks/useLineage.ts` | webview | Owns expansion/progress state, external cards, lineage edges, and host messages (spec 52). | `useLineage`, `LineageState` |
 
 ## `static-ui/` — offline browser viewer
 

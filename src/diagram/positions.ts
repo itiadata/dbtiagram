@@ -11,6 +11,7 @@
  */
 import type { Node } from '@xyflow/react';
 import { HEADER_HEIGHT, NODE_WIDTH } from './layout';
+import type { LineageEdge } from './lineage';
 
 export interface NodePosition {
   x: number;
@@ -106,6 +107,46 @@ export function mergeFlowNodes(flowNodes: readonly Node[], current: readonly Nod
   }
 
   return merged;
+}
+
+/** Places new lineage generations around retained cards without moving them. */
+export function placeLineageNodes(
+  flowNodes: readonly Node[],
+  current: readonly Node[],
+  edges: readonly LineageEdge[],
+  direction: 'upstream' | 'downstream',
+): Node[] {
+  const retained = new Map(current.map((item) => [item.id, item]));
+  const fresh = new Map(flowNodes.map((item) => [item.id, item]));
+  const placed = new Map<string, Node>(current.filter((item) => fresh.has(item.id)).map((item) => [item.id, item]));
+  const occupied: NodeRect[] = [...placed.values()].map((item) => ({
+    x: item.position.x, y: item.position.y,
+    width: item.width ?? NODE_WIDTH, height: item.height ?? HEADER_HEIGHT,
+  }));
+  const pending = flowNodes.filter((item) => !retained.has(item.id));
+  while (pending.length > 0) {
+    const index = pending.findIndex((item) => edges.some((edge) => {
+      const anchor = direction === 'upstream' ? edge.child : edge.parent;
+      const candidate = direction === 'upstream' ? edge.parent : edge.child;
+      return candidate === item.id && placed.has(anchor);
+    }));
+    const node = pending.splice(index < 0 ? 0 : index, 1)[0];
+    const relation = edges.find((edge) => (direction === 'upstream' ? edge.parent : edge.child) === node.id && placed.has(direction === 'upstream' ? edge.child : edge.parent));
+    const anchor = relation === undefined ? undefined : placed.get(direction === 'upstream' ? relation.child : relation.parent);
+    const width = node.width ?? NODE_WIDTH;
+    const height = node.height ?? HEADER_HEIGHT;
+    const desired = anchor === undefined ? node.position : {
+      x: direction === 'upstream'
+        ? anchor.position.x - width - 80
+        : anchor.position.x + (anchor.width ?? NODE_WIDTH) + 80,
+      y: anchor.position.y,
+    };
+    const position = avoidOverlap(desired, width, height, occupied);
+    const result = { ...node, position };
+    placed.set(node.id, result);
+    occupied.push({ ...position, width, height });
+  }
+  return flowNodes.map((item) => placed.get(item.id) ?? item);
 }
 
 /**

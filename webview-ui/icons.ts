@@ -30,4 +30,7 @@ export {
   Undo,
   Redo,
   RotateCcwClock,
+  GitBranch,
+  ArrowLeftFromLine,
+  ArrowRightFromLine,
 } from 'lucide-react';

@@ -80,7 +80,10 @@ export function DetailsSidebar({
   style,
   mode,
 }: DetailsSidebarProps): JSX.Element {
-  const readOnly = useDiagramPresentationMode() === 'readonly';
+  const readOnly = useDiagramPresentationMode() === 'readonly' || entity?.node.readOnly === true;
+  if (entity?.node.readOnly === true) {
+    return <aside className="details details--readonly" style={style}><div className="details__header"><span className="details__header-title">Properties</span><button type="button" className="sidebar__collapse" aria-label="Hide sidebar" onClick={onCollapse}><span className="sidebar__chevron sidebar__chevron--flip" /></button></div><div className="details__section"><h2 className="details__section-title">Referenced model</h2><ReadOnlyField label="Name" value={entity.node.label} /><ReadOnlyField label="Package" value={entity.node.packageName} /><ReadOnlyField label="Availability" value={entity.node.lineageKind === 'external' ? 'External package' : 'Not found in this project'} /></div></aside>;
+  }
   if (readOnly) {
     return (
       <aside className="details details--readonly" style={style}>

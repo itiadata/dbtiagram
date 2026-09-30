@@ -44,7 +44,7 @@ function loadFixtureModels(): ModelDefinition[] {
   return models;
 }
 
-const expectedModelNames = ['customers', 'order_items', 'orders', 'products', 'staging_orders'];
+const expectedModelNames = ['customers', 'order_items', 'order_summary', 'orders', 'products', 'staging_orders'];
 
 describe('sample fixture (fixtures/sample-dbt)', () => {
   it('parses every model.yml file, including nested ones', () => {

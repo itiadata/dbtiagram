@@ -9,6 +9,7 @@ import { flattenSourceTables, type SourceDefinition } from '../dbt/sourceTypes';
 import { columnTestNames } from '../dbt/tests';
 import { readVirtualConstraints } from '../dbt/virtual';
 import type { ForeignKeyDescriptor, ModelColumn, ModelDefinition } from '../dbt/types';
+import type { LineageEdge, LineageNodeKind } from './lineage';
 
 export interface TableNodeColumn {
   name: string;
@@ -45,6 +46,9 @@ export interface TableNode {
    * Feeds the `pkAndFk` column display mode (spec 24).
    */
   foreignKeyColumns: string[];
+  readOnly?: boolean;
+  lineageKind?: LineageNodeKind;
+  packageName?: string;
 }
 
 export interface RelationEdge {
@@ -61,6 +65,7 @@ export interface RelationEdge {
 export interface DiagramGraph {
   nodes: TableNode[];
   edges: RelationEdge[];
+  lineageEdges: LineageEdge[];
 }
 
 /**
@@ -240,5 +245,5 @@ function buildGraph(
     node.foreignKeyColumns = foreignKeyColumnsById.get(node.id) ?? [];
   }
 
-  return { nodes, edges };
+  return { nodes, edges, lineageEdges: [] };
 }

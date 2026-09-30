@@ -59,6 +59,9 @@ import { UndoRedoControls } from './UndoRedoControls';
 import { HistoryPanel } from './HistoryPanel';
 import { ModelRenameImpactDialog } from './ModelRenameImpact';
 import type { ModelRenameImpact } from '../src/shared/protocol';
+import { useLineage } from './hooks/useLineage';
+import { LineageProgress } from './LineageProgress';
+import { GitBranch, ArrowLeftFromLine, ArrowRightFromLine } from './icons';
 
 export function App(): JSX.Element {
   const [graph, setGraph] = useState<DiagramGraph | null>(null);
@@ -85,6 +88,7 @@ export function App(): JSX.Element {
 
   const selection = useSelection();
   const filter = useDiagramFilter();
+  const lineage = useLineage(filter.addModels);
   const sourceImport = useSourceImport(filter.showImportedModels);
   const undoRedo = useUndoRedo();
   const notes = useNotes(undoRedo.recordMutation);
@@ -149,6 +153,7 @@ export function App(): JSX.Element {
     onFilterScope: (uri) => filter.applyScope(uri),
     onLayoutApply: (message) => {
       filter.applyLayoutTables(layout.applyLayout(message));
+      lineage.restoreLayoutNodes(message.layout.tables.map((table) => table.name));
       notes.applyLayoutNotes(message.layout.notes);
       groups.applyLayoutGroups(message.layout.groups);
       columnDisplay.applySeed(
@@ -174,11 +179,26 @@ export function App(): JSX.Element {
     onGroupRenameResult: groups.applyRenameResult,
     onHistoryState: undoRedo.applyHistoryState,
     onHistoryApplyLayout: undoRedo.applyLayout,
+    onLineageState: lineage.applyState,
+    onLineageProgress: lineage.applyProgress,
+    onLineageResult: lineage.applyResult,
   });
+  const graphWithLineage = useMemo<DiagramGraph | null>(() => graph === null ? null : ({
+    nodes: [...graph.nodes, ...lineage.nodes.filter((node) => !graph.nodes.some((item) => item.id === node.id))],
+    edges: graph.edges,
+    lineageEdges: lineage.edges,
+  }), [graph, lineage.nodes, lineage.edges]);
   const visibleGraph = useMemo(
-    () => (graph === null ? null : filterGraph(graph, filter.visibleModels)),
-    [graph, filter.visibleModels],
+    () => {
+      if (graphWithLineage === null) return null;
+      return filterGraph(graphWithLineage, new Set([...filter.visibleModels, ...lineage.nodes.map((node) => node.id)]));
+    },
+    [graphWithLineage, filter.visibleModels, lineage.nodes],
   );
+
+  useEffect(() => {
+    if (mode === 'model') postToHost({ type: 'lineage:setDisplayed', models: visibleGraph?.nodes.map((node) => node.id) ?? [] });
+  }, [mode, visibleGraph?.nodes.map((node) => node.id).join('\u0000')]);
 
   // The layout library re-runs when the filtered graph changes or the user
   // clicks Auto-layout; hover changes only re-derive highlights, so node
@@ -418,10 +438,11 @@ export function App(): JSX.Element {
   // `diagram:edit` message is posted, so no model.yml is written.
   const onRemoveTable = useCallback(
     (model: string): void => {
-      filter.removeModels([model]);
+      const readOnly = graphWithLineage?.nodes.find((node) => node.id === model)?.readOnly === true;
+      if (readOnly) lineage.removeNode(model); else filter.removeModels([model]);
       selection.clearSelectionForModel(model);
     },
-    [filter, selection],
+    [filter, selection, graphWithLineage, lineage.removeNode],
   );
 
   // Spec 36: Delete/Backspace removes the selected table; a no-op unless the
@@ -441,6 +462,16 @@ export function App(): JSX.Element {
       const related = graph === null ? [] : relatedModels(graph, model);
       const missingRelated = related.filter((name) => !filter.visibleModels.has(name));
       const tableGroup = groupForModel(groups.groups, model);
+      const readOnly = graphWithLineage?.nodes.find((node) => node.id === model)?.readOnly === true;
+      if (readOnly) return [
+        {
+          label: 'Add lineage', icon: <GitBranch size={16} />, items: [
+            { label: 'Add upstream lineage', icon: <ArrowLeftFromLine size={16} />, onSelect: () => lineage.expand(model, 'upstream') },
+            { label: 'Add downstream lineage', icon: <ArrowRightFromLine size={16} />, onSelect: () => lineage.expand(model, 'downstream') },
+          ],
+        },
+        { label: 'Remove from diagram', icon: <Trash2 size={16} />, onSelect: () => onRemoveTable(model) },
+      ];
       return [
         { label: `Reveal in ${labels.sourceFile}`, icon: <ChartNoAxesGantt size={16} />, onSelect: () => onOpenModelSource(model, column) },
         ...(mode === 'model' ? [{
@@ -449,6 +480,12 @@ export function App(): JSX.Element {
           disabled: !sqlModels.has(model),
           title: sqlModels.has(model) ? undefined : `No .sql file found for "${model}"`,
           onSelect: () => onOpenModelSql(model),
+        }] : []),
+        ...(mode === 'model' ? [{
+          label: 'Add lineage', icon: <GitBranch size={16} />, items: [
+            { label: 'Add upstream lineage', icon: <ArrowLeftFromLine size={16} />, disabled: !sqlModels.has(model), onSelect: () => lineage.expand(model, 'upstream') },
+            { label: 'Add downstream lineage', icon: <ArrowRightFromLine size={16} />, onSelect: () => lineage.expand(model, 'downstream') },
+          ],
         }] : []),
         {
           label: 'Add related tables',
@@ -484,7 +521,7 @@ export function App(): JSX.Element {
         { label: 'Remove from diagram', icon: <Trash2 size={16} />, onSelect: () => onRemoveTable(model) },
       ];
     },
-    [columnDisplay, onOpenModelSource, onOpenModelSql, sqlModels, aiPromptAvailableModels, fieldsMatrix, onRemoveTable, graph, filter, mode, labels.sourceFile, groups],
+    [columnDisplay, onOpenModelSource, onOpenModelSql, sqlModels, aiPromptAvailableModels, fieldsMatrix, onRemoveTable, graph, graphWithLineage, filter, mode, labels.sourceFile, groups, lineage.expand],
   );
 
   const onColumnContextMenu = useCallback(
@@ -622,16 +659,16 @@ export function App(): JSX.Element {
   // The details sidebar derives its displayed entity from the FULL graph so a
   // filtered-out selection stays editable (spec 06, section 4).
   const selectedEntity = useMemo<SelectedEntity | null>(() => {
-    if (graph === null || current === null) return null;
+    if (graphWithLineage === null || current === null) return null;
     if (current.kind === 'table') {
-      const node = graph.nodes.find((n) => n.id === current.id);
+      const node = graphWithLineage.nodes.find((n) => n.id === current.id);
       return node === undefined ? null : { kind: 'table', node };
     }
-    const node = graph.nodes.find((n) => n.id === current.model);
+    const node = graphWithLineage.nodes.find((n) => n.id === current.model);
     if (node === undefined) return null;
     const column = node.columns.find((c) => c.name === current.column);
     return column === undefined ? null : { kind: 'column', node, column };
-  }, [graph, current]);
+  }, [graphWithLineage, current]);
 
   // Remount the sidebar fields when the selected entity changes so drafts
   // start fresh from the new entity's values (spec 06, section 6).
@@ -768,6 +805,7 @@ export function App(): JSX.Element {
               </ul>
             </div>
           )}
+          {lineage.progress !== null && <LineageProgress scanned={lineage.progress.scanned} total={lineage.progress.total} onCancel={lineage.cancel} />}
 
           {graph === null || flow === null ? (
             <p className="empty">No diagram yet.</p>
@@ -815,6 +853,8 @@ export function App(): JSX.Element {
                     onCancelFkCreate={fkCreate.cancel}
                     onLayoutGestureStart={undoRedo.beginGesture}
                     onLayoutGestureFinish={undoRedo.finishGesture}
+                    lineageEdges={lineage.edges}
+                    lineagePlacementDirection={lineage.placementDirection}
                   />
                 </DiagramInteractionContext.Provider>
               </ReactFlowProvider>
@@ -829,7 +869,7 @@ export function App(): JSX.Element {
             mode={mode}
             key={detailsKey}
             entity={selectedEntity}
-            nodes={graph?.nodes ?? []}
+            nodes={graphWithLineage?.nodes ?? []}
             focusedFk={selection.focusedFk}
             drafts={selectedTableId === null ? [] : (drafts.draftFks[selectedTableId] ?? [])}
             onEdit={onEdit}

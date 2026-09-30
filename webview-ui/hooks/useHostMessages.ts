@@ -12,6 +12,9 @@ import type { OpenBehavior } from '../../src/shared/openBehavior';
 import type { MatrixScope, StoredMatrixColumnPref } from '../../src/shared/matrixColumns';
 import type { HistoryState } from '../../src/shared/history';
 import type { DiagramLayout } from '../../src/diagram/layoutFile';
+import type { TableNode } from '../../src/diagram/graph';
+import type { LineageEdge } from '../../src/diagram/lineage';
+import type { LineageExpansionResult } from '../../src/webview/lineage';
 
 export type DiagramUpdateMessage = Extract<MessageToWebview, { type: 'diagram:update' }>;
 export type LayoutApplyMessage = Extract<MessageToWebview, { type: 'layout:apply' }>;
@@ -37,6 +40,9 @@ export interface HostMessageHandlers {
   onGroupRenameResult: (groupId: string, name: string | null) => void;
   onHistoryState: (state: HistoryState) => void;
   onHistoryApplyLayout: (layout: DiagramLayout) => void;
+  onLineageState: (nodes: TableNode[], edges: LineageEdge[]) => void;
+  onLineageProgress: (requestId: string, scanned: number, total: number) => void;
+  onLineageResult: (result: LineageExpansionResult | null) => void;
 }
 
 export function useHostMessages(handlers: HostMessageHandlers): void {
@@ -101,6 +107,15 @@ export function useHostMessages(handlers: HostMessageHandlers): void {
           break;
         case 'history:applyLayout':
           current.onHistoryApplyLayout(message.layout);
+          break;
+        case 'lineage:state':
+          current.onLineageState(message.nodes, message.edges);
+          break;
+        case 'lineage:progress':
+          current.onLineageProgress(message.requestId, message.scanned, message.total);
+          break;
+        case 'lineage:result':
+          current.onLineageResult(message.result);
           break;
       }
     };

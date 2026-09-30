@@ -28,7 +28,7 @@ function graphOf(edges: RelationEdge[]): DiagramGraph {
     ids.add(e.source);
     ids.add(e.target);
   }
-  return { nodes: [...ids].map(node), edges };
+  return { nodes: [...ids].map(node), edges, lineageEdges: [] };
 }
 
 describe('relatedModels', () => {

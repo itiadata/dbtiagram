@@ -1,7 +1,7 @@
 ---
 id: 52
 title: Add SQL-derived model lineage to diagrams
-status: approved
+status: implemented
 priority: high
 created: 2026-09-30
 owner: unassigned
@@ -170,6 +170,7 @@ And parent is left of child and child is left of grandchild
 | `src/diagram/positions.ts` | modify | Place newly added lineage generations around retained manual positions without moving existing cards. |
 | `src/diagram/flow.ts` | modify | Build header-anchored lineage Flow edges alongside FK edges. |
 | `src/shared/protocol.ts` | modify | Add visible-model sync, lineage requests/results/progress/cancel and lineage graph payloads. |
+| `src/shared/filter.ts` | modify | Preserve lineage edges when filtering a diagram graph. |
 | `src/vscode/lineageFiles.ts` | create | Read model SQL on demand, enumerate project model SQL, and manage exact-file watchers for displayed local models. |
 | `src/webview/lineage.ts` | create | Upstream traversal, cancellable project-wide downstream traversal and displayed-only refresh orchestration behind a host port. |
 | `src/webview/panel.ts` | modify | Hold panel lineage cache, synchronize displayed IDs, publish progress/results, and dispose exact-file watchers. |
@@ -189,6 +190,9 @@ And parent is left of child and child is left of grandchild
 | `test/unit/diagram/layoutFile.test.ts` | modify | Verify lineage-added table IDs persist through ordinary table entries without edge data. |
 | `test/unit/diagram/positions.test.ts` | modify | New lineage placement with retained positions. |
 | `test/unit/diagram/flow.test.ts` | modify | Header edge and simultaneous FK/lineage tests. |
+| `test/unit/shared/filter.test.ts` | modify | Cover lineage-edge filtering and update graph fixtures for the required collection. |
+| `test/unit/shared/relations.test.ts` | modify | Update graph fixtures for the required lineage-edge collection. |
+| `test/unit/shared/staticSite.test.ts` | modify | Update graph fixtures for the required lineage-edge collection. |
 | `test/unit/webview/lineage.test.ts` | create | Upstream, downstream progress/cancel and refresh-no-auto-add tests. |
 | `test/integration/suite/extension.test.ts` | modify | Exact-file watcher and cancellable downstream scan integration coverage. |
 | `fixtures/sample-dbt/models/order_summary.yml` | create | Local multi-level lineage model metadata. |

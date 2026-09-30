@@ -4,6 +4,7 @@ import {
   OVERLAP_PADDING,
   avoidOverlap,
   mergeFlowNodes,
+  placeLineageNodes,
   rectsOverlap,
 } from '../../../src/diagram/positions';
 import { NODE_WIDTH } from '../../../src/diagram/layout';
@@ -138,5 +139,20 @@ describe('mergeFlowNodes', () => {
 
   it('handles an empty flow', () => {
     expect(mergeFlowNodes([], [node('a', 0, 0)])).toEqual([]);
+  });
+});
+
+describe('placeLineageNodes', () => {
+  it('adds an upstream parent without moving the retained child', () => {
+    const current = [node('child', 500, 100)];
+    const result = placeLineageNodes(
+      [node('parent', 0, 0), node('child', 0, 0)],
+      current,
+      [{ parent: 'parent', child: 'child' }],
+      'upstream',
+    );
+    expect(result.find((item) => item.id === 'child')!.position).toEqual({ x: 500, y: 100 });
+    const parent = result.find((item) => item.id === 'parent')!;
+    expect(parent.position.x + NODE_WIDTH).toBeLessThan(500);
   });
 });

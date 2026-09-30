@@ -10,6 +10,9 @@ import type { MatrixScope, StoredMatrixColumnPref } from './matrixColumns';
 import type { DiagramMode } from './diagramMode';
 import type { BrokenImportedForeignKey } from '../dbt/importSource';
 import type { HistoryState } from './history';
+import type { TableNode } from '../diagram/graph';
+import type { LineageEdge } from '../diagram/lineage';
+import type { LineageExpansionResult } from '../webview/lineage';
 
 export interface SourceImportReport {
   destinationUri: string;
@@ -96,7 +99,10 @@ export type MessageToWebview =
   | { type: 'group:editTablesResult'; groupId: string; models: string[] | null }
   | { type: 'group:renameResult'; groupId: string; name: string | null }
   | { type: 'history:state'; state: HistoryState }
-  | { type: 'history:applyLayout'; layout: DiagramLayout };
+  | { type: 'history:applyLayout'; layout: DiagramLayout }
+  | { type: 'lineage:state'; nodes: TableNode[]; edges: LineageEdge[] }
+  | { type: 'lineage:progress'; requestId: string; scanned: number; total: number }
+  | { type: 'lineage:result'; result: LineageExpansionResult | null };
 
 /** Messages sent from the webview to the extension host. */
 export type MessageToExtension =
@@ -129,4 +135,7 @@ export type MessageToExtension =
   /** Persist grid column visibility/order for one matrix scope (spec 27). */
   | { type: 'matrix:setColumnPrefs'; scope: MatrixScope; columns: StoredMatrixColumnPref[] }
   /** Open (or focus) the `.sql` file implementing `model` (spec 38). */
-  | { type: 'model:openSql'; model: string };
+  | { type: 'model:openSql'; model: string }
+  | { type: 'lineage:setDisplayed'; models: string[] }
+  | { type: 'lineage:expand'; requestId: string; root: string; direction: 'upstream' | 'downstream' }
+  | { type: 'lineage:cancel'; requestId: string };

@@ -87,6 +87,15 @@ describe('buildLayout', () => {  it('sorts tables by name and rounds coordinates
 });
 
 describe('serializeDiagramLayout / parseDiagramLayout', () => {
+  it('round-trips lineage-added table ids without edge data', () => {
+    const layout: DiagramLayout = { ...sample, tables: [
+      { name: 'model:sample:report', x: 1, y: 2 },
+      { name: 'external:finance_pkg:currency', x: 3, y: 4 },
+    ] };
+    const text = serializeDiagramLayout(layout);
+    expect(parseDiagramLayout(text, 'fallback').tables).toEqual(layout.tables);
+    expect(text).not.toContain('lineage');
+  });
   it('round-trips a layout', () => {
     expect(parseDiagramLayout(serializeDiagramLayout(sample), 'fallback')).toEqual(sample);
   });
