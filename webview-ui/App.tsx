@@ -57,6 +57,8 @@ import { AI_RENAMING_UNAVAILABLE_REASON } from '../src/shared/aiRenaming';
 import { useUndoRedo } from './hooks/useUndoRedo';
 import { UndoRedoControls } from './UndoRedoControls';
 import { HistoryPanel } from './HistoryPanel';
+import { ModelRenameImpactDialog } from './ModelRenameImpact';
+import type { ModelRenameImpact } from '../src/shared/protocol';
 
 export function App(): JSX.Element {
   const [graph, setGraph] = useState<DiagramGraph | null>(null);
@@ -78,6 +80,7 @@ export function App(): JSX.Element {
   const [mode, setMode] = useState<DiagramMode>('model');
   const [aiPromptModel, setAiPromptModel] = useState<string | null>(null);
   const [aiPromptAvailableModels, setAiPromptAvailableModels] = useState<Set<string>>(new Set());
+  const [renameImpact, setRenameImpact] = useState<ModelRenameImpact | null>(null);
   const labels = diagramModeLabels(mode);
 
   const selection = useSelection();
@@ -165,6 +168,7 @@ export function App(): JSX.Element {
     onAppVersion: setAppVersion,
     onAppUpdateStatus: setUpdateStatus,
     onSourceImportResult: sourceImport.applyResult,
+    onModelRenameImpact: setRenameImpact,
     onGroupCreateResult: groups.applyCreateResult,
     onGroupEditTablesResult: groups.applyEditTablesResult,
     onGroupRenameResult: groups.applyRenameResult,
@@ -902,6 +906,7 @@ export function App(): JSX.Element {
         />
       )}
       {sourceImport.report !== null && <ImportReport report={sourceImport.report} onClose={sourceImport.dismiss} />}
+      {renameImpact !== null && <ModelRenameImpactDialog impact={renameImpact} onClose={() => setRenameImpact(null)} />}
       {aiPromptModel !== null && graph !== null && (
         <AiPromptExport
           model={aiPromptModel}

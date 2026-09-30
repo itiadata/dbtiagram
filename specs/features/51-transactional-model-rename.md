@@ -445,6 +445,6 @@ export function describeModelRename(oldName: string, newName: string): string;
 - [x] Any mid-operation failure rolls back, and incomplete rollback is explicit.
 - [x] Undo/redo treats the complete rename as one action.
 - [x] The sample fixture exercises models, macros, tests and snapshots.
-- [ ] A successful user rename shows all affected paths in a React dialog with
+- [x] A successful user rename shows all affected paths in a React dialog with
       an `OK` button; failures and history replay show no impact dialog.
 - [x] `npm run verify` is green.

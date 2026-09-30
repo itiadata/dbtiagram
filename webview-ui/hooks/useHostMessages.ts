@@ -7,7 +7,7 @@
  */
 import { useEffect, useRef } from 'react';
 import { postToHost } from '../host';
-import type { MessageToWebview, SourceImportReport } from '../../src/shared/protocol';
+import type { MessageToWebview, ModelRenameImpact, SourceImportReport } from '../../src/shared/protocol';
 import type { OpenBehavior } from '../../src/shared/openBehavior';
 import type { MatrixScope, StoredMatrixColumnPref } from '../../src/shared/matrixColumns';
 import type { HistoryState } from '../../src/shared/history';
@@ -31,6 +31,7 @@ export interface HostMessageHandlers {
   onAppVersion: (version: string) => void;
   onAppUpdateStatus: (status: 'unknown' | 'upToDate' | 'updateAvailable') => void;
   onSourceImportResult: (report: SourceImportReport) => void;
+  onModelRenameImpact: (impact: ModelRenameImpact) => void;
   onGroupCreateResult: (result: { name: string; models: string[] } | null) => void;
   onGroupEditTablesResult: (groupId: string, models: string[] | null) => void;
   onGroupRenameResult: (groupId: string, name: string | null) => void;
@@ -82,6 +83,9 @@ export function useHostMessages(handlers: HostMessageHandlers): void {
           break;
         case 'sourceImport:result':
           current.onSourceImportResult(message.report);
+          break;
+        case 'modelRename:impact':
+          current.onModelRenameImpact(message.impact);
           break;
         case 'group:createResult':
           current.onGroupCreateResult(message.result);

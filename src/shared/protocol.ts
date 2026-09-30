@@ -17,6 +17,13 @@ export interface SourceImportReport {
   brokenForeignKeys: BrokenImportedForeignKey[];
 }
 
+export interface ModelRenameImpact {
+  oldName: string;
+  newName: string;
+  updatedFiles: string[];
+  sqlRename?: { from: string; to: string };
+}
+
 export interface GroupPickerCandidate {
   id: string;
   label: string;
@@ -84,6 +91,7 @@ export type MessageToWebview =
   /** Latest displayable result of the process-wide automatic/manual update check. */
   | { type: 'app:updateStatus'; status: 'unknown' | 'upToDate' | 'updateAvailable' }
   | { type: 'sourceImport:result'; report: SourceImportReport }
+  | { type: 'modelRename:impact'; impact: ModelRenameImpact }
   | { type: 'group:createResult'; result: { name: string; models: string[] } | null }
   | { type: 'group:editTablesResult'; groupId: string; models: string[] | null }
   | { type: 'group:renameResult'; groupId: string; name: string | null }

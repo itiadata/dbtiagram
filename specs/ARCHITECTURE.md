@@ -88,7 +88,7 @@ including sticky notes (spec 16) and per-table/diagram-wide column-display modes
 
 | Path | Layer | Responsibility | Key exports |
 |------|-------|----------------|-------------|
-| `src/shared/protocol.ts` | shared | The **only** message contract between extension host and webview, including source-import and history requests/results. | `MessageToWebview`, `MessageToExtension`, `DiagramModelFile`, `DiagramPendingError`, `SourceImportReport` |
+| `src/shared/protocol.ts` | shared | The **only** message contract between extension host and webview, including source-import, model-rename impact, and history requests/results. | `MessageToWebview`, `MessageToExtension`, `DiagramModelFile`, `DiagramPendingError`, `SourceImportReport`, `ModelRenameImpact` |
 | `src/shared/diagramMode.ts` | shared | Diagram mode and mode-specific UI nouns. | `DiagramMode`, `diagramModeLabels` |
 | `src/shared/filter.ts` | shared | File/model filtering and selection reconciliation for the filter sidebar, the initial model-selection cap for large workspaces (spec 35), and the pure `removeModels` unchecking helper for table removal (spec 36). | `filterGraph`, `computeVisibleModels`, `reconcileSelection`, `scopeSelectionToFile`, `matchesSearch`, `capInitialSelection`, `INITIAL_MODEL_SELECTION_LIMIT`, `removeModels` |
 | `src/shared/glob.ts` | shared | Minimal glob matching used for model file discovery patterns. | `matchesGlob`, `globToRegExp`, `normalizePathForGlob` |
@@ -138,7 +138,7 @@ via `ExtensionContext.workspaceState` (spec 27). | `readMatrixColumnPrefs`, `wri
 | `src/vscode/clipboard.ts` | vscode-facing | Reads/writes AI rename/type clipboard text and displays native import/export notifications (specs 42/43). | `vscodeAiPromptClipboard`, `showAiPromptCopied`, `vscodeAiPromptImportClipboard`, `vscodeAiPromptImportNotifier` |
 | `src/vscode/aiRenamingRules.ts` | vscode-facing | Reads AI rules from the nearest workspace-bounded dbt project and watches saved marker/rules changes (spec 45). | `readAiRenamingRules`, `registerAiRenamingRulesWatcher` |
 | `src/vscode/dbtProjects.ts` | vscode-facing | Discover containing/all workspace dbt projects and enumerate configured SQL code paths (spec 51). | `findContainingDbtProject`, `findWorkspaceDbtProjects`, `findProjectSqlFiles`, `WorkspaceDbtProject` |
-| `src/vscode/modelRename.ts` | vscode-facing | VS Code filesystem adapter and successful-impact dialog for transactional model renames (spec 51). | `vscodeModelRenameFiles`, `showModelRenameImpact` |
+| `src/vscode/modelRename.ts` | vscode-facing | VS Code filesystem adapter for transactional model rename execution (spec 51). | `vscodeModelRenameFiles` |
 
 ## `src/webview/` — extension-host side of the panel
 
@@ -175,6 +175,7 @@ via `ExtensionContext.workspaceState` (spec 27). | `readMatrixColumnPrefs`, `wri
 | `webview-ui/SettingsPanel.tsx` | webview | "Open new diagrams" settings overlay: option list with descriptions, radio selection, dismiss conventions matching `ContextMenu` (spec 23). | `SettingsPanel`, `SettingsPanelProps` |
 | `webview-ui/Toast.tsx` | webview | Generic auto-dismissing popup with a manual close button; used for the initial model-selection-cap notice (spec 35). | `Toast`, `ToastProps` |
 | `webview-ui/ImportReport.tsx` | webview | Source-import completion modal listing imported names and broken FKs (spec 41). | `ImportReport`, `ImportReportProps` |
+| `webview-ui/ModelRenameImpact.tsx` | webview | Successful model-rename impact modal listing changed files and the SQL path rename (spec 51). | `ModelRenameImpactDialog`, `ModelRenameImpactProps` |
 | `webview-ui/AiPromptExport.tsx` | webview | Batch-size and batch-number dialog for exporting an AI rename/type prompt (spec 42). | `AiPromptExport`, `AiPromptExportProps` |
 | `webview-ui/context-menu-position.ts` | webview (pure) | Viewport flip/clamp geometry for the context menu and its submenu flyouts (spec 15, spec 24). | `placeMenu`, `placeSubmenu`, `MenuBox`, `MenuPoint`, `MenuPlacement`, `SubmenuAnchor` |
 | `webview-ui/details-visibility.ts` | webview (pure) | Details sidebar visibility policy: opens/closes with the selection, manual collapse sticks until it next changes (spec 19); `{visible,key}` transition that keeps the policy safe inside a React state updater (spec 21). | `selectionKey`, `nextDetailsVisible`, `SelectionKey`, `DetailsVisibility`, `initialDetailsVisibility`, `advanceDetailsVisibility` |
