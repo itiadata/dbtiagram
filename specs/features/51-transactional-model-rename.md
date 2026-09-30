@@ -1,7 +1,7 @@
 ---
 id: 51
 title: Rename a model across dbt project files
-status: implemented
+status: done
 priority: high
 created: 2026-09-30
 owner: unassigned
