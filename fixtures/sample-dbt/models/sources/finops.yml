@@ -29,3 +29,7 @@ sources:
         columns:
           - name: id
             data_type: integer
+      - name: staging_orders
+        columns:
+          - name: id
+            data_type: integer

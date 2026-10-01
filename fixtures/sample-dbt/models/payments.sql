@@ -1,1 +1,1 @@
-select * from {{ source('finops', 'transactions') }}
+select * from {{ source('finops', 'staging_orders') }}

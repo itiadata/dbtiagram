@@ -183,7 +183,7 @@ function TableNodeComponent({ id, data }: NodeProps<FlowNode>): JSX.Element {
           title={entityKind === 'source' ? 'Source' : entityKind === 'external' ? 'External model' : 'Model'}
           aria-label={entityKind === 'source' ? 'Source' : entityKind === 'external' ? 'External model' : 'Model'}
         >
-          {entityKind === 'source' ? <Database size={14} strokeWidth={2.5} /> : <Sheet size={14} />}
+          {entityKind === 'source' ? <Database size={16} /> : <Sheet size={16} />}
         </span>
       </div>
       {data.columns.map((column, index) => {

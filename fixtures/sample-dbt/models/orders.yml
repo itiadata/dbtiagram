@@ -19,6 +19,9 @@ models:
       - name: total_amount
         data_type: numeric
         description: Order total excluding tax
+      - name: payment_id
+        data_type: integer
+        description: FK to payments
     constraints:
       - type: primary_key
         columns: [order_id]
@@ -26,3 +29,7 @@ models:
         columns: [customer_id]
         to: ref('customers')
         to_columns: [customer_id]
+      - type: foreign_key
+        columns: [payment_id]
+        to: ref('payments')
+        to_columns: [id]

@@ -93,6 +93,7 @@ describe('sample fixture (fixtures/sample-dbt)', () => {
       'model:sample:order_items.order_id+customer_id->model:sample:orders.order_id+customer_id',
       'model:sample:order_items.product_id->model:sample:products.product_id',
       'model:sample:orders.customer_id->model:sample:customers.customer_id',
+      'model:sample:orders.payment_id->model:sample:payments.id',
       'model:sample:products.product_id->model:sample:customers.customer_id (virtual)',
       'model:sample:staging_orders.order_id->model:sample:orders.order_id',
     ]);
@@ -197,24 +198,24 @@ describe('sample fixture (fixtures/sample-dbt)', () => {
     const file = path.resolve(fixtureModelsDir, 'sources/finops.yml');
     const source = parseSourceYml(fs.readFileSync(file, 'utf8'), file);
     const graph = buildSourceDiagram(source.sources);
-    expect(graph.nodes.map((node) => node.id)).toEqual(['source:finops:costs', 'source:finops:workspaces', 'source:finops:transactions']);
+    expect(graph.nodes.map((node) => node.id)).toEqual(['source:finops:costs', 'source:finops:workspaces', 'source:finops:transactions', 'source:finops:staging_orders']);
     expect(graph.edges[0]).toMatchObject({ source: 'source:finops:costs', target: 'source:finops:workspaces', virtual: true });
   });
 
-  it('keeps one mixed FK and lineage example', () => {
+  it('keeps source/model lineage separate from FKs', () => {
     const graph = buildDiagram(loadFixtureModels());
     const fkPairs = new Set(graph.edges.map((edge) => [edge.source, edge.target].sort().join('\0')));
-    const overlaps = fixtureLineageEdges().filter((edge) => fkPairs.has([edge.parent, edge.child].sort().join('\0')));
-    expect(overlaps).toEqual([
-      { parent: 'model:sample:orders', child: 'model:sample:order_items' },
-    ]);
+    const sourceModelOverlaps = fixtureLineageEdges().filter(
+      (edge) => edge.parent.startsWith('source:') && fkPairs.has([edge.parent, edge.child].sort().join('\0')),
+    );
+    expect(graph.edges).toContainEqual(expect.objectContaining({ source: 'model:sample:orders', target: 'model:sample:payments' }));
+    expect(sourceModelOverlaps).toEqual([]);
   });
 
-  it('loads local and external fixture lineage', () => {
+  it('loads source and external fixture lineage', () => {
     expect(fixtureLineageEdges()).toEqual(expect.arrayContaining([
-      { parent: 'source:finops:transactions', child: 'model:sample:payments' },
-      { parent: 'model:sample:orders', child: 'model:sample:order_items' },
-      { parent: 'model:sample:order_items', child: 'model:sample:order_summary' },
+      { parent: 'source:finops:staging_orders', child: 'model:sample:payments' },
+      { parent: 'source:finops:staging_orders', child: 'model:sample:orders' },
       { parent: 'external:finance_pkg:dim_currency', child: 'model:sample:order_summary' },
     ]));
   });
@@ -252,7 +253,10 @@ describe('sample fixture (fixtures/sample-dbt)', () => {
     const built = buildStaticSite({ projectRoot: root, packageName: 'sample', yamlFiles, sqlFiles, layoutFiles }, 100);
     expect(built.data.universe?.graph.nodes.some((node) => node.entityKind === 'model')).toBe(true);
     expect(built.data.universe?.graph.nodes.some((node) => node.entityKind === 'source')).toBe(true);
-    expect(built.data.universe?.graph.lineageEdges).toContainEqual({ parent: 'source:finops:transactions', child: 'model:sample:payments' });
+    expect(built.data.universe?.graph.lineageEdges).toEqual(expect.arrayContaining([
+      { parent: 'source:finops:staging_orders', child: 'model:sample:payments' },
+      { parent: 'source:finops:staging_orders', child: 'model:sample:orders' },
+    ]));
     expect(built.warnings).toEqual([]);
   });
 });
