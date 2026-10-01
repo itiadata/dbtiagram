@@ -1,7 +1,7 @@
 ---
 id: 52
 title: Add SQL-derived model lineage to diagrams
-status: done
+status: approved
 priority: high
 created: 2026-09-30
 owner: unassigned
@@ -56,6 +56,8 @@ projects must not have every SQL file parsed or watched during normal use.
 - Auto-layout always rearranges every card and ranks lineage parent → child from
   left to right.
 - Show FK and lineage edges simultaneously, including between the same pair.
+- Render lineage lines and arrowheads with VS Code's secondary button colour,
+  rather than the primary accent colour.
 - Fixture SQL with multi-level, unknown and external refs.
 
 **Out of scope**
@@ -158,6 +160,15 @@ Then every card is rearranged
 And parent is left of child and child is left of grandchild
 ```
 
+### Distinguish lineage arrows with the secondary colour
+
+```
+Given lineage is displayed between two tables
+When the diagram renders the lineage edge
+Then the line uses the VS Code secondary button background colour
+And the arrowhead uses the same secondary colour
+```
+
 ## Implementation Plan
 
 ### Files
@@ -168,7 +179,7 @@ And parent is left of child and child is left of grandchild
 | `src/diagram/graph.ts` | modify | Add read-only/external node metadata and a separate lineage-edge collection. |
 | `src/diagram/layout.ts` | modify | Rank lineage parent-to-child and avoid opposing FK rank constraints for the same pair. |
 | `src/diagram/positions.ts` | modify | Place newly added lineage generations around retained manual positions without moving existing cards. |
-| `src/diagram/flow.ts` | modify | Build header-anchored lineage Flow edges alongside FK edges. |
+| `src/diagram/flow.ts` | modify | Build header-anchored lineage Flow edges alongside FK edges and theme their arrow markers with the secondary button colour. |
 | `src/shared/protocol.ts` | modify | Add visible-model sync, lineage requests/results/progress/cancel and lineage graph payloads. |
 | `src/shared/filter.ts` | modify | Preserve lineage edges when filtering a diagram graph. |
 | `src/vscode/lineageFiles.ts` | create | Read model SQL on demand, enumerate project model SQL, and manage exact-file watchers for displayed local models. |
@@ -184,7 +195,7 @@ And parent is left of child and child is left of grandchild
 | `webview-ui/LineageEdge.tsx` | create | Render the thicker themed parent-to-child arrow. |
 | `webview-ui/LineageProgress.tsx` | create | Modal progress UI and Cancel action for downstream scans. |
 | `webview-ui/icons.ts` | modify | Export lineage submenu icons. |
-| `webview-ui/styles.css` | modify | Lineage arrow, header handle, read-only card and progress styles. |
+| `webview-ui/styles.css` | modify | Lineage arrow, header handle, read-only card and progress styles, using the secondary button colour for lineage strokes. |
 | `test/unit/diagram/lineage.test.ts` | create | Identity, closure, cycle and dedupe tests. |
 | `test/unit/diagram/layout.test.ts` | modify | Parent-left-child ordering tests. |
 | `test/unit/diagram/layoutFile.test.ts` | modify | Verify lineage-added table IDs persist through ordinary table entries without edge data. |
@@ -319,7 +330,8 @@ export function canvasOnlyLineageNodes(nodes: readonly TableNode[]): TableNode[]
   details/matrix/FK actions, and no Reveal/Open SQL actions. They retain Remove
   from diagram and Add lineage actions.
 - Lineage edges attach at header-centre left/right handles, carry an arrow marker
-  at the child, use a 2.5px themed stroke, and coexist with FK edges. Their
+  at the child, use a 2.5px `var(--vscode-button-secondaryBackground)` stroke,
+  and coexist with FK edges. Their
   source and target sides are recalculated from the current table positions:
   the parent uses the side facing the child and the child uses the side facing
   the parent. The arrowhead uses exactly the same themed colour as the line.
@@ -368,7 +380,7 @@ And lineage state does not add the card back
 | `test/unit/webview/lineage.test.ts` | `retains only canvas-only lineage nodes` | one local and one external expansion node | only the external node remains in lineage-owned canvas state |
 | `test/unit/diagram/layoutFile.test.ts` | `round-trips lineage-added table IDs without edge data` | layout tables `model:sample:report`, `external:finance_pkg:currency` with positions | same two table entries and positions; serialized YAML has no lineage key |
 | `test/unit/diagram/flow.test.ts` | `builds header lineage and column FK together` | same node pair has one lineage and one FK | two edges; lineage uses header anchors and arrow; FK retains column handles |
-| `test/unit/diagram/flow.test.ts` | `lineage handles face the opposite table after movement` | parent positioned right of child | parent uses left header handle; child uses right header handle; marker colour equals line colour |
+| `test/unit/diagram/flow.test.ts` | `lineage handles face the opposite table after movement` | parent positioned right of child | parent uses left header handle; child uses right header handle; marker colour is `var(--vscode-button-secondaryBackground)` and matches the CSS line colour |
 | `test/unit/diagram/layout.test.ts` | `ranks lineage left to right` | parent→child→grandchild | `parent.x < child.x < grandchild.x` |
 | `test/unit/diagram/positions.test.ts` | `adds upstream without moving retained cards` | retained child at `{x:500,y:100}`, new parent | child unchanged; parent right edge is left of child x |
 | `test/integration/suite/extension.test.ts` | `watches only displayed model SQL files` | two displayed and 100 hidden model SQL paths | exact watchers registered for two paths only |
@@ -396,6 +408,7 @@ And lineage state does not add the card back
 - [ ] Saved layouts store displayed tables and positions, never lineage arrows; arrows are recalculated from current SQL.
 - [ ] Unknown/external cards are name-only, read-only and canvas-only.
 - [ ] Header arrows coexist with column FK lines.
+- [ ] Lineage lines and arrowheads use the VS Code secondary button background colour.
 - [ ] Addition preserves positions; Auto-layout puts parents left of children.
 - [ ] The fixture supports manual upstream/downstream/external testing.
 - [ ] `npm run verify` is green.
