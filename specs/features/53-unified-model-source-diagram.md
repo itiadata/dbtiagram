@@ -1,7 +1,7 @@
 ---
 id: 53
 title: Unify model and source diagrams
-status: approved
+status: implemented
 priority: medium
 created: 2026-09-30
 owner: unassigned
