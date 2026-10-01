@@ -1862,7 +1862,7 @@ body.vscode-dark .group-color-swatch--cyan { --swatch: #22d3ee; }
 .history-row span { flex: 1; }
 .history-row small { padding: 2px 5px; border-radius: 3px; background: var(--vscode-badge-background); color: var(--vscode-badge-foreground); }
 .history-row em { font-style: normal; color: var(--vscode-descriptionForeground); }
-.react-flow__edge-lineage .react-flow__edge-path { stroke: var(--vscode-button-secondaryBackground); stroke-width: 2.5px; }
+.react-flow__edge-lineage .react-flow__edge-path { stroke: color-mix(in srgb, var(--accent) 50%, var(--vscode-button-secondaryBackground)); stroke-width: 2.5px; }
 .table-node--readonly { border-style: dashed; opacity: .9; }
 .lineage-progress { position: absolute; inset: 0; z-index: 1000; display: grid; place-items: center; background: rgba(0,0,0,.35); }
 .lineage-progress__card { min-width: 280px; padding: 20px; border: 1px solid var(--vscode-panel-border); background: var(--vscode-editor-background); box-shadow: 0 8px 24px rgba(0,0,0,.35); }
