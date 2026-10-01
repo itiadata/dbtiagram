@@ -1,7 +1,7 @@
 ---
 id: 53
 title: Unify model and source diagrams
-status: implemented
+status: approved
 priority: medium
 created: 2026-09-30
 owner: unassigned
@@ -131,7 +131,7 @@ Then each source card has the Lucide Database icon at the top right
 And each local or external model card has the Lucide Sheet icon at the top right
 And source icons are orange
 And model and external-model icons use the primary accent colour
-And the source icon uses a 2.5 stroke width for comparable visual weight
+And both icons render at 16px with Lucide's standard 2px stroke width
 ```
 
 ### Show representative fixture lineage
@@ -139,10 +139,10 @@ And the source icon uses a 2.5 stroke width for comparable visual weight
 ```
 Given the sample fixture diagram is opened
 When current SQL lineage is reconstructed
-Then finops.transactions points to payments
-And orders points to order_items, which points to order_summary
+Then a source table points to two local models through SQL lineage
+And those two models are related by a foreign key
 And finance_pkg.dim_currency points to order_summary as an external-package model
-And only orders and order_items demonstrate the same pair having both SQL lineage and a foreign key
+And no source/model pair is also related by a foreign key
 ```
 
 ## Implementation Plan
@@ -213,9 +213,11 @@ And only orders and order_items demonstrate the same pair having both SQL lineag
 | `test/unit/static/site.test.ts` | modify | Combined static graph/layout/current-SQL lineage tests. |
 | `test/unit/static/project.test.ts` | modify | Static package-name and SQL discovery tests. |
 | `test/integration/suite/extension.test.ts` | modify | Both commands, scoping and combined persistence coverage. |
-| `fixtures/sample-dbt/models/payments.yml` | create | Model metadata for source-lineage manual testing. |
-| `fixtures/sample-dbt/models/payments.sql` | create | `source('finops', 'transactions')` fixture dependency. |
-| `fixtures/sample-dbt/models/sources/finops.yml` | modify | Add the transactions source table referenced by payments.sql. |
+| `fixtures/sample-dbt/models/payments.yml` | create | Model metadata for source-lineage and model-FK manual testing. |
+| `fixtures/sample-dbt/models/payments.sql` | create | `source('finops', 'staging_orders')` fixture dependency. |
+| `fixtures/sample-dbt/models/orders.sql` | modify | Add `source('finops', 'staging_orders')` lineage alongside the fixture's independent model SQL. |
+| `fixtures/sample-dbt/models/orders.yml` | modify | Retain the FK relationship from orders to payments for fixture manual testing. |
+| `fixtures/sample-dbt/models/sources/finops.yml` | modify | Add the staging_orders source table referenced by payments.sql and orders.sql. |
 | `fixtures/sample-dbt/models/customers.sql` | modify | Remove executable model lineage that duplicates the existing orders/customers FK example. |
 | `fixtures/sample-dbt/models/order_summary.sql` | modify | Keep local model lineage and add a direct executable external-package model ref for manual verification. |
 | `fixtures/sample-dbt/diagrams/orders.dbtiagram.yml` | modify | Convert the committed sample layout to namespaced version 2. |
@@ -445,8 +447,8 @@ export interface GenerateStaticSiteResult {
   entities use Lucide `Database`; model and external entities use Lucide
   `Sheet`. Source icons use `var(--vscode-charts-orange, #f59e0b)`; local and
   external model icons use `var(--accent)`. The icon has the tooltip `Source`,
-  `Model`, or `External model`. The Database icon uses `strokeWidth={2.5}` so
-  its curved lines have comparable visual weight to the Sheet icon.
+  `Model`, or `External model`. Both Lucide icons render at `size={16}` with
+  their default 2px stroke width, avoiding small-size aliasing artifacts.
 - Both stores load for every panel. Opening from a file applies initial scope
   only to that domain: the invoked file is checked and the other domain starts
   unchecked. Palette/layout opens follow their existing all/layout behavior.
@@ -494,13 +496,11 @@ export interface GenerateStaticSiteResult {
 - Existing command IDs remain unchanged. Entity-file panel keys include the
   invoking domain, so opening the same physical YAML through different commands
   cannot alias accidentally; both panel instances still contain combined data.
-- The committed sample keeps one intentional overlap between relationship
-  systems: `orders -> order_items` is represented by SQL lineage and by the
-  existing FK in the opposite child-to-parent edge convention. Other examples
-  avoid duplicating the same table pair across FK and lineage. The representative
-  lineage chain is `finops.transactions -> payments` and
-  `orders -> order_items -> order_summary`, with
-  `finance_pkg.dim_currency -> order_summary` demonstrating an external model.
+- The committed sample demonstrates a source table feeding two models without
+  a cross-domain FK: `finops.staging_orders -> payments` and
+  `finops.staging_orders -> orders`. The local models demonstrate FKs separately
+  through `orders -> payments`. `finance_pkg.dim_currency -> order_summary`
+  remains the external-model lineage example.
 
 ### Tests
 
@@ -526,9 +526,9 @@ export interface GenerateStaticSiteResult {
 | `test/unit/webview/layoutMessages.test.ts` | `opens a combined layout without a mode check` | namespaced model/source entries | one `layout:apply` with both entries and no error |
 | `test/unit/static/site.test.ts` | `builds one combined static universe with current source lineage` | model SQL calling a fixture source | namespaced model/source nodes and source-to-model lineage edge |
 | `test/unit/static/project.test.ts` | `loads package identity and model SQL` | temp project with dbt_project.yml and models/payments.sql | `packageName: sample` and SQL input `models/payments.sql` |
-| `test/unit/fixture.test.ts` | `loads combined fixture source lineage` | sample project payments SQL and finops source | `source:finops:transactions -> model:sample:payments` |
-| `test/unit/fixture.test.ts` | `keeps one mixed FK and lineage example` | fixture graph plus current SQL | only the orders/order_items pair appears in both relationship systems |
-| `test/unit/fixture.test.ts` | `loads local and external fixture lineage` | order_items/order_summary SQL | local chain plus `external:finance_pkg:dim_currency -> model:sample:order_summary` |
+| `test/unit/fixture.test.ts` | `loads combined fixture source lineage` | payments/orders SQL and finops staging_orders source | both source-to-model edges are present |
+| `test/unit/fixture.test.ts` | `keeps source/model lineage separate from FKs` | fixture graph plus current SQL | `orders -> payments` is an FK; no source/model pair appears in both systems |
+| `test/unit/fixture.test.ts` | `loads external fixture lineage` | order_summary SQL | `external:finance_pkg:dim_currency -> model:sample:order_summary` |
 | `test/integration/suite/extension.test.ts` | `both commands open combined panels` | invoke model then source commands | model-file and source-file titled diagram tabs both open successfully |
 
 ### Verification
@@ -554,6 +554,6 @@ export interface GenerateStaticSiteResult {
 - [ ] Layout files store tables but no lineage arrows; current SQL reconstructs arrows without removing tables.
 - [ ] Card headers distinguish sources from local/external models with Database and Sheet icons.
 - [ ] Source icons are orange; local and external model icons use the primary accent colour.
-- [ ] The source Database icon uses a 2.5 stroke width.
-- [ ] The sample fixture demonstrates source, local-model and external-package lineage with only one intentional FK/lineage overlap.
+- [ ] Both 16px domain icons use Lucide's default 2px stroke width.
+- [ ] The sample fixture demonstrates one source feeding two models, those local models connected by an FK, and external-package lineage.
 - [ ] `npm run verify` is green.
