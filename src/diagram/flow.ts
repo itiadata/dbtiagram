@@ -236,7 +236,7 @@ export function buildFlowElements(
       targetHandle,
       type: LINEAGE_EDGE_TYPE,
       interactionWidth: EDGE_INTERACTION_WIDTH,
-      markerEnd: { type: MarkerType.ArrowClosed, color: 'var(--vscode-charts-blue)' },
+      markerEnd: { type: MarkerType.ArrowClosed, color: 'var(--vscode-button-secondaryBackground)' },
       data: { title: `${edge.parent} -> ${edge.child}`, kind: 'lineage' },
     });
   }

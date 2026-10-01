@@ -1,7 +1,7 @@
 ---
 id: 52
 title: Add SQL-derived model lineage to diagrams
-status: approved
+status: implemented
 priority: high
 created: 2026-09-30
 owner: unassigned

@@ -67,7 +67,7 @@ describe('buildFlowElements', () => {
     ], () => undefined, () => undefined).edges[0];
     expect(routed.sourceHandle).toBe(columnSourceHandle(LINEAGE_HEADER_ANCHOR, 'left'));
     expect(routed.targetHandle).toBe(columnTargetHandle(LINEAGE_HEADER_ANCHOR, 'right'));
-    expect(routed.markerEnd).toMatchObject({ color: 'var(--vscode-charts-blue)' });
+    expect(routed.markerEnd).toMatchObject({ color: 'var(--vscode-button-secondaryBackground)' });
   });
   it('maps every model to a table node positioned by the layout', () => {
     const { flow, layout } = flowFor([
