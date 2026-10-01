@@ -179,7 +179,7 @@ function TableNodeComponent({ id, data }: NodeProps<FlowNode>): JSX.Element {
           <span className="table-node__title-text">{data.label}</span>
         )}
         <span
-          className="table-node__entity-icon nodrag"
+          className={`table-node__entity-icon table-node__entity-icon--${entityKind === 'source' ? 'source' : 'model'} nodrag`}
           title={entityKind === 'source' ? 'Source' : entityKind === 'external' ? 'External model' : 'Model'}
           aria-label={entityKind === 'source' ? 'Source' : entityKind === 'external' ? 'External model' : 'Model'}
         >
