@@ -154,6 +154,16 @@ Then the diagram is scoped to that file and all 10 of its models are checked
 And no popup is shown (or a workspace-level one that briefly appeared is dismissed), since the file the user is actually looking at is under the cap
 ```
 
+### Opening a saved diagram clears the workspace-level cap notice
+
+```
+Given a workspace with 228 models
+And a saved diagram lists 22 entities
+When the saved diagram is opened
+Then all 22 saved entities are displayed
+And no "Showing 20 of 228 models" popup is shown
+```
+
 ## Implementation Plan
 
 ### Files
@@ -163,6 +173,7 @@ And no popup is shown (or a workspace-level one that briefly appeared is dismiss
 | `src/shared/filter.ts` | modify | Add `INITIAL_MODEL_SELECTION_LIMIT` and pure `capInitialSelection` helper. |
 | `test/unit/shared/filter.test.ts` | modify | Unit tests for `capInitialSelection`. |
 | `webview-ui/hooks/useDiagramFilter.ts` | modify | On the first-ever `applyModelFiles` call, seed `selectedModels` via `capInitialSelection` when the total exceeds the limit, and expose an `initialCapNotice` + `dismissInitialCapNotice`. Also apply the same cap inside `applyScope` (spec 14's per-file scoping), against that file's own model count, since scoping supersedes the workspace-wide seed. |
+| `test/unit/webview/useDiagramFilter.test.ts` | create | Regression coverage for saved-layout selection replacing the capped initial selection and clearing its notice. |
 | `webview-ui/Toast.tsx` | create | Small presentational auto-dismissing popup component. |
 | `webview-ui/App.tsx` | modify | Render `<Toast>` when `filter.initialCapNotice` is set. |
 | `webview-ui/styles.css` | modify | `.toast` styles (fixed position, dark-theme aware, dismiss button). |
@@ -201,6 +212,15 @@ export interface DiagramFilterState {
   initialCapNotice: InitialCapNotice | null;
   dismissInitialCapNotice: () => void;
 }
+
+export interface LayoutFilterSelection {
+  selectedEntitiesByDomain: Readonly<Record<DiagramDomain, Set<string>>>;
+  initialCapNotice: null;
+}
+
+export function filterSelectionForLayout(
+  ids: readonly string[],
+): LayoutFilterSelection;
 ```
 
 ```tsx
@@ -264,6 +284,12 @@ export function Toast(props: ToastProps): JSX.Element;
   `filter:scope` once per panel lifetime (constructor + the `webview:ready`
   re-send race guard, both gated on `source.kind === 'model'`), so `applyScope`
   naturally runs at most once per webview instance.
+- **Saved layouts supersede the cap notice.** `layout:apply` replaces the
+  temporary initial selection with exactly the saved layout's existing entity
+  IDs. The same transition must set `initialCapNotice` to `null`, because its
+  workspace-level `shown` count no longer describes what the canvas displays.
+  `filterSelectionForLayout` derives both pieces of replacement state together
+  so the regression is covered without a VS Code host or browser DOM.
 
 ### Tests
 
@@ -272,6 +298,7 @@ export function Toast(props: ToastProps): JSX.Element;
 | `test/unit/shared/filter.test.ts` | `capInitialSelection returns everything at or under the limit` | `capInitialSelection(['a','b'], 20)` | `new Set(['a','b'])` |
 | `test/unit/shared/filter.test.ts` | `capInitialSelection keeps only the first N in order` | `capInitialSelection(Array.from({length: 47}, (_,i) => `m${i}`), 20)` | a `Set` equal to `new Set(Array.from({length:20}, (_,i) => `m${i}`))` (first 20 names, `m0`..`m19`) |
 | `test/unit/shared/filter.test.ts` | `capInitialSelection uses the default limit of 20 when omitted` | `capInitialSelection(Array.from({length: 25}, (_,i) => `m${i}`))` | a `Set` of size 20 containing `m0`..`m19` |
+| `test/unit/webview/useDiagramFilter.test.ts` | `saved layout selection clears an initial cap notice` | 22 model entity IDs passed to `filterSelectionForLayout` after an initial `{ shown: 20, total: 228 }` notice | all 22 IDs in `selectedEntitiesByDomain.model`, an empty source set, and `initialCapNotice: null` |
 
 ### Verification
 
@@ -302,6 +329,8 @@ export function Toast(props: ToastProps): JSX.Element;
       no repeated popup.
 - [ ] Reopening the diagram panel re-evaluates the cap and can show the popup
       again.
+- [ ] Opening a saved diagram displays exactly its existing entities and clears
+      any initial workspace-cap popup.
 - [ ] `src/shared/filter.ts` stays pure (no `vscode` import) and
       `capInitialSelection` is covered by sub-second Vitest unit tests.
 - [ ] `npm test` and `npm run typecheck` pass; `computeVisibleModels`,
