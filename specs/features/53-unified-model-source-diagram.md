@@ -1,7 +1,7 @@
 ---
 id: 53
 title: Unify model and source diagrams
-status: implemented
+status: approved
 priority: medium
 created: 2026-09-30
 owner: unassigned
@@ -122,6 +122,26 @@ When all are displayed
 Then they are three distinct cards despite overlapping visible names
 ```
 
+### Identify each card's domain
+
+```
+Given model, source and external-package model cards are displayed
+When the user looks at their table headers
+Then each source card has the Lucide Database icon at the top right
+And each local or external model card has the Lucide Sheet icon at the top right
+```
+
+### Show representative fixture lineage
+
+```
+Given the sample fixture diagram is opened
+When current SQL lineage is reconstructed
+Then finops.transactions points to payments
+And orders points to order_items, which points to order_summary
+And finance_pkg.dim_currency points to order_summary as an external-package model
+And only orders and order_items demonstrate the same pair having both SQL lineage and a foreign key
+```
+
 ## Implementation Plan
 
 ### Files
@@ -157,6 +177,9 @@ Then they are three distinct cards despite overlapping visible names
 | `webview-ui/FieldsMatrix.tsx` | modify | Select model/source matrix policy by row entity kind. |
 | `webview-ui/FieldsMatrixRow.tsx` | modify | Enforce source-row read-only cells inside a mixed global matrix. |
 | `webview-ui/ForeignKeySection.tsx` | modify | Restrict FK targets to the selected entity's domain and show concise labels. |
+| `webview-ui/TableNode.tsx` | modify | Render a domain icon at the top right of every table header: Database for sources and Sheet for local/external models. |
+| `webview-ui/icons.ts` | modify | Re-export the Lucide Database and Sheet icons. |
+| `webview-ui/styles.css` | modify | Position and style the domain icon without obstructing title editing or header lineage handles. |
 | `webview-ui/hooks/useDraftForeignKeys.ts` | modify | Select forced-virtual behavior from the source entity kind. |
 | `webview-ui/hooks/useSourceImport.ts` | modify | Reveal imported model entity IDs while retaining concise report names. |
 | `src/static/project.ts` | modify | Read the dbt package name and model SQL files for static lineage. |
@@ -190,6 +213,8 @@ Then they are three distinct cards despite overlapping visible names
 | `fixtures/sample-dbt/models/payments.yml` | create | Model metadata for source-lineage manual testing. |
 | `fixtures/sample-dbt/models/payments.sql` | create | `source('finops', 'transactions')` fixture dependency. |
 | `fixtures/sample-dbt/models/sources/finops.yml` | modify | Add the transactions source table referenced by payments.sql. |
+| `fixtures/sample-dbt/models/customers.sql` | modify | Remove executable model lineage that duplicates the existing orders/customers FK example. |
+| `fixtures/sample-dbt/models/order_summary.sql` | modify | Keep local model lineage and add a direct executable external-package model ref for manual verification. |
 | `fixtures/sample-dbt/diagrams/orders.dbtiagram.yml` | modify | Convert the committed sample layout to namespaced version 2. |
 | `fixtures/sample-dbt/diagrams/customers.dbtiagram.yml` | modify | Convert the committed sample layout to namespaced version 2. |
 | `specs/ARCHITECTURE.md` | modify | Register entity IDs and update all changed responsibilities. |
@@ -413,6 +438,9 @@ export interface GenerateStaticSiteResult {
 
 - Visible labels remain concise; identity always uses the namespaced ID. A model
   and source with the same visible name therefore never collide.
+- Card headers show a non-interactive domain icon at the top right. Source
+  entities use Lucide `Database`; model and external entities use Lucide
+  `Sheet`. The icon has the tooltip `Source`, `Model`, or `External model`.
 - Both stores load for every panel. Opening from a file applies initial scope
   only to that domain: the invoked file is checked and the other domain starts
   unchecked. Palette/layout opens follow their existing all/layout behavior.
@@ -460,6 +488,13 @@ export interface GenerateStaticSiteResult {
 - Existing command IDs remain unchanged. Entity-file panel keys include the
   invoking domain, so opening the same physical YAML through different commands
   cannot alias accidentally; both panel instances still contain combined data.
+- The committed sample keeps one intentional overlap between relationship
+  systems: `orders -> order_items` is represented by SQL lineage and by the
+  existing FK in the opposite child-to-parent edge convention. Other examples
+  avoid duplicating the same table pair across FK and lineage. The representative
+  lineage chain is `finops.transactions -> payments` and
+  `orders -> order_items -> order_summary`, with
+  `finance_pkg.dim_currency -> order_summary` demonstrating an external model.
 
 ### Tests
 
@@ -486,6 +521,8 @@ export interface GenerateStaticSiteResult {
 | `test/unit/static/site.test.ts` | `builds one combined static universe with current source lineage` | model SQL calling a fixture source | namespaced model/source nodes and source-to-model lineage edge |
 | `test/unit/static/project.test.ts` | `loads package identity and model SQL` | temp project with dbt_project.yml and models/payments.sql | `packageName: sample` and SQL input `models/payments.sql` |
 | `test/unit/fixture.test.ts` | `loads combined fixture source lineage` | sample project payments SQL and finops source | `source:finops:transactions -> model:sample:payments` |
+| `test/unit/fixture.test.ts` | `keeps one mixed FK and lineage example` | fixture graph plus current SQL | only the orders/order_items pair appears in both relationship systems |
+| `test/unit/fixture.test.ts` | `loads local and external fixture lineage` | order_items/order_summary SQL | local chain plus `external:finance_pkg:dim_currency -> model:sample:order_summary` |
 | `test/integration/suite/extension.test.ts` | `both commands open combined panels` | invoke model then source commands | model-file and source-file titled diagram tabs both open successfully |
 
 ### Verification
@@ -509,4 +546,6 @@ export interface GenerateStaticSiteResult {
 - [ ] Domain-specific editing rules remain intact.
 - [ ] Namespaced layouts save and reopen; pre-feature layout files are rejected without migration.
 - [ ] Layout files store tables but no lineage arrows; current SQL reconstructs arrows without removing tables.
+- [ ] Card headers distinguish sources from local/external models with Database and Sheet icons.
+- [ ] The sample fixture demonstrates source, local-model and external-package lineage with only one intentional FK/lineage overlap.
 - [ ] `npm run verify` is green.
