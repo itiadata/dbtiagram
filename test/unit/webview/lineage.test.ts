@@ -77,6 +77,37 @@ describe('lineage orchestration', () => {
     ]);
   });
 
+  it('expands downstream transitively from a source', async () => {
+    const values: LineageProgress[] = [];
+    const sourceHost = host({
+      payments: "select * from {{ source('finops', 'transactions') }}",
+      report: "select * from {{ ref('payments') }}",
+    }, values);
+    sourceHost.resolveModelNode = async (packageName, name) => ({
+      ...node(`model:${packageName === '' ? 'sample' : packageName}:${name}`, name),
+      lineageKind: 'local',
+      packageName: packageName === '' ? 'sample' : packageName,
+    });
+    const result = await expandDownstream(sourceHost, 'source-descendants', 'source:finops:transactions');
+    expect(values.at(-1)).toEqual({ scanned: 2, total: 2 });
+    expect(result?.nodes.map((item) => item.id)).toEqual(['model:sample:payments', 'model:sample:report']);
+    expect(result?.edges).toEqual([
+      { parent: 'source:finops:transactions', child: 'model:sample:payments' },
+      { parent: 'model:sample:payments', child: 'model:sample:report' },
+    ]);
+  });
+
+  it('returns an empty downstream result for an unused source', async () => {
+    const values: LineageProgress[] = [];
+    const result = await expandDownstream(host({
+      payments: 'select 1',
+      report: "select * from {{ ref('payments') }}",
+    }, values), 'unused-source', 'source:finops:transactions');
+    expect(values.at(-1)).toEqual({ scanned: 2, total: 2 });
+    expect(result?.nodes).toEqual([]);
+    expect(result?.edges).toEqual([]);
+  });
+
   it('cancels downstream atomically', async () => {
     expect(await expandDownstream(host({ a: 'select 1', b: "{{ ref('a') }}", c: "{{ ref('b') }}" }, [], 1), 'r3', 'model:sample:a')).toBeNull();
   });

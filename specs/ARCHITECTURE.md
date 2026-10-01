@@ -247,6 +247,7 @@ filter text for the fields matrix (spec 27). | `useFieldsMatrix`, `FieldsMatrixS
 | `webview-ui/LineageEdge.tsx` | webview | Renders thick parent-to-child lineage arrows (spec 52). | `LineageEdge` |
 | `webview-ui/LineageProgress.tsx` | webview | Downstream scan progress modal and cancellation action (spec 52). | `LineageProgress` |
 | `webview-ui/hooks/useLineage.ts` | webview | Owns expansion/progress state, external cards, lineage edges, and host messages (spec 52). | `useLineage`, `LineageState` |
+| `webview-ui/lineage-menu.ts` | webview (pure) | Selects upstream/downstream context-menu actions by diagram entity kind (spec 56). | `LineageDirection`, `lineageDirectionsForEntity` |
 
 ## `static-ui/` — offline browser viewer
 

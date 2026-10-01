@@ -62,6 +62,7 @@ import { useLineage } from './hooks/useLineage';
 import { LineageProgress } from './LineageProgress';
 import { GitBranch, ArrowLeftFromLine, ArrowRightFromLine } from './icons';
 import { parseDiagramEntityId } from '../src/shared/entityId';
+import { lineageDirectionsForEntity } from './lineage-menu';
 
 export function App(): JSX.Element {
   const [graph, setGraph] = useState<DiagramGraph | null>(null);
@@ -466,14 +467,18 @@ export function App(): JSX.Element {
       const missingRelated = related.filter((name) => !filter.visibleEntities.has(name));
       const tableGroup = groupForModel(groups.groups, model);
       const readOnly = graphWithLineage?.nodes.find((node) => node.id === model)?.readOnly === true;
-      const modelEntity = entityKind(model) === 'model';
+      const kind = entityKind(model) ?? parseDiagramEntityId(model)?.kind ?? 'model';
+      const modelEntity = kind === 'model';
       const rawName = rawModelName(model);
+      const lineageItems: ContextMenuItem[] = lineageDirectionsForEntity(kind).map((direction) => ({
+        label: direction === 'upstream' ? 'Add upstream lineage' : 'Add downstream lineage',
+        icon: direction === 'upstream' ? <ArrowLeftFromLine size={16} /> : <ArrowRightFromLine size={16} />,
+        disabled: direction === 'upstream' && modelEntity && (rawName === null || !sqlModels.has(rawName)),
+        onSelect: () => lineage.expand(model, direction),
+      }));
       if (readOnly) return [
         {
-          label: 'Add lineage', icon: <GitBranch size={16} />, items: [
-            { label: 'Add upstream lineage', icon: <ArrowLeftFromLine size={16} />, onSelect: () => lineage.expand(model, 'upstream') },
-            { label: 'Add downstream lineage', icon: <ArrowRightFromLine size={16} />, onSelect: () => lineage.expand(model, 'downstream') },
-          ],
+          label: 'Add lineage', icon: <GitBranch size={16} />, items: lineageItems,
         },
         { label: 'Remove from diagram', icon: <Trash2 size={16} />, onSelect: () => onRemoveTable(model) },
       ];
@@ -486,12 +491,7 @@ export function App(): JSX.Element {
           title: rawName !== null && sqlModels.has(rawName) ? undefined : `No .sql file found for "${model}"`,
           onSelect: () => onOpenModelSql(model),
         }] : []),
-        ...(modelEntity ? [{
-          label: 'Add lineage', icon: <GitBranch size={16} />, items: [
-            { label: 'Add upstream lineage', icon: <ArrowLeftFromLine size={16} />, disabled: rawName === null || !sqlModels.has(rawName), onSelect: () => lineage.expand(model, 'upstream') },
-            { label: 'Add downstream lineage', icon: <ArrowRightFromLine size={16} />, onSelect: () => lineage.expand(model, 'downstream') },
-          ],
-        }] : []),
+        { label: 'Add lineage', icon: <GitBranch size={16} />, items: lineageItems },
         {
           label: 'Add related tables',
           icon: <Waypoints size={16} />,
