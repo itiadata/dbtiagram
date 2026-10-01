@@ -1,7 +1,7 @@
 ---
 id: 53
 title: Unify model and source diagrams
-status: implemented
+status: approved
 priority: medium
 created: 2026-09-30
 owner: unassigned
@@ -129,6 +129,8 @@ Given model, source and external-package model cards are displayed
 When the user looks at their table headers
 Then each source card has the Lucide Database icon at the top right
 And each local or external model card has the Lucide Sheet icon at the top right
+And source icons are orange
+And model and external-model icons use the primary accent colour
 ```
 
 ### Show representative fixture lineage
@@ -440,7 +442,9 @@ export interface GenerateStaticSiteResult {
   and source with the same visible name therefore never collide.
 - Card headers show a non-interactive domain icon at the top right. Source
   entities use Lucide `Database`; model and external entities use Lucide
-  `Sheet`. The icon has the tooltip `Source`, `Model`, or `External model`.
+  `Sheet`. Source icons use `var(--vscode-charts-orange, #f59e0b)`; local and
+  external model icons use `var(--accent)`. The icon has the tooltip `Source`,
+  `Model`, or `External model`.
 - Both stores load for every panel. Opening from a file applies initial scope
   only to that domain: the invoked file is checked and the other domain starts
   unchecked. Palette/layout opens follow their existing all/layout behavior.
@@ -547,5 +551,6 @@ export interface GenerateStaticSiteResult {
 - [ ] Namespaced layouts save and reopen; pre-feature layout files are rejected without migration.
 - [ ] Layout files store tables but no lineage arrows; current SQL reconstructs arrows without removing tables.
 - [ ] Card headers distinguish sources from local/external models with Database and Sheet icons.
+- [ ] Source icons are orange; local and external model icons use the primary accent colour.
 - [ ] The sample fixture demonstrates source, local-model and external-package lineage with only one intentional FK/lineage overlap.
 - [ ] `npm run verify` is green.
