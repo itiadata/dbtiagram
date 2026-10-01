@@ -216,31 +216,31 @@ export async function openSqlDiagram(
 // src/webview/panelKey.ts (pure — must not import `vscode`)
 export type DiagramSource =
   | { kind: 'layout'; fsPath: string }
-  | { kind: 'model'; fsPath: string }
-  | { kind: 'source'; fsPath: string }
+  | { kind: 'entityFile'; domain: DiagramDomain; fsPath: string }
   | { kind: 'sql'; fsPath: string; modelYmlPath: string; modelName: string }
-  | { kind: 'adhoc'; id: string; mode: DiagramMode };
+  | { kind: 'adhoc'; id: string };
 ```
 
 ```ts
 // src/shared/protocol.ts (shared — must not import `vscode`)
 // Replaces the existing filter:scope variant in MessageToWebview:
-| { type: 'filter:scope'; uri: string; entities?: string[] }
+| { type: 'filter:scope'; domain: DiagramDomain; uri: string; entities?: DiagramEntityId[] }
 ```
 
 ```ts
 // src/shared/filter.ts (shared — must not import `vscode`)
 export function scopeSelectionToFile(
   files: readonly DiagramEntityFile[],
+  domain: DiagramDomain,
   uri: string,
-  entities?: readonly string[],
-): { files: Set<string>; models: Set<string> } | null;
+  entities?: readonly DiagramEntityId[],
+): DomainSelection | null;
 ```
 
 ```ts
 // webview-ui/hooks/useDiagramFilter.ts (webview)
 // Existing DiagramFilterState member gains the optional exact subset:
-applyScope: (uri: string, entities?: readonly string[]) => void;
+applyScope: (domain: DiagramDomain, uri: string, entities?: readonly DiagramEntityId[]) => void;
 ```
 
 ```ts
@@ -278,17 +278,19 @@ export function shouldRequestPendingFit(
    Its registry key is `sql:<normalized SQL path>`, independent of the YAML
    panel key. Its title is `<SQL basename>.sql — dbt Diagram`; reopening the same
    SQL path reveals the existing panel without resetting user changes.
-8. A newly created SQL-origin panel uses model mode and the existing placement
+8. A newly created SQL-origin panel uses the unified diagram with model-domain
+    initial scope and the existing placement
    resolver, so `dbtiagram.openBehavior` alone determines tab/split/window
-   placement. On initial ready it publishes `filter:scope` with the resolved YAML
-   path and `[modelName]`.
+   placement. On initial ready it publishes `filter:scope` with domain `model`,
+   the resolved YAML path and the one namespaced model entity ID derived from
+   that file's dbt package plus `modelName`.
 9. Explicit scope entities are intersected with the entities actually declared
    by that file. If the file or requested model is absent by the time the webview
    receives the message, the scope is ignored rather than showing a blank graph.
    Existing YAML-origin scope calls omit `entities` and retain current behavior.
-10. Feature 53's later unified-diagram implementation must preserve the SQL
-     entry point, SQL-keyed identity and exact single-model initial scope while
-     adapting the entity name to its namespaced model ID.
+10. Feature 53's unified diagram behavior is preserved: SQL opens use a distinct
+    SQL source while YAML opens retain `{ kind: 'entityFile', domain, fsPath }`,
+    and exact scope entities are namespaced `DiagramEntityId` values.
 11. The `DiagramCanvas` adopt effect must not request a pending fit because the
     node count grew or `filterTick` changed. This preserves pan and zoom for all
     table additions/removals, including model, source and external-lineage
@@ -309,8 +311,8 @@ export function shouldRequestPendingFit(
 | `test/unit/shared/sqlFiles.test.ts` | `reports a missing YAML definition` | `orphan.sql`; no file declares `orphan` | `{kind:'notFound',modelName:'orphan'}` and exact message `Cannot open dbt Diagram for "orphan": no model YAML definition was found.` |
 | `test/unit/shared/sqlFiles.test.ts` | `rejects multiple declaring YAML files deterministically` | `duplicate.sql`; `/repo/b/schema.yml` and `/repo/a/schema.yml` declare `duplicate` | sorted paths `['/repo/a/schema.yml','/repo/b/schema.yml']` and exact message `Cannot open dbt Diagram for "duplicate": multiple model YAML files define it: /repo/a/schema.yml, /repo/b/schema.yml.` |
 | `test/unit/shared/sqlFiles.test.ts` | `rejects a non-SQL path` | `orders.py` | `{kind:'invalidSqlPath'}` and exact message `Open a dbt model SQL file first.` |
-| `test/unit/shared/filter.test.ts` | `checks one requested model in its declaring file` | file `schema.yml:[orders,items]`, URI `schema.yml`, entities `[orders]` | selected files `{schema.yml}` and models `{orders}` |
-| `test/unit/shared/filter.test.ts` | `ignores a stale requested model scope` | file `schema.yml:[items]`, URI `schema.yml`, entities `[orders]` | `null` |
+| `test/unit/shared/filter.test.ts` | `checks one requested model in its declaring file` | model file `schema.yml:[model:sample:orders,model:sample:items]`, domain `model`, URI `schema.yml`, entities `[model:sample:orders]` | selected files `{schema.yml}` and entities `{model:sample:orders}` |
+| `test/unit/shared/filter.test.ts` | `ignores a stale requested model scope` | model file `schema.yml:[model:sample:items]`, domain `model`, URI `schema.yml`, entities `[model:sample:orders]` | `null` |
 | `test/unit/vscode/editorButton.test.ts` | `classifies model SQL immediately from its derived glob` | path `C:/repo/models/marts/orders.sql`, text `select 1`, model glob `**/models/**/*.yml` | `{model:false,source:false,sql:true,layout:false}` |
 | `test/unit/vscode/editorButton.test.ts` | `classifies active YAML text without discovery` | matching YAML path with `models: []`, then `sources: []` | model context true in first result; source context true in second |
 | `test/unit/vscode/editorButton.test.ts` | `rejects SQL outside the configured model tree` | path `C:/repo/analysis/orders.sql`, model glob `**/models/**/*.yml` | `sql:false` |
