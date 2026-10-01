@@ -142,6 +142,8 @@ And the viewport fits the arranged tables after their cards are measured
 | `src/webview/panelKey.ts` | modify | Add SQL-origin panel identity, title and model mode. |
 | `src/webview/panel.ts` | modify | Publish SQL-origin initial scope with the declaring YAML URI and only the SQL model name. |
 | `webview-ui/hooks/useDiagramFilter.ts` | modify | Apply an optional exact-entity subset from the initial scope message. |
+| `webview-ui/hooks/useHostMessages.ts` | modify | Forward optional exact scope entities from the typed host message. |
+| `webview-ui/App.tsx` | modify | Pass optional exact scope entities into the diagram filter hook. |
 | `webview-ui/initial-fit.ts` | modify | Add a pure policy limiting change-triggered pending fits to Auto-layout and saved-layout application. |
 | `webview-ui/DiagramCanvas.tsx` | modify | Stop requesting pending fits for table additions and filter changes while retaining Auto-layout and saved-layout fits. |
 | `test/unit/shared/sqlFiles.test.ts` | modify | Cover unique, missing and ambiguous SQL-to-YAML resolution and exact errors. |
@@ -241,6 +243,18 @@ export function scopeSelectionToFile(
 // webview-ui/hooks/useDiagramFilter.ts (webview)
 // Existing DiagramFilterState member gains the optional exact subset:
 applyScope: (domain: DiagramDomain, uri: string, entities?: readonly DiagramEntityId[]) => void;
+```
+
+```ts
+// webview-ui/hooks/useHostMessages.ts (webview)
+export interface HostMessageHandlers {
+  // Existing member gains the optional exact subset:
+  onFilterScope: (
+    domain: DiagramDomain,
+    uri: string,
+    entities?: readonly DiagramEntityId[],
+  ) => void;
+}
 ```
 
 ```ts
