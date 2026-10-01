@@ -15,7 +15,7 @@ export function useSourceImport(
   const [report, setReport] = useState<SourceImportReport | null>(null);
   const start = useCallback(() => postToHost({ type: 'sourceImport:start' }), []);
   const applyResult = useCallback((result: SourceImportReport): void => {
-    showImportedModels(result.importedModels, result.destinationUri);
+    showImportedModels(result.importedEntityIds, result.destinationUri);
     setReport(result);
   }, [showImportedModels]);
   const dismiss = useCallback(() => setReport(null), []);

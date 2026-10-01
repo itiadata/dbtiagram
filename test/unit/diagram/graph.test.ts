@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { buildDiagram, buildSourceDiagram } from '../../../src/diagram/graph';
+import { buildDiagram as buildCombinedDiagram } from '../../../src/diagram/graph';
 import type { ModelDefinition } from '../../../src/dbt/types';
+
+const buildDiagram = (items: ModelDefinition[]) => buildCombinedDiagram(items.map((model) => ({ packageName: 'sample', model })), []);
+const buildSourceDiagram = (sources: Parameters<typeof buildCombinedDiagram>[1]) => buildCombinedDiagram([], sources);
 
 const models: ModelDefinition[] = [
   {
@@ -19,11 +22,18 @@ const models: ModelDefinition[] = [
 ];
 
 describe('buildDiagram', () => {
+  it('builds a combined collision-safe graph', () => {
+    const graph = buildCombinedDiagram(
+      [{ packageName: 'sample', model: { name: 'transactions' } }],
+      [{ name: 'finops', tables: [{ name: 'transactions' }] }],
+    );
+    expect(graph.nodes.map((node) => node.id)).toEqual(['model:sample:transactions', 'source:finops:transactions']);
+  });
   it('creates one node per model with columns', () => {
     const graph = buildDiagram(models);
 
     expect(graph.nodes).toHaveLength(3);
-    const orders = graph.nodes.find((n) => n.id === 'orders');
+    const orders = graph.nodes.find((n) => n.id === 'model:sample:orders');
     expect(orders?.description).toBe('One row per order');
     expect(orders?.columns).toEqual([
       { name: 'id', dataType: 'integer', description: 'Primary key' },
@@ -35,8 +45,8 @@ describe('buildDiagram', () => {
     const graph = buildDiagram(models);
     expect(graph.edges).toEqual([
       {
-        source: 'orders',
-        target: 'customers',
+        source: 'model:sample:orders',
+        target: 'model:sample:customers',
         sourceColumns: ['customer_id'],
         targetColumns: ['id'],
         virtual: false,
@@ -61,8 +71,8 @@ describe('buildDiagram', () => {
     ]);
     expect(graph.edges).toEqual([
       {
-        source: 'order_items',
-        target: 'orders',
+        source: 'model:sample:order_items',
+        target: 'model:sample:orders',
         sourceColumns: ['order_id', 'customer_id'],
         targetColumns: ['order_id', 'customer_id'],
         virtual: false,
@@ -85,8 +95,8 @@ describe('buildDiagram', () => {
     ]);
     expect(graph.edges).toEqual([
       {
-        source: 'orders',
-        target: 'customers',
+        source: 'model:sample:orders',
+        target: 'model:sample:customers',
         sourceColumns: ['customer_id'],
         targetColumns: ['id'],
         virtual: false,
@@ -122,7 +132,7 @@ describe('buildDiagram', () => {
       { name: 'b' },
     ]);
     expect(graph.edges).toEqual([
-      { source: 'a', target: 'b', sourceColumns: ['x'], targetColumns: ['y'], virtual: false },
+      { source: 'model:sample:a', target: 'model:sample:b', sourceColumns: ['x'], targetColumns: ['y'], virtual: false },
     ]);
   });
 
@@ -252,8 +262,8 @@ describe('buildDiagram', () => {
         { name: 'customers' },
       ]);
       expect(graph.nodes[0].foreignKeys).toEqual([
-        { target: 'orders', to: "ref('orders')", columns: ['a'], toColumns: ['x'], virtual: false },
-        { target: 'customers', to: "ref('s_pp', 'customers')", columns: ['b'], toColumns: ['y'], virtual: false },
+        { target: 'model:sample:orders', to: "ref('orders')", columns: ['a'], toColumns: ['x'], virtual: false },
+        { target: 'model:sample:customers', to: "ref('s_pp', 'customers')", columns: ['b'], toColumns: ['y'], virtual: false },
       ]);
     });
 
@@ -269,7 +279,7 @@ describe('buildDiagram', () => {
       ]);
       expect(graph.nodes[0].foreignKeys).toEqual([
         { target: undefined, to: 'not a ref', columns: ['a'], toColumns: ['b'], virtual: false },
-        { target: 'ghost', to: "ref('ghost')", columns: ['a'], toColumns: ['a'], virtual: false },
+        { target: 'model:sample:ghost', to: "ref('ghost')", columns: ['a'], toColumns: ['a'], virtual: false },
       ]);
       expect(graph.edges).toEqual([]);
     });
@@ -295,8 +305,8 @@ describe('buildDiagram', () => {
         { name: 'customers' },
       ]);
       expect(graph.nodes[0].foreignKeys).toEqual([
-        { target: 'orders', to: "ref('orders')", columns: ['a'], toColumns: ['x'], virtual: false },
-        { target: 'customers', to: "ref('customers')", columns: ['b'], toColumns: ['y'], virtual: true },
+        { target: 'model:sample:orders', to: "ref('orders')", columns: ['a'], toColumns: ['x'], virtual: false },
+        { target: 'model:sample:customers', to: "ref('customers')", columns: ['b'], toColumns: ['y'], virtual: true },
       ]);
     });
   });
@@ -313,7 +323,7 @@ describe('buildDiagram', () => {
       ]);
       expect(graph.edges).toEqual([]);
       expect(graph.nodes[0].foreignKeys).toEqual([
-        { target: 'customers', to: "ref('customers')", columns: [], toColumns: [], virtual: false },
+        { target: 'model:sample:customers', to: "ref('customers')", columns: [], toColumns: [], virtual: false },
       ]);
     });
 
@@ -336,7 +346,7 @@ describe('buildDiagram', () => {
       ]);
       expect(graph.edges).toEqual([]);
       expect(graph.nodes[0].foreignKeys).toEqual([
-        { target: 'customers', to: "ref('customers')", columns: [], toColumns: [], virtual: true },
+        { target: 'model:sample:customers', to: "ref('customers')", columns: [], toColumns: [], virtual: true },
       ]);
     });
 
@@ -373,7 +383,7 @@ describe('buildDiagram', () => {
         { name: 'b', columns: [{ name: 'y1' }] },
       ]);
       expect(graph.edges).toEqual([
-        { source: 'a', target: 'b', sourceColumns: ['x1'], targetColumns: ['y1'], virtual: false },
+        { source: 'model:sample:a', target: 'model:sample:b', sourceColumns: ['x1'], targetColumns: ['y1'], virtual: false },
       ]);
     });
 
@@ -389,7 +399,7 @@ describe('buildDiagram', () => {
         { name: 'customers', columns: [{ name: 'id' }] },
       ]);
       expect(graph.edges).toEqual([
-        { source: 'order_items', target: 'customers', sourceColumns: ['customer_id'], targetColumns: ['id'], virtual: false },
+        { source: 'model:sample:order_items', target: 'model:sample:customers', sourceColumns: ['customer_id'], targetColumns: ['id'], virtual: false },
       ]);
     });
   });
@@ -414,8 +424,8 @@ describe('buildDiagram', () => {
       ]);
       expect(graph.edges).toEqual([
         {
-          source: 'products',
-          target: 'customers',
+          source: 'model:sample:products',
+          target: 'model:sample:customers',
           sourceColumns: ['product_id'],
           targetColumns: ['customer_id'],
           virtual: true,
@@ -465,8 +475,8 @@ describe('buildDiagram', () => {
       ]);
       expect(graph.edges).toEqual([
         {
-          source: 'products',
-          target: 'customers',
+          source: 'model:sample:products',
+          target: 'model:sample:customers',
           sourceColumns: ['product_id'],
           targetColumns: ['customer_id'],
           virtual: false,
@@ -487,8 +497,8 @@ describe('buildDiagram', () => {
         },
         { name: 'customers', columns: [{ name: 'id' }] },
       ]);
-      const orders = graph.nodes.find((n) => n.id === 'orders')!;
-      const customers = graph.nodes.find((n) => n.id === 'customers')!;
+      const orders = graph.nodes.find((n) => n.id === 'model:sample:orders')!;
+      const customers = graph.nodes.find((n) => n.id === 'model:sample:customers')!;
       expect(orders.foreignKeyColumns).toEqual(['customer_id']);
       expect(customers.foreignKeyColumns).toEqual(['id']);
     });
@@ -511,7 +521,7 @@ describe('buildDiagram', () => {
         { name: 'b', columns: [{ name: 'id' }] },
         { name: 'c', columns: [{ name: 'id' }] },
       ]);
-      const a = graph.nodes.find((n) => n.id === 'a')!;
+      const a = graph.nodes.find((n) => n.id === 'model:sample:a')!;
       expect(a.foreignKeyColumns).toEqual(['b_id']);
     });
   });
@@ -524,7 +534,7 @@ describe('buildDiagram', () => {
           columns: [{ name: 'email', dataTests: ['unique'] }],
         },
       ]);
-      const node = graph.nodes.find((n) => n.id === 'users')!;
+      const node = graph.nodes.find((n) => n.id === 'model:sample:users')!;
       const email = node.columns.find((c) => c.name === 'email')!;
       expect(email.tests).toEqual(['unique']);
     });
@@ -536,7 +546,7 @@ describe('buildDiagram', () => {
           columns: [{ name: 'amount' }],
         },
       ]);
-      const node = graph.nodes.find((n) => n.id === 'users')!;
+      const node = graph.nodes.find((n) => n.id === 'model:sample:users')!;
       const amount = node.columns.find((c) => c.name === 'amount')!;
       expect(amount.tests).toBeUndefined();
     });
@@ -549,7 +559,7 @@ describe('buildDiagram', () => {
           constraints: [{ type: 'primary_key', columns: ['order_id'] }],
         },
       ]);
-      const node = graph.nodes.find((n) => n.id === 'orders')!;
+      const node = graph.nodes.find((n) => n.id === 'model:sample:orders')!;
       const order_id = node.columns.find((c) => c.name === 'order_id')!;
       expect(order_id.tests).toBeUndefined();
     });
@@ -562,7 +572,7 @@ describe('buildDiagram', () => {
           constraints: [{ type: 'primary_key', columns: ['order_id'] }],
         },
       ]);
-      const node = graph.nodes.find((n) => n.id === 'orders')!;
+      const node = graph.nodes.find((n) => n.id === 'model:sample:orders')!;
       const order_id = node.columns.find((c) => c.name === 'order_id')!;
       expect(order_id.tests).toEqual(['unique']);
     });
@@ -572,8 +582,8 @@ describe('buildDiagram', () => {
 describe('buildSourceDiagram', () => {
   it('builds qualified source nodes and dashed edges', () => {
     const graph = buildSourceDiagram([{ name: 'finops', tables: [{ name: 'costs', columns: [{ name: 'workspace_id' }], config: { meta: { dbtiagram: { virtual: { foreign_keys: [{ to: "source('finops', 'workspaces')", columns: ['workspace_id'], to_columns: ['id'] }] } } } } }, { name: 'workspaces', columns: [{ name: 'id' }] }] }]);
-    expect(graph.nodes.map((node) => node.id)).toEqual(['finops.costs', 'finops.workspaces']);
-    expect(graph.edges).toEqual([{ source: 'finops.costs', target: 'finops.workspaces', sourceColumns: ['workspace_id'], targetColumns: ['id'], virtual: true }]);
+    expect(graph.nodes.map((node) => node.id)).toEqual(['source:finops:costs', 'source:finops:workspaces']);
+    expect(graph.edges).toEqual([{ source: 'source:finops:costs', target: 'source:finops:workspaces', sourceColumns: ['workspace_id'], targetColumns: ['id'], virtual: true }]);
   });
 
   it('qualifies only duplicate source table labels', () => {
@@ -583,9 +593,9 @@ describe('buildSourceDiagram', () => {
       { name: 'crm', tables: [{ name: 'customers' }] },
     ]);
     expect(graph.nodes.map(({ id, label }) => ({ id, label }))).toEqual([
-      { id: 'finops.orders', label: 'finops.orders' },
-      { id: 'sales.orders', label: 'sales.orders' },
-      { id: 'crm.customers', label: 'customers' },
+      { id: 'source:finops:orders', label: 'finops.orders' },
+      { id: 'source:sales:orders', label: 'sales.orders' },
+      { id: 'source:crm:customers', label: 'customers' },
     ]);
   });
 });

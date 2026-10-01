@@ -28,7 +28,6 @@ import { isPrimaryKeyColumn, toggleColumnPrimaryKey } from './columnPrimaryKey';
 import { ForeignKeySection, type DraftForeignKey } from './ForeignKeySection';
 import { ChartNoAxesGantt } from './icons';
 import { PrimaryKeySection } from './PrimaryKeySection';
-import type { DiagramMode } from '../src/shared/diagramMode';
 import { useDiagramPresentationMode } from './presentation-mode';
 
 /** The entity the sidebar renders: a table, or a column within its table. */
@@ -59,7 +58,6 @@ interface DetailsSidebarProps {
   onColumnDisplayModeChange: (mode: ColumnDisplayMode) => void;
   /** Inline width from the App's resize state (spec 11). */
   style?: CSSProperties;
-  mode: DiagramMode;
 }
 
 export function DetailsSidebar({
@@ -78,8 +76,8 @@ export function DetailsSidebar({
   columnDisplayMode,
   onColumnDisplayModeChange,
   style,
-  mode,
 }: DetailsSidebarProps): JSX.Element {
+  const source = entity?.node.entityKind === 'source';
   const readOnly = useDiagramPresentationMode() === 'readonly' || entity?.node.readOnly === true;
   if (entity?.node.readOnly === true) {
     return <aside className="details details--readonly" style={style}><div className="details__header"><span className="details__header-title">Properties</span><button type="button" className="sidebar__collapse" aria-label="Hide sidebar" onClick={onCollapse}><span className="sidebar__chevron sidebar__chevron--flip" /></button></div><div className="details__section"><h2 className="details__section-title">Referenced model</h2><ReadOnlyField label="Name" value={entity.node.label} /><ReadOnlyField label="Package" value={entity.node.packageName} /><ReadOnlyField label="Availability" value={entity.node.lineageKind === 'external' ? 'External package' : 'Not found in this project'} /></div></aside>;
@@ -93,7 +91,7 @@ export function DetailsSidebar({
             <ReadOnlyField label="Name" value={entity.node.label} /><ReadOnlyField label="Description" value={entity.node.description} />
             <ColumnDisplaySection mode={columnDisplayMode} onChange={onColumnDisplayModeChange} />
             <ReadOnlyField label="Primary key" value={entity.node.primaryKey?.columns.join(', ')} />
-            <ForeignKeySection node={entity.node} nodes={nodes} focusedFk={focusedFk} drafts={[]} onEdit={onEdit} onAddDraft={onAddDraft} onRemoveDraft={onRemoveDraft} onDraftVirtualChange={onDraftVirtualChange} onDraftAddPair={onDraftAddPair} onRemoveLastPair={onRemoveLastPair} forceVirtual={mode === 'source'} />
+            <ForeignKeySection node={entity.node} nodes={nodes} focusedFk={focusedFk} drafts={[]} onEdit={onEdit} onAddDraft={onAddDraft} onRemoveDraft={onRemoveDraft} onDraftVirtualChange={onDraftVirtualChange} onDraftAddPair={onDraftAddPair} onRemoveLastPair={onRemoveLastPair} forceVirtual={source} />
           </div>
         ) : <div className="details__section"><h2 className="details__section-title">Column</h2><ReadOnlyField label="Name" value={entity.column.name} /><ReadOnlyField label="Data type" value={entity.column.dataType} /><ReadOnlyField label="Description" value={entity.column.description} /><ReadOnlyField label="Primary key" value={isPrimaryKeyColumn(entity.node, entity.column.name) ? 'Yes' : 'No'} /></div>}
       </aside>
@@ -121,17 +119,17 @@ export function DetailsSidebar({
           <button
             type="button"
             className="details__reveal"
-            title={`Reveal in ${mode === 'source' ? 'source yml' : 'model.yml'}`}
+            title={`Reveal in ${source ? 'source yml' : 'model.yml'}`}
             onClick={() => onOpenModelSource(entity.node.id)}
           >
             <ChartNoAxesGantt size={14} />
-            Reveal in {mode === 'source' ? 'source yml' : 'model.yml'}
+            Reveal in {source ? 'source yml' : 'model.yml'}
           </button>
           <EditableField
             label="Name"
             value={entity.node.label}
             required
-            readOnly={mode === 'source'}
+            readOnly={source}
             onCommit={(value) =>
               onEdit({ kind: 'setModelName', model: entity.node.id, name: value })
             }
@@ -149,7 +147,7 @@ export function DetailsSidebar({
             }
           />
           <ColumnDisplaySection mode={columnDisplayMode} onChange={onColumnDisplayModeChange} />
-           <PrimaryKeySection node={entity.node} onEdit={onEdit} forceVirtual={mode === 'source'} />
+            <PrimaryKeySection node={entity.node} onEdit={onEdit} forceVirtual={source} />
           <ForeignKeySection
             node={entity.node}
             nodes={nodes}
@@ -161,7 +159,7 @@ export function DetailsSidebar({
             onDraftVirtualChange={onDraftVirtualChange}
             onDraftAddPair={onDraftAddPair}
             onRemoveLastPair={onRemoveLastPair}
-            forceVirtual={mode === 'source'}
+            forceVirtual={source}
           />
         </div>
       ) : (
@@ -173,17 +171,17 @@ export function DetailsSidebar({
           <button
             type="button"
             className="details__reveal"
-            title={`Reveal in ${mode === 'source' ? 'source yml' : 'model.yml'}`}
+            title={`Reveal in ${source ? 'source yml' : 'model.yml'}`}
             onClick={() => onOpenModelSource(entity.node.id, entity.column.name)}
           >
             <ChartNoAxesGantt size={14} />
-            Reveal in {mode === 'source' ? 'source yml' : 'model.yml'}
+            Reveal in {source ? 'source yml' : 'model.yml'}
           </button>
           <EditableField
             label="Name"
             value={entity.column.name}
             required
-            readOnly={mode === 'source'}
+            readOnly={source}
             onCommit={(value) =>
               onEdit({
                 kind: 'setColumnName',
@@ -196,7 +194,7 @@ export function DetailsSidebar({
           <EditableField
             label="Data type"
             value={entity.column.dataType ?? ''}
-            readOnly={mode === 'source'}
+            readOnly={source}
             onCommit={(value) =>
               onEdit({
                 kind: 'setColumnDataType',
@@ -223,7 +221,7 @@ export function DetailsSidebar({
             <input
               type="checkbox"
               checked={isPrimaryKeyColumn(entity.node, entity.column.name)}
-              onChange={() => onEdit(toggleColumnPrimaryKey(entity.node, entity.column.name, mode === 'source'))}
+              onChange={() => onEdit(toggleColumnPrimaryKey(entity.node, entity.column.name, source))}
             />
             Primary key
           </label>

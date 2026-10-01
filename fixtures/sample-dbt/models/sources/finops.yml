@@ -25,3 +25,7 @@ sources:
         columns:
           - name: id
             data_type: integer
+      - name: transactions
+        columns:
+          - name: id
+            data_type: integer

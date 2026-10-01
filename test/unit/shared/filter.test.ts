@@ -12,12 +12,16 @@ import {
 import type { DiagramModelFile } from '../../../src/shared/protocol';
 
 const files: DiagramModelFile[] = [
-  { uri: 'C:/repo/models/orders.yml', label: 'orders.yml', entities: ['orders', 'order_items'] },
-  { uri: 'C:/repo/models/products.yml', label: 'products.yml', entities: ['products'] },
+  { uri: 'C:/repo/models/orders.yml', label: 'orders.yml', domain: 'model', entities: ['model:sample:orders', 'model:sample:order_items'] },
+  { uri: 'C:/repo/models/products.yml', label: 'products.yml', domain: 'model', entities: ['model:sample:products'] },
+];
+const combinedFiles: DiagramModelFile[] = [
+  ...files,
+  { uri: 'C:/repo/models/sources.yml', label: 'sources.yml', domain: 'source', entities: ['source:finops:transactions'] },
 ];
 
 const allFileUris = new Set(files.map((file) => file.uri));
-const allModelNames = new Set(['orders', 'order_items', 'products']);
+const allModelNames = new Set(['model:sample:orders', 'model:sample:order_items', 'model:sample:products']);
 
 describe('matchesSearch', () => {
   it('matches everything for an empty or whitespace query', () => {
@@ -56,9 +60,17 @@ describe('reconcileSelection', () => {
 });
 
 describe('computeVisibleModels', () => {
+  it('filters model and source domains independently', () => {
+    const visible = computeVisibleModels(
+      combinedFiles,
+      new Set(['C:/repo/models/orders.yml']),
+      new Set(['model:sample:orders', 'source:finops:transactions']),
+    );
+    expect(visible).toEqual(new Set(['model:sample:orders']));
+  });
   it('shows every model when everything is selected', () => {
     const visible = computeVisibleModels(files, allFileUris, allModelNames);
-    expect([...visible].sort()).toEqual(['order_items', 'orders', 'products']);
+    expect([...visible].sort()).toEqual(['model:sample:order_items', 'model:sample:orders', 'model:sample:products']);
   });
 
   it('hides all models of an unchecked file', () => {
@@ -67,7 +79,7 @@ describe('computeVisibleModels', () => {
       new Set(['C:/repo/models/orders.yml']),
       allModelNames,
     );
-    expect([...visible].sort()).toEqual(['order_items', 'orders']);
+    expect([...visible].sort()).toEqual(['model:sample:order_items', 'model:sample:orders']);
   });
 
   it('hides a selected model when its file is unchecked (file precedence)', () => {
@@ -76,12 +88,12 @@ describe('computeVisibleModels', () => {
       new Set(['C:/repo/models/products.yml']),
       allModelNames,
     );
-    expect([...visible]).toEqual(['products']);
+    expect([...visible]).toEqual(['model:sample:products']);
   });
 
   it('narrows within checked files via the model selection', () => {
-    const visible = computeVisibleModels(files, allFileUris, new Set(['order_items']));
-    expect([...visible]).toEqual(['order_items']);
+    const visible = computeVisibleModels(files, allFileUris, new Set(['model:sample:order_items']));
+    expect([...visible]).toEqual(['model:sample:order_items']);
   });
 
   it('shows nothing when no file is checked', () => {
@@ -160,25 +172,32 @@ describe('capInitialSelection', () => {
 });
 
 describe('scopeSelectionToFile', () => {
+  it('scopes only the invoking domain', () => {
+    const scoped = scopeSelectionToFile(combinedFiles, 'model', 'C:/repo/models/orders.yml');
+    expect(scoped).toEqual({
+      files: new Set(['C:/repo/models/orders.yml']),
+      entities: new Set(['model:sample:orders', 'model:sample:order_items']),
+    });
+  });
   it('checks exactly the given file and its models', () => {
-    const scoped = scopeSelectionToFile(files, 'C:/repo/models/orders.yml');
+    const scoped = scopeSelectionToFile(files, 'model', 'C:/repo/models/orders.yml');
     expect(scoped).not.toBeNull();
     expect([...(scoped?.files ?? [])]).toEqual(['C:/repo/models/orders.yml']);
-    expect([...(scoped?.models ?? [])].sort()).toEqual(['order_items', 'orders']);
+    expect([...(scoped?.entities ?? [])].sort()).toEqual(['model:sample:order_items', 'model:sample:orders']);
   });
 
   it('excludes the other files models', () => {
-    const scoped = scopeSelectionToFile(files, 'C:/repo/models/products.yml');
-    expect([...(scoped?.models ?? [])]).toEqual(['products']);
+    const scoped = scopeSelectionToFile(files, 'model', 'C:/repo/models/products.yml');
+    expect([...(scoped?.entities ?? [])]).toEqual(['model:sample:products']);
     expect(scoped?.files.has('C:/repo/models/orders.yml')).toBe(false);
   });
 
   it('returns null for a file the webview does not know', () => {
-    expect(scopeSelectionToFile(files, 'C:/repo/models/missing.yml')).toBeNull();
+    expect(scopeSelectionToFile(files, 'model', 'C:/repo/models/missing.yml')).toBeNull();
   });
 
   it('returns null when there are no files at all', () => {
-    expect(scopeSelectionToFile([], 'C:/repo/models/orders.yml')).toBeNull();
+    expect(scopeSelectionToFile([], 'model', 'C:/repo/models/orders.yml')).toBeNull();
   });
 });
 
@@ -206,10 +225,10 @@ describe('removeModels', () => {
 
   it('hides a removed model from computeVisibleModels', () => {
     const singleFile: DiagramModelFile[] = [
-      { uri: 'f', label: 'f', entities: ['orders', 'customers'] },
+      { uri: 'f', label: 'f', domain: 'model', entities: ['model:sample:orders', 'model:sample:customers'] },
     ];
-    const selectedModels = removeModels(new Set(['orders', 'customers']), ['orders']);
+    const selectedModels = removeModels(new Set(['model:sample:orders', 'model:sample:customers']), ['model:sample:orders']);
     const visible = computeVisibleModels(singleFile, new Set(['f']), selectedModels);
-    expect(visible).toEqual(new Set(['customers']));
+    expect(visible).toEqual(new Set(['model:sample:customers']));
   });
 });

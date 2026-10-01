@@ -10,6 +10,7 @@ import type { ModelEdit } from '../../src/dbt/edit';
 import type { ForeignKeyDescriptor } from '../../src/dbt/types';
 import type { DiagramGraph } from '../../src/diagram/graph';
 import { sameFkContent } from '../ForeignKeySection';
+import { modelEntityId, parseDiagramEntityId } from '../../src/shared/entityId';
 
 /** What the user selected on the diagram (spec 06): a table or a column. */
 export type Selection =
@@ -76,7 +77,9 @@ export function useSelection(): SelectionState {
     if (edit.kind === 'setModelName' && current.kind === 'table' && current.id === edit.model) {
       const name = edit.name.trim();
       if (name.length > 0 && name !== current.id) {
-        pendingRenameRef.current = { oldRef: current, newRef: { kind: 'table', id: name } };
+        const parsed = parseDiagramEntityId(current.id);
+        const id = parsed?.kind === 'model' ? modelEntityId(parsed.packageName, name) : name;
+        pendingRenameRef.current = { oldRef: current, newRef: { kind: 'table', id } };
       }
       return;
     }

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildDiagram } from '../../../src/diagram/graph';
+import { buildDiagram as buildCombinedDiagram } from '../../../src/diagram/graph';
 import {
   HEADER_HEIGHT,
   NODE_WIDTH,
@@ -10,6 +10,7 @@ import {
 } from '../../../src/diagram/layout';
 import type { NodePlacement } from '../../../src/diagram/layout';
 import type { ModelDefinition } from '../../../src/dbt/types';
+const buildDiagram = (models: ModelDefinition[]) => buildCombinedDiagram(models.map((model) => ({ packageName: 'sample', model })), []);
 
 function layoutFor(models: ModelDefinition[]) {
   return layoutDiagram(buildDiagram(models));
@@ -68,7 +69,7 @@ describe('layoutDiagram', () => {
     ]);
     expect(layout.nodes).toHaveLength(1);
     expect(layout.nodes[0]).toMatchObject({
-      id: 'a',
+      id: 'model:sample:a',
       width: NODE_WIDTH,
       height: nodeHeight(3),
     });
@@ -96,9 +97,9 @@ describe('layoutDiagram', () => {
       { name: 'c', columns: [{ name: 'z' }] },
     ]);
     const nodes = byId(layout);
-    const a = nodes.get('a');
-    const b = nodes.get('b');
-    const c = nodes.get('c');
+    const a = nodes.get('model:sample:a');
+    const b = nodes.get('model:sample:b');
+    const c = nodes.get('model:sample:c');
     expect(a).toBeDefined();
     expect(b).toBeDefined();
     expect(c).toBeDefined();
@@ -145,11 +146,11 @@ describe('layoutDiagram', () => {
       { name: 'parent' }, { name: 'child' }, { name: 'grandchild' },
     ]);
     graph.lineageEdges = [
-      { parent: 'parent', child: 'child' },
-      { parent: 'child', child: 'grandchild' },
+      { parent: 'model:sample:parent', child: 'model:sample:child' },
+      { parent: 'model:sample:child', child: 'model:sample:grandchild' },
     ];
     const nodes = byId(layoutDiagram(graph));
-    expect(nodes.get('parent')!.x).toBeLessThan(nodes.get('child')!.x);
-    expect(nodes.get('child')!.x).toBeLessThan(nodes.get('grandchild')!.x);
+    expect(nodes.get('model:sample:parent')!.x).toBeLessThan(nodes.get('model:sample:child')!.x);
+    expect(nodes.get('model:sample:child')!.x).toBeLessThan(nodes.get('model:sample:grandchild')!.x);
   });
 });

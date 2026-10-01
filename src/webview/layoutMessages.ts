@@ -14,7 +14,6 @@ import {
   type DiagramLayout,
 } from '../diagram/layoutFile';
 import type { MessageToWebview } from '../shared/protocol';
-import type { DiagramMode } from '../shared/diagramMode';
 
 /** The saved layout file a panel currently writes back to. */
 export interface ActiveLayout {
@@ -24,7 +23,6 @@ export interface ActiveLayout {
 
 /** Everything the layout handlers need from the owning panel. */
 export interface LayoutHost {
-  mode: DiagramMode;
   postMessage(message: MessageToWebview): void;
   getActiveLayout(): ActiveLayout | undefined;
   setActiveLayout(active: ActiveLayout | undefined): void;
@@ -79,11 +77,6 @@ export async function openLayout(host: LayoutHost, fsPath: string): Promise<void
     });
     return;
   }
-  if (layout.mode !== host.mode) {
-    host.postMessage({ type: 'diagram:error', message: `Layout mode "${layout.mode}" does not match panel mode "${host.mode}"` });
-    return;
-  }
-
   host.setActiveLayout({ fsPath, name: layout.name });
   host.onLayoutOpened(layout.name);
   host.setPendingLayout(layout, false);

@@ -78,14 +78,15 @@ suite('dbtiagram extension', () => {
     const result = await expandDownstream({
       readModelSql: async () => { reads += 1; return "{{ ref('root') }}"; },
       allProjectModelIds: async () => ['a', 'b', 'c'],
-      resolveNode: async (_packageName, name) => ({ id: name, label: name, columns: [], foreignKeys: [], foreignKeyColumns: [], lineageKind: 'local', packageName: 'sample' }),
+      resolveModelNode: async (_packageName, name) => ({ id: name, label: name, columns: [], foreignKeys: [], foreignKeyColumns: [], lineageKind: 'local', packageName: 'sample' }),
+      resolveSourceNode: async (sourceName, tableName) => ({ id: `source:${sourceName}:${tableName}`, label: tableName, columns: [], foreignKeys: [], foreignKeyColumns: [], entityKind: 'source' }),
       progress: () => undefined,
       isCancelled: () => reads >= 1,
     }, 'cancel-test', 'root');
     assert.strictEqual(result, null);
   });
 
-  test('source command opens an independent source diagram', async () => {
+  test('source command opens a combined diagram scoped from a source file', async () => {
     const sourceUri = vscode.Uri.file(
       path.resolve(__dirname, '../../../../fixtures/sample-dbt/models/sources/finops.yml'),
     );

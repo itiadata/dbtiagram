@@ -5,18 +5,13 @@
  * unit-testable without an Electron host.
  */
 import { stripLayoutSuffix } from '../diagram/layoutFile';
-import type { DiagramMode } from '../shared/diagramMode';
+import type { DiagramDomain } from '../shared/diagramMode';
 
 /** What a diagram tab was opened from. Its identity and title derive from this. */
 export type DiagramSource =
   | { kind: 'layout'; fsPath: string }
-  | { kind: 'model'; fsPath: string }
-  | { kind: 'source'; fsPath: string }
-  | { kind: 'adhoc'; id: string; mode: DiagramMode };
-
-export function diagramSourceMode(source: Exclude<DiagramSource, { kind: 'layout' }>): DiagramMode {
-  return source.kind === 'source' ? 'source' : source.kind === 'model' ? 'model' : source.mode;
-}
+  | { kind: 'entityFile'; domain: DiagramDomain; fsPath: string }
+  | { kind: 'adhoc'; id: string };
 
 /** Base title shared by every diagram tab. */
 const BASE_TITLE = 'dbt Diagram';
@@ -40,6 +35,9 @@ export function diagramPanelKey(
   if (source.kind === 'adhoc') {
     return `adhoc:${source.id}`;
   }
+  if (source.kind === 'entityFile') {
+    return `entityFile:${source.domain}:${normalizePath(source.fsPath, caseInsensitive)}`;
+  }
   return `${source.kind}:${normalizePath(source.fsPath, caseInsensitive)}`;
 }
 
@@ -60,8 +58,7 @@ export function diagramPanelTitle(source: DiagramSource, layoutName?: string): s
           : stripLayoutSuffix(baseName(source.fsPath));
       return `${name} — ${BASE_TITLE}`;
     }
-    case 'model':
-    case 'source':
+    case 'entityFile':
       return `${baseName(source.fsPath)} — ${BASE_TITLE}`;
     case 'adhoc':
       return BASE_TITLE;

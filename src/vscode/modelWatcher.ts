@@ -11,7 +11,7 @@ import { matchesGlob } from '../shared/glob';
 
 export interface ModelWatcherCallbacks {
   /** Current `dbtiagram.modelFileGlob` value, read on every event. */
-  getGlob: () => string;
+  getGlobs: () => readonly string[];
   /** Current `dbtiagram.watchModelFiles` value; false disables live reload. */
   getEnabled: () => boolean;
   /** A model.yml document's text changed (typing, save, or revert). */
@@ -30,7 +30,7 @@ export function registerModelWatcher(callbacks: ModelWatcherCallbacks): vscode.D
   const isModelPath = (uri: vscode.Uri): boolean =>
     callbacks.getEnabled() &&
     !isLayoutFilePath(uri.fsPath) &&
-    matchesGlob(uri.fsPath, callbacks.getGlob());
+    callbacks.getGlobs().some((glob) => matchesGlob(uri.fsPath, glob));
 
   const disposables: vscode.Disposable[] = [
     vscode.workspace.onDidChangeTextDocument((event) => {

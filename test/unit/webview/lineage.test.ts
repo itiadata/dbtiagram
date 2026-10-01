@@ -17,13 +17,14 @@ function host(sql: Record<string, string>, progress: LineageProgress[] = [], can
   return {
     readModelSql: async (id) => { reads += 1; return sql[id] ?? null; },
     allProjectModelIds: async () => Object.keys(sql),
-    resolveNode: async (packageName, name) => {
+    resolveModelNode: async (packageName, name) => {
       const effectivePackage = packageName === '' ? 'sample' : packageName;
       const local = effectivePackage === 'sample' && Object.hasOwn(sql, name);
       return local
         ? { ...node(name), lineageKind: 'local', packageName: effectivePackage }
         : { ...node(`external:${effectivePackage}:${name}`, name), readOnly: true, lineageKind: effectivePackage === 'sample' ? 'unknown' : 'external', packageName: effectivePackage };
     },
+    resolveSourceNode: async (sourceName, tableName) => ({ ...node(`source:${sourceName}:${tableName}`, tableName), entityKind: 'source' }),
     progress: (value) => progress.push(value),
     isCancelled: () => reads >= cancelAfter,
   };
@@ -81,10 +82,23 @@ describe('lineage orchestration', () => {
   });
 
   it('refresh removes obsolete edges and never adds a hidden node', async () => {
-    const displayed = new Set(['items', 'report']);
+    const displayed = new Set(['model:sample:items', 'model:sample:report']);
     expect(await refreshDisplayedLineage(host({ report: "{{ ref('hidden') }}", items: 'select 1' }), displayed, [
-      { parent: 'items', child: 'report' },
+      { parent: 'model:sample:items', child: 'model:sample:report' },
     ])).toEqual([]);
-    expect([...displayed]).toEqual(['items', 'report']);
+    expect([...displayed]).toEqual(['model:sample:items', 'model:sample:report']);
+  });
+
+  it('missing source relationship keeps layout cards', async () => {
+    const displayed = new Set(['source:finops:transactions', 'model:sample:payments']);
+    expect(await refreshDisplayedLineage(host({ payments: 'select 1' }), displayed, [
+      { parent: 'source:finops:transactions', child: 'model:sample:payments' },
+    ])).toEqual([]);
+    expect([...displayed]).toEqual(['source:finops:transactions', 'model:sample:payments']);
+  });
+
+  it('adds source upstream lineage', async () => {
+    const result = await expandUpstream(host({ payments: "select * from {{ source('finops', 'transactions') }}" }), 'r4', 'model:sample:payments');
+    expect(result.edges).toEqual([{ parent: 'source:finops:transactions', child: 'model:sample:payments' }]);
   });
 });

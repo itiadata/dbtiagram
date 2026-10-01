@@ -23,7 +23,7 @@ export type LayoutActiveMessage = Extract<MessageToWebview, { type: 'layout:acti
 export interface HostMessageHandlers {
   onDiagramUpdate: (message: DiagramUpdateMessage) => void;
   onDiagramError: (message: string) => void;
-  onFilterScope: (uri: string) => void;
+  onFilterScope: (domain: import('../../src/shared/diagramMode').DiagramDomain, uri: string) => void;
   onLayoutApply: (message: LayoutApplyMessage) => void;
   onLayoutActive: (message: LayoutActiveMessage) => void;
   onSettingsCurrent: (openBehavior: OpenBehavior) => void;
@@ -61,7 +61,7 @@ export function useHostMessages(handlers: HostMessageHandlers): void {
           current.onDiagramError(message.message);
           break;
         case 'filter:scope':
-          current.onFilterScope(message.uri);
+          current.onFilterScope(message.domain, message.uri);
           break;
         case 'layout:apply':
           current.onLayoutApply(message);

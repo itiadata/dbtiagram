@@ -1,13 +1,13 @@
-version: 1
+version: 2
 name: orders
 tables:
-  - name: customers
+  - name: model:sample:customers
     x: 40
     y: 60
-  - name: order_items
+  - name: model:sample:order_items
     x: 760
     y: 60
-  - name: orders
+  - name: model:sample:orders
     x: 400
     y: 60
 notes:

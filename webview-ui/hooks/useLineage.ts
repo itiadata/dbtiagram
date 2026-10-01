@@ -66,7 +66,7 @@ function mergeEdges(current: readonly LineageEdge[], added: readonly LineageEdge
 }
 function parseExternalNode(id: string): TableNode | null {
   const match = /^external:([^:]+):(.+)$/.exec(id);
-  return match === null ? null : { id, label: match[2], columns: [], foreignKeys: [], foreignKeyColumns: [], readOnly: true, lineageKind: 'external', packageName: match[1] };
+  return match === null ? null : { id, label: match[2], columns: [], foreignKeys: [], foreignKeyColumns: [], readOnly: true, lineageKind: 'external', packageName: match[1], entityKind: 'external' };
 }
 
 export function canvasOnlyLineageNodes(nodes: readonly TableNode[]): TableNode[] {

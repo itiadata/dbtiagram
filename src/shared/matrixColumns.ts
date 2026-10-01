@@ -4,7 +4,7 @@
  * (rendering/editing the grid) and the extension host (typing what it
  * persists) — MUST NOT import `vscode`.
  */
-import type { DiagramMode } from './diagramMode';
+import type { DiagramDomain } from './diagramMode';
 
 export type MatrixScope = 'model' | 'global';
 
@@ -44,7 +44,7 @@ function matrixColumnIdsEqual(a: MatrixColumnId, b: MatrixColumnId): boolean {
 export function defaultMatrixColumns(
   metaKeys: readonly string[],
   scope: MatrixScope,
-  mode: DiagramMode = 'model',
+  mode: DiagramDomain = 'model',
 ): MatrixColumnDef[] {
   const base: MatrixColumnDef[] = [];
   if (scope === 'global') {

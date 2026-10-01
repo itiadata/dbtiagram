@@ -47,7 +47,6 @@ import { ProductTitle } from './ProductTitle';
 import { ImportReport } from './ImportReport';
 import { useSourceImport } from './hooks/useSourceImport';
 import { SIDEBAR_DEFAULT_WIDTH } from './sidebar-constants';
-import { diagramModeLabels, type DiagramMode } from '../src/shared/diagramMode';
 import { Settings, SavePlus, Save, SaveCheck, StickyNotePlus, Grid3x3, ChartNoAxesGantt, BetweenHorizontalStart, Trash2, Waypoints, FileCode2, Import, ClipboardCopy, ClipboardPaste, PencilSparkles, Group } from './icons';
 import { AiPromptExport } from './AiPromptExport';
 import { useGroups } from './hooks/useGroups';
@@ -62,6 +61,7 @@ import type { ModelRenameImpact } from '../src/shared/protocol';
 import { useLineage } from './hooks/useLineage';
 import { LineageProgress } from './LineageProgress';
 import { GitBranch, ArrowLeftFromLine, ArrowRightFromLine } from './icons';
+import { parseDiagramEntityId } from '../src/shared/entityId';
 
 export function App(): JSX.Element {
   const [graph, setGraph] = useState<DiagramGraph | null>(null);
@@ -80,22 +80,24 @@ export function App(): JSX.Element {
   const [sqlModels, setSqlModels] = useState<Set<string>>(new Set());
   const [appVersion, setAppVersion] = useState<string | null>(null);
   const [updateStatus, setUpdateStatus] = useState<'unknown' | 'upToDate' | 'updateAvailable'>('unknown');
-  const [mode, setMode] = useState<DiagramMode>('model');
   const [aiPromptModel, setAiPromptModel] = useState<string | null>(null);
   const [aiPromptAvailableModels, setAiPromptAvailableModels] = useState<Set<string>>(new Set());
   const [renameImpact, setRenameImpact] = useState<ModelRenameImpact | null>(null);
-  const labels = diagramModeLabels(mode);
+  const rawModelName = useCallback((id: string): string | null => {
+    const parsed = parseDiagramEntityId(id);
+    return parsed?.kind === 'model' ? parsed.name : null;
+  }, []);
 
   const selection = useSelection();
   const filter = useDiagramFilter();
-  const lineage = useLineage(filter.addModels);
+  const lineage = useLineage(filter.addEntities);
   const sourceImport = useSourceImport(filter.showImportedModels);
   const undoRedo = useUndoRedo();
   const notes = useNotes(undoRedo.recordMutation);
   const groups = useGroups(undoRedo.recordMutation);
   const columnDisplay = useColumnDisplay();
   const fkCreate = useFkCreateMode();
-  const layout = useLayoutPersistence(mode, notes.notes, {
+  const layout = useLayoutPersistence(notes.notes, {
     groups: groups.groups,
     mutationRevision: groups.mutationRevision,
   }, {
@@ -138,8 +140,7 @@ export function App(): JSX.Element {
         message.pendingErrors.map((pending) => `${pending.uri}: ${pending.message}`),
       );
       setError(null);
-      setMode(message.mode);
-      filter.applyModelFiles(message.files);
+      filter.applyEntityFiles(message.files);
       selection.reconcileToGraph(message.diagram);
       columnTransfer.reconcile(message.diagram);
     },
@@ -150,7 +151,7 @@ export function App(): JSX.Element {
       // graph — so only the bookkeeping ref is dropped.
       selection.clearPendingRename();
     },
-    onFilterScope: (uri) => filter.applyScope(uri),
+    onFilterScope: (domain, uri) => filter.applyScope(domain, uri),
     onLayoutApply: (message) => {
       filter.applyLayoutTables(layout.applyLayout(message));
       lineage.restoreLayoutNodes(message.layout.tables.map((table) => table.name));
@@ -191,14 +192,14 @@ export function App(): JSX.Element {
   const visibleGraph = useMemo(
     () => {
       if (graphWithLineage === null) return null;
-      return filterGraph(graphWithLineage, new Set([...filter.visibleModels, ...lineage.nodes.map((node) => node.id)]));
+      return filterGraph(graphWithLineage, new Set([...filter.visibleEntities, ...lineage.nodes.map((node) => node.id)]));
     },
-    [graphWithLineage, filter.visibleModels, lineage.nodes],
+    [graphWithLineage, filter.visibleEntities, lineage.nodes],
   );
 
   useEffect(() => {
-    if (mode === 'model') postToHost({ type: 'lineage:setDisplayed', models: visibleGraph?.nodes.map((node) => node.id) ?? [] });
-  }, [mode, visibleGraph?.nodes.map((node) => node.id).join('\u0000')]);
+    postToHost({ type: 'lineage:setDisplayed', models: visibleGraph?.nodes.map((node) => node.id) ?? [] });
+  }, [visibleGraph?.nodes.map((node) => node.id).join('\u0000')]);
 
   // The layout library re-runs when the filtered graph changes or the user
   // clicks Auto-layout; hover changes only re-derive highlights, so node
@@ -251,7 +252,8 @@ export function App(): JSX.Element {
     [notePendingRename],
   );
 
-  const drafts = useDraftForeignKeys(onEdit, mode === 'source');
+  const entityKind = useCallback((id: string) => graph?.nodes.find((node) => node.id === id)?.entityKind ?? null, [graph]);
+  const drafts = useDraftForeignKeys(onEdit, entityKind);
 
   // Spec 26: column clicks route through the FK-draw gesture first; when the
   // mode is inactive `handleColumnClick` returns null and the click falls
@@ -261,7 +263,7 @@ export function App(): JSX.Element {
       const outcome = fkCreate.handleColumnClick(model, column);
       if (outcome === null) {
         onColumnSelect(model, column);
-        if (mode === 'model') {
+        if (entityKind(model) === 'model') {
           const ordered = graph?.nodes.find((node) => node.id === model)?.columns.map((item) => item.name) ?? [];
           columnTransfer.select(model, column, ordered, event.shiftKey);
         }
@@ -275,19 +277,19 @@ export function App(): JSX.Element {
           target: target.model,
           columns: [source.column],
           toColumns: [target.column],
-           virtual: mode === 'source',
+           virtual: entityKind(source.model) === 'source',
         });
         onTableSelect(source.model);
         setFocusedFk({
-           to: mode === 'source' ? `source('${target.model.split('.')[0]}', '${target.model.split('.').slice(1).join('.')}')` : `ref('${target.model}')`,
+           to: entityKind(source.model) === 'source' ? `source('${target.model.split(':')[1]}', '${target.model.split(':')[2]}')` : `ref('${target.model}')`,
           target: target.model,
           columns: [source.column],
           toColumns: [target.column],
-           virtual: mode === 'source',
+           virtual: entityKind(source.model) === 'source',
         });
       }
     },
-    [fkCreate, onColumnSelect, onEdit, onTableSelect, setFocusedFk, mode, graph, columnTransfer.select],
+    [fkCreate, onColumnSelect, onEdit, onTableSelect, setFocusedFk, graph, columnTransfer.select, entityKind],
   );
 
   // Feature 07: a defined onEdgeClick is what keeps React Flow from tagging
@@ -370,8 +372,9 @@ export function App(): JSX.Element {
 
   // Spec 38: opens (or focuses) the model's .sql file beside the diagram.
   const onOpenModelSql = useCallback((model: string): void => {
-    postToHost({ type: 'model:openSql', model });
-  }, []);
+    const name = rawModelName(model);
+    if (name !== null) postToHost({ type: 'model:openSql', model: name });
+  }, [rawModelName]);
 
   // Spec 16: React Flow tags each rendered node with its id, so focusing a
   // note's editor after it is created (or via "Edit text") needs no extra
@@ -412,19 +415,19 @@ export function App(): JSX.Element {
           icon: <StickyNotePlus size={16} />,
           onSelect: () => focusNoteText(notes.addNote(flowPoint.x, flowPoint.y)),
         },
-        ...(mode === 'model' ? [{
+        ...([{
           label: 'Import models from source yml',
           icon: <Import size={16} />,
           onSelect: sourceImport.start,
-        }] : []),
+        }]),
         {
-          label: `Edit fields matrix (all ${mode === 'source' ? 'tables' : 'models'})`,
+          label: 'Edit fields matrix (all tables)',
           icon: <Grid3x3 size={16} />,
           onSelect: () => fieldsMatrix.openGlobal(),
         },
       ]);
     },
-    [openMenu, notes, focusNoteText, fieldsMatrix, mode, sourceImport.start],
+    [openMenu, notes, focusNoteText, fieldsMatrix, sourceImport.start],
   );
 
   const onDeleteSelectedNotes = useCallback((): void => {
@@ -439,7 +442,7 @@ export function App(): JSX.Element {
   const onRemoveTable = useCallback(
     (model: string): void => {
       const readOnly = graphWithLineage?.nodes.find((node) => node.id === model)?.readOnly === true;
-      if (readOnly) lineage.removeNode(model); else filter.removeModels([model]);
+      if (readOnly) lineage.removeNode(model); else filter.removeEntities([model]);
       selection.clearSelectionForModel(model);
     },
     [filter, selection, graphWithLineage, lineage.removeNode],
@@ -460,9 +463,11 @@ export function App(): JSX.Element {
     (model: string, column?: string): ContextMenuItem[] => {
       const currentMode = columnDisplay.effectiveMode(model);
       const related = graph === null ? [] : relatedModels(graph, model);
-      const missingRelated = related.filter((name) => !filter.visibleModels.has(name));
+      const missingRelated = related.filter((name) => !filter.visibleEntities.has(name));
       const tableGroup = groupForModel(groups.groups, model);
       const readOnly = graphWithLineage?.nodes.find((node) => node.id === model)?.readOnly === true;
+      const modelEntity = entityKind(model) === 'model';
+      const rawName = rawModelName(model);
       if (readOnly) return [
         {
           label: 'Add lineage', icon: <GitBranch size={16} />, items: [
@@ -473,17 +478,17 @@ export function App(): JSX.Element {
         { label: 'Remove from diagram', icon: <Trash2 size={16} />, onSelect: () => onRemoveTable(model) },
       ];
       return [
-        { label: `Reveal in ${labels.sourceFile}`, icon: <ChartNoAxesGantt size={16} />, onSelect: () => onOpenModelSource(model, column) },
-        ...(mode === 'model' ? [{
+        { label: `Reveal in ${entityKind(model) === 'source' ? 'source yml' : 'model.yml'}`, icon: <ChartNoAxesGantt size={16} />, onSelect: () => onOpenModelSource(model, column) },
+        ...(modelEntity ? [{
           label: 'Open SQL file',
           icon: <FileCode2 size={16} />,
-          disabled: !sqlModels.has(model),
-          title: sqlModels.has(model) ? undefined : `No .sql file found for "${model}"`,
+          disabled: rawName === null || !sqlModels.has(rawName),
+          title: rawName !== null && sqlModels.has(rawName) ? undefined : `No .sql file found for "${model}"`,
           onSelect: () => onOpenModelSql(model),
         }] : []),
-        ...(mode === 'model' ? [{
+        ...(modelEntity ? [{
           label: 'Add lineage', icon: <GitBranch size={16} />, items: [
-            { label: 'Add upstream lineage', icon: <ArrowLeftFromLine size={16} />, disabled: !sqlModels.has(model), onSelect: () => lineage.expand(model, 'upstream') },
+            { label: 'Add upstream lineage', icon: <ArrowLeftFromLine size={16} />, disabled: rawName === null || !sqlModels.has(rawName), onSelect: () => lineage.expand(model, 'upstream') },
             { label: 'Add downstream lineage', icon: <ArrowRightFromLine size={16} />, onSelect: () => lineage.expand(model, 'downstream') },
           ],
         }] : []),
@@ -492,7 +497,7 @@ export function App(): JSX.Element {
           icon: <Waypoints size={16} />,
           disabled: missingRelated.length === 0,
           title: missingRelated.length === 0 ? 'No related tables to add' : undefined,
-          onSelect: () => filter.addModels(related),
+          onSelect: () => filter.addEntities(related),
         },
         {
           label: 'Show columns',
@@ -504,12 +509,12 @@ export function App(): JSX.Element {
           })),
         },
         { label: 'Edit columns', icon: <Grid3x3 size={16} />, onSelect: () => fieldsMatrix.openForModel(model) },
-        ...(mode === 'model' ? [{
+        ...(modelEntity ? [{
           label: 'AI renaming',
           icon: <PencilSparkles size={16} />,
-          disabled: !aiPromptAvailableModels.has(model),
-          title: aiPromptAvailableModels.has(model) ? undefined : AI_RENAMING_UNAVAILABLE_REASON,
-          items: aiPromptAvailableModels.has(model) ? [{ label: 'Export prompt', icon: <ClipboardCopy size={16} />, onSelect: () => setAiPromptModel(model) }, { label: 'Import clipboard response', icon: <ClipboardPaste size={16} />, onSelect: () => postToHost({ type: 'aiPrompt:import', model }) }] : undefined,
+          disabled: rawName === null || !aiPromptAvailableModels.has(rawName),
+          title: rawName !== null && aiPromptAvailableModels.has(rawName) ? undefined : AI_RENAMING_UNAVAILABLE_REASON,
+          items: rawName !== null && aiPromptAvailableModels.has(rawName) ? [{ label: 'Export prompt', icon: <ClipboardCopy size={16} />, onSelect: () => setAiPromptModel(rawName) }, { label: 'Import clipboard response', icon: <ClipboardPaste size={16} />, onSelect: () => postToHost({ type: 'aiPrompt:import', model: rawName }) }] : undefined,
         }] : []),
         ...(tableGroup === undefined ? [{
           label: 'Add to group',
@@ -521,7 +526,7 @@ export function App(): JSX.Element {
         { label: 'Remove from diagram', icon: <Trash2 size={16} />, onSelect: () => onRemoveTable(model) },
       ];
     },
-    [columnDisplay, onOpenModelSource, onOpenModelSql, sqlModels, aiPromptAvailableModels, fieldsMatrix, onRemoveTable, graph, graphWithLineage, filter, mode, labels.sourceFile, groups, lineage.expand],
+    [columnDisplay, onOpenModelSource, onOpenModelSql, sqlModels, aiPromptAvailableModels, fieldsMatrix, onRemoveTable, graph, graphWithLineage, filter, groups, lineage.expand, entityKind, rawModelName],
   );
 
   const onColumnContextMenu = useCallback(
@@ -529,20 +534,21 @@ export function App(): JSX.Element {
       const ordered = graph?.nodes.find((node) => node.id === model)?.columns.map((item) => item.name) ?? [];
       if (column.length > 0) columnTransfer.selectForContextMenu(model, column, ordered);
       const target = column.length > 0 ? { model, before: column } : { model };
-      const pasteDisabled = mode !== 'model' || columnTransfer.clipboard === null || columnTransfer.clipboard.sourceModel === model;
+      const modelEntity = entityKind(model) === 'model';
+      const pasteDisabled = !modelEntity || columnTransfer.clipboard === null || columnTransfer.clipboard.sourceModel === model;
       openMenu(event.clientX, event.clientY, [
-        ...(mode === 'model' && column.length > 0 ? [
+        ...(modelEntity && column.length > 0 ? [
           { label: 'Copy', onSelect: columnTransfer.copy },
           { label: 'Cut', onSelect: columnTransfer.cut },
         ] : []),
-        ...(mode === 'model' ? [{
+        ...(modelEntity ? [{
           label: 'Paste', disabled: pasteDisabled,
           onSelect: () => { const edit = columnTransfer.paste(target); if (edit !== null) onEdit(edit); },
         }] : []),
         ...buildTableMenuItems(model, column.length > 0 ? column : undefined),
       ]);
     },
-    [openMenu, buildTableMenuItems, graph, mode, columnTransfer, onEdit],
+    [openMenu, buildTableMenuItems, graph, columnTransfer, onEdit, entityKind],
   );
 
   // Spec 15: only table cards carry a menu; other node types (notes) are
@@ -683,8 +689,8 @@ export function App(): JSX.Element {
     graph === null || visibleGraph === null
       ? 'loading…'
       : visibleGraph.nodes.length === graph.nodes.length
-        ? `${graph.nodes.length} ${labels.entitySection.toLowerCase()}`
-        : `${visibleGraph.nodes.length} of ${graph.nodes.length} ${labels.entitySection.toLowerCase()}`;
+        ? `${graph.nodes.length} entities`
+        : `${visibleGraph.nodes.length} of ${graph.nodes.length} entities`;
 
   const activeLayout = layout.activeLayout;
   const selectedTableId = selectedEntity?.kind === 'table' ? selectedEntity.node.id : null;
@@ -695,24 +701,22 @@ export function App(): JSX.Element {
         {filterVisible ? (
           <FilterSidebar
             style={{ width: filterWidth }}
-            files={filter.modelFiles}
-            labels={labels}
-            showSql={mode === 'model'}
-            availableModelNames={filter.availableModelNames}
-            selectedFiles={filter.selectedFiles}
-            selectedModels={filter.selectedModels}
-            fileSearch={filter.fileSearch}
-            modelSearch={filter.modelSearch}
+            filesByDomain={filter.filesByDomain}
+            showSql
+            availableEntitiesByDomain={filter.availableEntitiesByDomain}
+            selectedFilesByDomain={filter.selectedFilesByDomain}
+            selectedEntitiesByDomain={filter.selectedEntitiesByDomain}
+            searchByDomain={filter.searchByDomain}
             onFileSearchChange={filter.setFileSearch}
-            onModelSearchChange={filter.setModelSearch}
+            onEntitySearchChange={filter.setEntitySearch}
             onToggleFile={filter.toggleFile}
-            onToggleModel={filter.toggleModel}
+            onToggleEntity={filter.toggleEntity}
             onSelectAllFiles={filter.selectAllFiles}
             onClearFiles={filter.clearFiles}
-            onSelectAllModels={filter.selectAllModels}
-            onClearModels={filter.clearModels}
-            onRevealModel={revealModel}
-            onOpenModelSource={onOpenModelSource}
+            onSelectAllEntities={filter.selectAllEntities}
+            onClearEntities={filter.clearEntities}
+            onRevealEntity={revealModel}
+            onOpenEntitySource={onOpenModelSource}
             sqlModels={sqlModels}
             onOpenModelSql={onOpenModelSql}
             onOpenMenu={openMenu}
@@ -843,7 +847,7 @@ export function App(): JSX.Element {
                     onRemoveSelectedTable={onRemoveSelectedTable}
                     onAddNoteAt={onAddNoteAt}
                     onOpenFieldsMatrix={fieldsMatrix.openGlobal}
-                    onImportSourceModels={mode === 'model' ? sourceImport.start : undefined}
+                    onImportSourceModels={sourceImport.start}
                     groupNodes={groups.groupNodes}
                     groupIds={groups.groupIds}
                     onTableRectsChange={groups.setTableRects}
@@ -866,7 +870,6 @@ export function App(): JSX.Element {
         {detailsVisible ? (
           <DetailsSidebar
             style={{ width: detailsWidth }}
-            mode={mode}
             key={detailsKey}
             entity={selectedEntity}
             nodes={graphWithLineage?.nodes ?? []}
@@ -926,7 +929,6 @@ export function App(): JSX.Element {
       )}
       {fieldsMatrix.target !== null && graph !== null && (
         <FieldsMatrix
-          mode={mode}
           target={fieldsMatrix.target}
           graph={graph}
           onEdit={onEdit}
@@ -941,7 +943,7 @@ export function App(): JSX.Element {
       )}
       {filter.initialCapNotice !== null && (
         <Toast
-          message={`Showing ${filter.initialCapNotice.shown} of ${filter.initialCapNotice.total} ${labels.entitySection.toLowerCase()} — use the Filter section in the sidebar to change which ${labels.entitySection.toLowerCase()} are loaded.`}
+          message={`Showing ${filter.initialCapNotice.shown} of ${filter.initialCapNotice.total} models — use the Filter section in the sidebar to change which models are loaded.`}
           onDismiss={filter.dismissInitialCapNotice}
         />
       )}

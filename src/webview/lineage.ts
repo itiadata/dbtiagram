@@ -1,7 +1,8 @@
 /** Pure SQL-lineage expansion orchestration. */
-import { findSqlRefs } from '../dbt/sqlRefs';
+import { sqlLineageTargets } from '../diagram/lineage';
 import type { TableNode } from '../diagram/graph';
 import { lineageDescendants, type LineageEdge } from '../diagram/lineage';
+import { parseDiagramEntityId } from '../shared/entityId';
 
 export interface LineageProgress { scanned: number; total: number }
 export interface LineageExpansionResult {
@@ -14,7 +15,8 @@ export interface LineageExpansionResult {
 export interface LineageHost {
   readModelSql(modelId: string): Promise<string | null>;
   allProjectModelIds(): Promise<string[]>;
-  resolveNode(packageName: string, modelName: string): Promise<TableNode>;
+  resolveModelNode(packageName: string, modelName: string): Promise<TableNode>;
+  resolveSourceNode(sourceName: string, tableName: string): Promise<TableNode>;
   progress(value: LineageProgress): void;
   isCancelled(): boolean;
 }
@@ -29,9 +31,8 @@ export async function expandUpstream(
   const visit = async (childId: string, readableName: string, packageName: string): Promise<void> => {
     const text = await host.readModelSql(readableName);
     if (text === null) return;
-    for (const ref of findSqlRefs(text)) {
-      const targetPackage = ref.package ?? packageName;
-      const resolved = await host.resolveNode(targetPackage, ref.name);
+    for (const target of sqlLineageTargets(packageName, text)) {
+      const resolved = target.kind === 'model' ? await host.resolveModelNode(target.packageName, target.name) : await host.resolveSourceNode(target.sourceName, target.tableName);
       const key = `${resolved.id}\u0000${childId}`;
       if (!edges.some((edge) => `${edge.parent}\u0000${edge.child}` === key)) {
         edges.push({ parent: resolved.id, child: childId });
@@ -39,7 +40,7 @@ export async function expandUpstream(
       if (visited.has(resolved.id)) continue;
       visited.add(resolved.id);
       nodes.push(resolved);
-      if (resolved.lineageKind !== 'external') await visit(resolved.id, ref.name, targetPackage);
+      if (target.kind === 'model' && resolved.lineageKind !== 'external') await visit(resolved.id, target.name, target.packageName);
     }
   };
   await visit(root, rootIdentity.name, rootIdentity.packageName);
@@ -56,12 +57,12 @@ export async function expandDownstream(
   for (let index = 0; index < ids.length; index += 1) {
     if (host.isCancelled()) return null;
     const childName = ids[index];
-    const child = await host.resolveNode(rootIdentity.packageName, childName);
+    const child = await host.resolveModelNode(rootIdentity.packageName, childName);
     nodesById.set(child.id, child);
     const text = await host.readModelSql(childName);
     if (host.isCancelled()) return null;
-    if (text !== null) for (const ref of findSqlRefs(text)) {
-      const parent = await host.resolveNode(ref.package ?? rootIdentity.packageName, ref.name);
+    if (text !== null) for (const target of sqlLineageTargets(rootIdentity.packageName, text)) {
+      const parent = target.kind === 'model' ? await host.resolveModelNode(target.packageName, target.name) : await host.resolveSourceNode(target.sourceName, target.tableName);
       nodesById.set(parent.id, parent);
       allEdges.push({ parent: parent.id, child: child.id });
     }
@@ -81,12 +82,13 @@ export async function refreshDisplayedLineage(
 ): Promise<LineageEdge[]> {
   const edges: LineageEdge[] = [];
   for (const child of displayed) {
+    const parsedChild = parseDiagramEntityId(child);
+    if (parsedChild?.kind !== 'model') continue;
     const current = identity(child);
-    if (child.startsWith('external:')) continue;
     const text = await host.readModelSql(current.name);
     if (text === null) continue;
-    for (const ref of findSqlRefs(text)) {
-      const parent = await host.resolveNode(ref.package ?? current.packageName, ref.name);
+    for (const target of sqlLineageTargets(current.packageName, text)) {
+      const parent = target.kind === 'model' ? await host.resolveModelNode(target.packageName, target.name) : await host.resolveSourceNode(target.sourceName, target.tableName);
       if (displayed.has(parent.id)) edges.push({ parent: parent.id, child });
     }
   }
@@ -101,7 +103,7 @@ function identity(id: string): { packageName: string; name: string } {
 async function resolvedIdentity(host: LineageHost, id: string): Promise<{ packageName: string; name: string }> {
   const parsed = identity(id);
   if (parsed.packageName !== '') return parsed;
-  const node = await host.resolveNode('', parsed.name);
+  const node = await host.resolveModelNode('', parsed.name);
   return { packageName: node.packageName ?? '', name: parsed.name };
 }
 

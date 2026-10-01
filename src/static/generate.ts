@@ -8,10 +8,8 @@ import { serializeStaticSiteData } from '../shared/staticSite';
 
 export interface GenerateStaticSiteResult {
   indexPath: string;
-  modelExplorerCount: 0 | 1;
-  sourceExplorerCount: 0 | 1;
-  modelLayoutCount: number;
-  sourceLayoutCount: number;
+  explorerCount: 0 | 1;
+  layoutCount: number;
   warnings: StaticSiteWarning[];
 }
 
@@ -45,10 +43,8 @@ export async function generateStaticSite(options: StaticGeneratorOptions): Promi
   }
   return {
     indexPath: path.join(options.output, 'index.html'),
-    modelExplorerCount: built.data.model === undefined ? 0 : 1,
-    sourceExplorerCount: built.data.source === undefined ? 0 : 1,
-    modelLayoutCount: built.data.layouts.filter((entry) => entry.layout.mode === 'model').length,
-    sourceLayoutCount: built.data.layouts.filter((entry) => entry.layout.mode === 'source').length,
+    explorerCount: built.data.universe === undefined ? 0 : 1,
+    layoutCount: built.data.layouts.length,
     warnings: built.warnings,
   };
 }

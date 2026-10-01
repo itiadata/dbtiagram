@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildDiagram } from '../../../src/diagram/graph';
+import { buildDiagram as buildCombinedDiagram } from '../../../src/diagram/graph';
 import { layoutDiagram } from '../../../src/diagram/layout';
 import {
   CARD_ANCHOR,
@@ -13,6 +13,7 @@ import {
   type HandleSide,
 } from '../../../src/diagram/flow';
 import type { ModelDefinition } from '../../../src/dbt/types';
+const buildDiagram = (models: ModelDefinition[]) => buildCombinedDiagram(models.map((model) => ({ packageName: 'sample', model })), []);
 import type { ColumnDisplayMode } from '../../../src/diagram/columnDisplay';
 import { LINEAGE_EDGE_TYPE, LINEAGE_HEADER_ANCHOR } from '../../../src/diagram/flow';
 
@@ -42,12 +43,12 @@ describe('buildFlowElements', () => {
       { name: 'child', columns: [{ name: 'parent_id' }], constraints: [{ type: 'foreign_key', columns: ['parent_id'], to: "ref('parent')", toColumns: ['id'] }] },
       { name: 'parent', columns: [{ name: 'id' }] },
     ]);
-    graph.lineageEdges = [{ parent: 'parent', child: 'child' }];
+    graph.lineageEdges = [{ parent: 'model:sample:parent', child: 'model:sample:child' }];
     const flow = buildFlowElements(graph, layoutDiagram(graph), () => 'all');
     expect(flow.edges).toHaveLength(2);
     const lineage = flow.edges.find((edge) => edge.type === LINEAGE_EDGE_TYPE)!;
     expect(lineage).toMatchObject({
-      source: 'parent', target: 'child',
+      source: 'model:sample:parent', target: 'model:sample:child',
       sourceHandle: columnSourceHandle(LINEAGE_HEADER_ANCHOR, 'right'),
       targetHandle: columnTargetHandle(LINEAGE_HEADER_ANCHOR, 'left'),
       data: { kind: 'lineage' },
@@ -57,12 +58,12 @@ describe('buildFlowElements', () => {
 
   it('makes lineage handles face the opposite table after movement', () => {
     const graph = buildDiagram([{ name: 'parent' }, { name: 'child' }]);
-    graph.lineageEdges = [{ parent: 'parent', child: 'child' }];
+    graph.lineageEdges = [{ parent: 'model:sample:parent', child: 'model:sample:child' }];
     const built = buildFlowElements(graph, layoutDiagram(graph), () => 'all');
     const lineage = built.edges.find((edge) => edge.type === LINEAGE_EDGE_TYPE)!;
     const routed = routeEdges(lineage === undefined ? [] : [lineage], [
-      { id: 'parent', x: 500, y: 0, width: 240, height: 44 },
-      { id: 'child', x: 0, y: 0, width: 240, height: 44 },
+      { id: 'model:sample:parent', x: 500, y: 0, width: 240, height: 44 },
+      { id: 'model:sample:child', x: 0, y: 0, width: 240, height: 44 },
     ], () => undefined, () => undefined).edges[0];
     expect(routed.sourceHandle).toBe(columnSourceHandle(LINEAGE_HEADER_ANCHOR, 'left'));
     expect(routed.targetHandle).toBe(columnTargetHandle(LINEAGE_HEADER_ANCHOR, 'right'));
@@ -107,8 +108,8 @@ describe('buildFlowElements', () => {
 
     expect(flow.edges).toHaveLength(2);
     expect(flow.edges[0]).toMatchObject({
-      source: 'a',
-      target: 'b',
+      source: 'model:sample:a',
+      target: 'model:sample:b',
       sourceHandle: columnSourceHandle('x1', 'right'),
       targetHandle: columnTargetHandle('y1', 'left'),
       type: FK_EDGE_TYPE,
@@ -116,16 +117,16 @@ describe('buildFlowElements', () => {
       data: {
         sourceColumn: 'x1',
         targetColumn: 'y1',
-        title: 'a.x1 -> b.y1',
+        title: 'model:sample:a.x1 -> model:sample:b.y1',
       },
     });
     expect(flow.edges[1]).toMatchObject({
-      source: 'a',
-      target: 'b',
+      source: 'model:sample:a',
+      target: 'model:sample:b',
       sourceHandle: columnSourceHandle('x2', 'right'),
       targetHandle: columnTargetHandle('y2', 'left'),
       interactionWidth: EDGE_INTERACTION_WIDTH,
-      data: { title: 'a.x2 -> b.y2' },
+      data: { title: 'model:sample:a.x2 -> model:sample:b.y2' },
     });
   });
 
@@ -154,7 +155,7 @@ describe('buildFlowElements', () => {
 
     const ids = flow.edges.map((edge) => edge.id);
     expect(new Set(ids).size).toBe(ids.length);
-    expect(ids).toEqual(['a.x1->b.y1', 'a.x2->b.y2', 'a.x1->b.y1[0]']);
+    expect(ids).toEqual(['model:sample:a.x1->model:sample:b.y1', 'model:sample:a.x2->model:sample:b.y2', 'model:sample:a.x1->model:sample:b.y1[0]']);
   });
 
   it('dedupes identical FKs at the graph layer', () => {
@@ -290,7 +291,7 @@ describe('used handle dots (spec 09 merged)', () => {
       },
       { name: 'orders', columns: [{ name: 'order_id' }, { name: 'total_amount' }] },
     ]);
-    const orders = flow.nodes.find((n) => n.id === 'orders')!;
+    const orders = flow.nodes.find((n) => n.id === 'model:sample:orders')!;
     // orders.order_id is the target; total_amount participates in no FK.
     expect(orders.data.handles).toEqual({
       [columnTargetHandle('order_id', 'left')]: 'left',
@@ -310,7 +311,7 @@ describe('used handle dots (spec 09 merged)', () => {
       },
       { name: 'customers', columns: [{ name: 'customer_id' }] },
     ]);
-    const orders = flow.nodes.find((n) => n.id === 'orders')!;
+    const orders = flow.nodes.find((n) => n.id === 'model:sample:orders')!;
     expect(orders.data.handles).toEqual({
       [columnSourceHandle('customer_id', 'right')]: 'right',
     });
@@ -328,7 +329,7 @@ describe('used handle dots (spec 09 merged)', () => {
       },
       { name: 'customers', columns: [{ name: 'customer_id' }] },
     ]);
-    const orders = flow.nodes.find((n) => n.id === 'orders')!;
+    const orders = flow.nodes.find((n) => n.id === 'model:sample:orders')!;
     expect(orders.data.handles![columnSourceHandle('total_amount', 'left')]).toBeUndefined();
     expect(orders.data.handles![columnSourceHandle('total_amount', 'right')]).toBeUndefined();
     expect(orders.data.handles![columnTargetHandle('total_amount', 'left')]).toBeUndefined();
@@ -350,8 +351,8 @@ describe('used handle dots (spec 09 merged)', () => {
         constraints: [{ type: 'foreign_key', columns: ['c'], to: "ref('a')", toColumns: ['c'] }],
       },
     ]);
-    const a = flow.nodes.find((n) => n.id === 'a')!;
-    const b = flow.nodes.find((n) => n.id === 'b')!;
+    const a = flow.nodes.find((n) => n.id === 'model:sample:a')!;
+    const b = flow.nodes.find((n) => n.id === 'model:sample:b')!;
     const keys = (handles: typeof a.data.handles): string[] => Object.keys(handles ?? {});
     // dagre places a left of b, so a's two edges attach on its right side and
     // b's on its left: each node has exactly one source and one target handle.
@@ -390,7 +391,7 @@ describe('used handle dots (spec 09 merged)', () => {
       },
       { name: 'b', columns: [{ name: 'y1' }, { name: 'y2' }] },
     ]);
-    const a = flow.nodes.find((n) => n.id === 'a')!;
+    const a = flow.nodes.find((n) => n.id === 'model:sample:a')!;
     expect(flow.edges).toHaveLength(3);
     expect(Object.keys(a.data.handles ?? {})).toEqual([
       columnSourceHandle('x1', 'right'),
@@ -413,8 +414,8 @@ describe('used handle dots (spec 09 merged)', () => {
         constraints: [{ type: 'foreign_key', columns: ['c'], to: "ref('a')", toColumns: ['c'] }],
       },
     ]);
-    const forward = flow.edges.find((edge) => edge.source === 'a');
-    const back = flow.edges.find((edge) => edge.source === 'b');
+    const forward = flow.edges.find((edge) => edge.source === 'model:sample:a');
+    const back = flow.edges.find((edge) => edge.source === 'model:sample:b');
     expect(forward?.sourceHandle).toBe(columnSourceHandle('c', 'right'));
     expect(forward?.targetHandle).toBe(columnTargetHandle('c', 'left'));
     expect(back?.sourceHandle).toBe(columnSourceHandle('c', 'left'));
@@ -476,23 +477,23 @@ describe('routeEdges (live drag geometry, spec 12)', () => {
 
   /** Two 240px-wide cards at the given left edges (heights are irrelevant to the side choice). */
   const rects = (aX: number, bX: number) => [
-    { id: 'a', x: aX, y: 0, width: 240, height: 68 },
-    { id: 'b', x: bX, y: 0, width: 240, height: 68 },
+    { id: 'model:sample:a', x: aX, y: 0, width: 240, height: 68 },
+    { id: 'model:sample:b', x: bX, y: 0, width: 240, height: 68 },
   ];
 
   it('keeps forward sides when the target stays at/right of the source', () => {
     const flow = pairFlow();
     const { edges: rebuilt, nodeHandles } = routeEdgesFor(flow.edges, rects(0, 400));
     expect(rebuilt[0]).toMatchObject({
-      source: 'a',
-      target: 'b',
+      source: 'model:sample:a',
+      target: 'model:sample:b',
       sourceHandle: columnSourceHandle('x', 'right'),
       targetHandle: columnTargetHandle('y', 'left'),
     });
-    expect(Object.fromEntries(nodeHandles.get('a')!)).toEqual({
+    expect(Object.fromEntries(nodeHandles.get('model:sample:a')!)).toEqual({
       [columnSourceHandle('x', 'right')]: 'right',
     });
-    expect(Object.fromEntries(nodeHandles.get('b')!)).toEqual({
+    expect(Object.fromEntries(nodeHandles.get('model:sample:b')!)).toEqual({
       [columnTargetHandle('y', 'left')]: 'left',
     });
   });
@@ -504,10 +505,10 @@ describe('routeEdges (live drag geometry, spec 12)', () => {
       sourceHandle: columnSourceHandle('x', 'left'),
       targetHandle: columnTargetHandle('y', 'right'),
     });
-    expect(Object.fromEntries(nodeHandles.get('a')!)).toEqual({
+    expect(Object.fromEntries(nodeHandles.get('model:sample:a')!)).toEqual({
       [columnSourceHandle('x', 'left')]: 'left',
     });
-    expect(Object.fromEntries(nodeHandles.get('b')!)).toEqual({
+    expect(Object.fromEntries(nodeHandles.get('model:sample:b')!)).toEqual({
       [columnTargetHandle('y', 'right')]: 'right',
     });
   });
@@ -554,7 +555,7 @@ describe('routeEdges (live drag geometry, spec 12)', () => {
       expect(edge.targetHandle).toBe(columnTargetHandle(edge.data.targetColumn!, 'right'));
     }
     // Two edges share a.x1: the live map still holds one handle id per column.
-    expect(Object.keys(Object.fromEntries(nodeHandles.get('a')!))).toEqual([
+    expect(Object.keys(Object.fromEntries(nodeHandles.get('model:sample:a')!))).toEqual([
       columnSourceHandle('x1', 'left'),
       columnSourceHandle('x2', 'left'),
     ]);
@@ -563,7 +564,7 @@ describe('routeEdges (live drag geometry, spec 12)', () => {
   it('omits nodes with no edges from the live handle map', () => {
     const { flow } = flowFor([{ name: 'orphan', columns: [{ name: 'id' }] }]);
     const { edges: rebuilt, nodeHandles } = routeEdgesFor(flow.edges, [
-      { id: 'orphan', x: 0, y: 0, width: 240, height: 68 },
+      { id: 'model:sample:orphan', x: 0, y: 0, width: 240, height: 68 },
     ]);
     expect(rebuilt).toEqual([]);
     expect(nodeHandles.size).toBe(0);
@@ -619,7 +620,7 @@ describe('broken FK columns (spec 20)', () => {
       { name: 'customers', columns: [{ name: 'id' }] },
     ]);
     expect(flow.edges[0].data.title).toBe(
-      'order_items.customer_id -> customers.id (missing column: order_items.customer_id)',
+      'model:sample:order_items.customer_id -> model:sample:customers.id (missing column: model:sample:order_items.customer_id)',
     );
   });
 
@@ -639,7 +640,7 @@ describe('broken FK columns (spec 20)', () => {
     expect(edge.targetHandle?.startsWith(`${CARD_ANCHOR}:target:`)).toBe(true);
     expect(edge.data.unresolved).toEqual({ source: false, target: true });
     expect(edge.data.title).toBe(
-      'order_items.customer_id -> customers.id (missing column: customers.id)',
+      'model:sample:order_items.customer_id -> model:sample:customers.id (missing column: model:sample:customers.id)',
     );
   });
 
@@ -655,7 +656,7 @@ describe('broken FK columns (spec 20)', () => {
       { name: 'customers', columns: [{ name: 'customer_id' }] },
     ]);
     expect(flow.edges[0].data.title).toBe(
-      'order_items.customer_id -> customers.id (missing column: order_items.customer_id, customers.id)',
+      'model:sample:order_items.customer_id -> model:sample:customers.id (missing column: model:sample:order_items.customer_id, model:sample:customers.id)',
     );
     expect(flow.edges[0].data.unresolved).toEqual({ source: true, target: true });
   });
@@ -675,7 +676,7 @@ describe('broken FK columns (spec 20)', () => {
     expect(edge.data.unresolved).toBeUndefined();
     expect(edge.sourceHandle?.startsWith('customer_id:source:')).toBe(true);
     expect(edge.targetHandle?.startsWith('id:target:')).toBe(true);
-    expect(edge.data.title).toBe('order_items.customer_id -> customers.id');
+    expect(edge.data.title).toBe('model:sample:order_items.customer_id -> model:sample:customers.id');
   });
 
   it('mounts the card handle on the node whose column is missing', () => {
@@ -689,7 +690,7 @@ describe('broken FK columns (spec 20)', () => {
       },
       { name: 'customers', columns: [{ name: 'id' }] },
     ]);
-    const orderItems = flow.nodes.find((n) => n.id === 'order_items')!;
+    const orderItems = flow.nodes.find((n) => n.id === 'model:sample:order_items')!;
     const keys = Object.keys(orderItems.data.handles ?? {});
     expect(keys.some((k) => k.startsWith(`${CARD_ANCHOR}:source:`))).toBe(true);
   });
@@ -713,13 +714,13 @@ describe('column display anchoring (spec 24)', () => {
           constraints: [{ type: 'primary_key', columns: ['order_id'] }],
         },
       ],
-      (nodeId) => (nodeId === 'order_items' ? 'pkOnly' : 'all'),
+      (nodeId) => (nodeId === 'model:sample:order_items' ? 'pkOnly' : 'all'),
     );
     const edge = flow.edges[0];
     expect(edge.sourceHandle?.startsWith(`${HEADER_ANCHOR}:source:`)).toBe(true);
     expect(edge.targetHandle?.startsWith('order_id:target:')).toBe(true);
     expect(edge.data.unresolved).toBeUndefined();
-    expect(edge.data.title).toBe('order_items.order_id -> orders.order_id');
+    expect(edge.data.title).toBe('model:sample:order_items.order_id -> model:sample:orders.order_id');
   });
 
   it('a genuinely missing FK column still anchors at CARD_ANCHOR and stays unresolved (regression guard)', () => {

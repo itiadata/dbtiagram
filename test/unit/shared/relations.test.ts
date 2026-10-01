@@ -68,19 +68,19 @@ describe('relatedModels', () => {
 
 describe('filesDeclaring', () => {
   const files: DiagramModelFile[] = [
-    { uri: 'a.yml', label: 'a', entities: ['orders'] },
-    { uri: 'b.yml', label: 'b', entities: ['customers'] },
+    { uri: 'a.yml', label: 'a', domain: 'model', entities: ['model:sample:orders'] },
+    { uri: 'b.yml', label: 'b', domain: 'model', entities: ['model:sample:customers'] },
   ];
 
   it('returns the uris declaring the models', () => {
-    expect(filesDeclaring(files, ['customers'])).toEqual(['b.yml']);
+    expect(filesDeclaring(files, ['model:sample:customers'])).toEqual(['b.yml']);
   });
 
   it('collapses a file declaring several of the models', () => {
     const merged: DiagramModelFile[] = [
-      { uri: 'a.yml', label: 'a', entities: ['orders', 'customers'] },
+      { uri: 'a.yml', label: 'a', domain: 'model', entities: ['model:sample:orders', 'model:sample:customers'] },
     ];
-    expect(filesDeclaring(merged, ['orders', 'customers'])).toEqual(['a.yml']);
+    expect(filesDeclaring(merged, ['model:sample:orders', 'model:sample:customers'])).toEqual(['a.yml']);
   });
 
   it('ignores models no file declares', () => {

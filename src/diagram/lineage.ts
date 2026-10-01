@@ -1,10 +1,22 @@
 /** Pure SQL-lineage identities and stable transitive traversal. */
+import { findSqlRefs, findSqlSources } from '../dbt/sqlRefs';
+import { modelEntityId } from '../shared/entityId';
 export type LineageNodeKind = 'local' | 'unknown' | 'external';
 export interface LineageNodeId { package: string; name: string }
 export interface LineageEdge { parent: string; child: string }
 
 export function lineageId(target: LineageNodeId): string {
-  return `model:${target.package}:${target.name}`;
+  return modelEntityId(target.package, target.name);
+}
+
+export type SqlLineageTarget =
+  | { kind: 'model'; packageName: string; name: string }
+  | { kind: 'source'; sourceName: string; tableName: string };
+export function sqlLineageTargets(packageName: string, text: string): SqlLineageTarget[] {
+  return [
+    ...findSqlRefs(text).map((ref): SqlLineageTarget => ({ kind: 'model', packageName: ref.package ?? packageName, name: ref.name })),
+    ...findSqlSources(text).map((source): SqlLineageTarget => ({ kind: 'source', sourceName: source.source, tableName: source.table })),
+  ];
 }
 
 export function lineageAncestors(edges: readonly LineageEdge[], start: string): string[] {

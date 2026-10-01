@@ -33,15 +33,15 @@ export function activate(context: vscode.ExtensionContext): void {
       const uri = resource ?? vscode.window.activeTextEditor?.document.uri;
       const source: DiagramSource =
         uri !== undefined && uri.scheme === 'file'
-          ? { kind: 'model', fsPath: uri.fsPath }
-          : { kind: 'adhoc', id: String((adhocCounter += 1)), mode: 'model' };
+          ? { kind: 'entityFile', domain: 'model', fsPath: uri.fsPath }
+          : { kind: 'adhoc', id: String((adhocCounter += 1)) };
       return DiagramPanel.createOrShow(context.extensionUri, source, context.workspaceState, version);
     }),
     vscode.commands.registerCommand('dbtiagram.openSource', (resource?: vscode.Uri) => {
       const uri = resource ?? vscode.window.activeTextEditor?.document.uri;
       const source: DiagramSource = uri !== undefined && uri.scheme === 'file'
-        ? { kind: 'source', fsPath: uri.fsPath }
-        : { kind: 'adhoc', id: String((adhocCounter += 1)), mode: 'source' };
+        ? { kind: 'entityFile', domain: 'source', fsPath: uri.fsPath }
+        : { kind: 'adhoc', id: String((adhocCounter += 1)) };
       return DiagramPanel.createOrShow(context.extensionUri, source, context.workspaceState, version);
     }),
     // Opens the diagram with a saved layout applied (spec 13). The editor/title
@@ -51,7 +51,7 @@ export function activate(context: vscode.ExtensionContext): void {
       const source: DiagramSource =
         uri !== undefined && uri.scheme === 'file'
           ? { kind: 'layout', fsPath: uri.fsPath }
-          : { kind: 'adhoc', id: String((adhocCounter += 1)), mode: 'model' };
+          : { kind: 'adhoc', id: String((adhocCounter += 1)) };
       return DiagramPanel.createOrShow(context.extensionUri, source, context.workspaceState, version);
     }),
   );

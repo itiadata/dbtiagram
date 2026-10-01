@@ -9,6 +9,7 @@
  */
 import type { DiagramGraph } from '../diagram/graph';
 import type { DiagramEntityFile } from './protocol';
+import type { DiagramDomain } from './diagramMode';
 
 /**
  * Default cap on how many models start checked on a diagram's first load
@@ -94,14 +95,17 @@ export function computeVisibleModels(
  */
 export function scopeSelectionToFile(
   files: readonly DiagramEntityFile[],
+  domain: DiagramDomain,
   uri: string,
-): { files: Set<string>; models: Set<string> } | null {
-  const file = files.find((candidate) => candidate.uri === uri);
+): DomainSelection | null {
+  const file = files.find((candidate) => candidate.domain === domain && candidate.uri === uri);
   if (file === undefined) {
     return null;
   }
-  return { files: new Set([file.uri]), models: new Set(file.entities) };
+  return { files: new Set([file.uri]), entities: new Set(file.entities) };
 }
+
+export interface DomainSelection { files: Set<string>; entities: Set<string> }
 
 /**
  * The checked-model set with `names` removed (spec 36). Pure; never mutates

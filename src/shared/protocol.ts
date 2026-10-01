@@ -7,16 +7,18 @@ import type { DiagramLayout } from '../diagram/layoutFile';
 import type { ModelEdit } from '../dbt/edit';
 import type { OpenBehavior } from './openBehavior';
 import type { MatrixScope, StoredMatrixColumnPref } from './matrixColumns';
-import type { DiagramMode } from './diagramMode';
+import type { DiagramDomain } from './diagramMode';
 import type { BrokenImportedForeignKey } from '../dbt/importSource';
 import type { HistoryState } from './history';
 import type { TableNode } from '../diagram/graph';
 import type { LineageEdge } from '../diagram/lineage';
 import type { LineageExpansionResult } from '../webview/lineage';
+import type { DiagramEntityId } from './entityId';
 
 export interface SourceImportReport {
   destinationUri: string;
   importedModels: string[];
+  importedEntityIds: DiagramEntityId[];
   brokenForeignKeys: BrokenImportedForeignKey[];
 }
 
@@ -51,7 +53,8 @@ export interface DiagramEntityFile {
   /** VS Code-style display name (bare name or folder-disambiguated path). */
   label: string;
   /** Model names defined in this file, in file order. */
-  entities: string[];
+  domain: DiagramDomain;
+  entities: DiagramEntityId[];
 }
 export type DiagramModelFile = DiagramEntityFile;
 
@@ -59,7 +62,6 @@ export type DiagramModelFile = DiagramEntityFile;
 export type MessageToWebview =
   | {
       type: 'diagram:update';
-      mode: DiagramMode;
       diagram: DiagramGraph;
       pendingErrors: DiagramPendingError[];
       files: DiagramEntityFile[];
@@ -70,7 +72,7 @@ export type MessageToWebview =
    * opened from that file, so it starts showing only that file's models. Sent
    * only for model-file sources, never for layouts or palette invocations.
    */
-  | { type: 'filter:scope'; uri: string }
+  | { type: 'filter:scope'; domain: DiagramDomain; uri: string }
   /** A saved layout was opened: apply its visible tables and positions (spec 13). */
   | { type: 'layout:apply'; layout: DiagramLayout; missing: string[] }
   /** Which layout file the panel writes back to, if any (spec 13). */

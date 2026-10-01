@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type DragEvent } from 'react';
 import type { ModelEdit } from '../src/dbt/edit';
 import type { DiagramGraph, TableNode } from '../src/diagram/graph';
-import type { DiagramMode } from '../src/shared/diagramMode';
 import { buildMatrixRows, discoverMetaKeys, type MatrixRow } from '../src/diagram/matrix';
 import {
   applyStoredPrefs,
@@ -22,12 +21,11 @@ import {
 import type { MatrixColumnFilters } from './hooks/useFieldsMatrix';
 import { FieldsMatrixRow } from './FieldsMatrixRow';
 import { FieldsMatrixCreateRow } from './FieldsMatrixCreateRow';
-import { addColumnEdit, hasActiveMatrixFilter, matrixAllowsRowStructure, matrixReorderEdit } from './matrix-row-order';
+import { addColumnEdit, hasActiveMatrixFilter, matrixReorderEdit } from './matrix-row-order';
 import { matrixArrayEdit, matrixMetaPreview, matrixTextEdit, metaValuesSupportTextBatch } from './matrix-meta-values';
 import { MetaArrayEditor } from './MetaArrayEditor';
 
 export interface FieldsMatrixProps {
-  mode: DiagramMode;
   target: { scope: 'model'; model: string } | { scope: 'global' };
   graph: DiagramGraph;
   onEdit: (edit: ModelEdit) => void;
@@ -54,7 +52,6 @@ function cellText(row: MatrixRow, id: MatrixColumnId): string {
 }
 
 export function FieldsMatrix({
-  mode,
   target,
   graph,
   onEdit,
@@ -89,7 +86,7 @@ export function FieldsMatrix({
   useEffect(() => {
     if (columns.length > 0) return;
     const metaKeys = discoverMetaKeys(nodes);
-    seedColumns(applyStoredPrefs(defaultMatrixColumns(metaKeys, target.scope, mode), storedPrefs));
+    seedColumns(applyStoredPrefs(defaultMatrixColumns(metaKeys, target.scope, target.scope === 'model' && nodes[0]?.entityKind === 'source' ? 'source' : 'model'), storedPrefs));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [columns.length]);
 
@@ -158,7 +155,7 @@ export function FieldsMatrix({
   function togglePrimaryKey(row: MatrixRow): void {
     const node = graph.nodes.find((n) => n.id === row.model);
     const pkColumns = node?.primaryKey?.columns ?? [];
-    const virtual = node?.primaryKey?.virtual ?? false;
+    const virtual = node?.entityKind === 'source' || (node?.primaryKey?.virtual ?? false);
     const next = row.isPrimaryKey
       ? pkColumns.filter((c) => c !== row.column)
       : [...pkColumns, row.column];
@@ -194,7 +191,7 @@ export function FieldsMatrix({
 
   const selectedCells = selection === null ? [] : cellsInSelection(selection);
   const selectedSet = new Set(selectedCells.map((c) => `${c.row}:${c.columnIndex}`));
-  const allowsRowStructure = matrixAllowsRowStructure(mode);
+  const allowsRowStructure = target.scope === 'model' && nodes[0]?.entityKind === 'model';
   const reorderEnabled = allowsRowStructure && target.scope === 'model' && !hasActiveMatrixFilter(columnFilters);
 
   const batchColumn: MatrixColumnDef | undefined = useMemo(() => {
@@ -251,7 +248,7 @@ export function FieldsMatrix({
     onColumnsChange(reorderColumn(columns, fromIndex, index));
   }
 
-  const scopeLabel = target.scope === 'global' ? `Edit fields matrix (all ${mode === 'source' ? 'tables' : 'models'})` : `Edit columns — ${target.model}`;
+  const scopeLabel = target.scope === 'global' ? 'Edit fields matrix (all tables)' : `Edit columns — ${target.model}`;
 
   return (
     <div className="fields-matrix-overlay">
@@ -346,7 +343,7 @@ export function FieldsMatrix({
                 const row = rows[rowIndex];
                 if (row === undefined) return null;
                 return <FieldsMatrixRow key={`${row.model}.${row.column}`} row={row} visibleRowIndex={visibleRowIndex}
-                  visibleColumns={visibleColumns} selectedCells={selectedSet} reorderEnabled={reorderEnabled}
+                  visibleColumns={visibleColumns.map((column) => graph.nodes.find((node) => node.id === row.model)?.entityKind === 'source' ? { ...column, editable: typeof column.id !== 'string' && column.editable } : column)} selectedCells={selectedSet} reorderEnabled={reorderEnabled && graph.nodes.find((node) => node.id === row.model)?.entityKind === 'model'}
                    onCellPointerDown={onCellPointerDown} onCellPointerEnter={onCellPointerEnter}
                    onTextCommit={editRow} onPrimaryKeyToggle={togglePrimaryKey} onVirtualPrimaryKeyToggle={toggleVirtualPrimaryKey}
                    onArrayCommit={(arrayRow, arrayColumn, values) => setArrayEditor({ row: arrayRow, column: arrayColumn, values })}

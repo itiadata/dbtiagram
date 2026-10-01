@@ -1,310 +1,86 @@
-/**
- * Left sidebar of the diagram webview (spec 05): a Filter section with two
- * checkbox lists — model yml files (with file precedence) and models. Both
- * lists have a search box that narrows the visible rows without changing the
- * diagram, and All / None buttons that select or clear the whole level at once.
- * Every section (Filter and each sub-section) collapses/expands via a chevron
- * toggle in its header; the sidebar is deliberately generic so future features
- * can add their own collapsible sections to the column.
- */
 import { useState, type CSSProperties, type ReactNode } from 'react';
+import type { DiagramDomain } from '../src/shared/diagramMode';
+import { diagramDomainLabels } from '../src/shared/diagramMode';
+import { parseDiagramEntityId } from '../src/shared/entityId';
 import { matchesSearch } from '../src/shared/filter';
 import type { DiagramEntityFile } from '../src/shared/protocol';
-import type { DiagramModeLabels } from '../src/shared/diagramMode';
 import type { ContextMenuItem } from './ContextMenu';
 import { FileCode2 } from './icons';
 import { useDiagramPresentationMode } from './presentation-mode';
 
-interface CollapsibleSectionProps {
-  title: string;
-  open: boolean;
-  onToggle: () => void;
-  /** Optional `checked/total` label shown in the header, kept visible while collapsed. */
-  count?: string;
-  /** Optional extra header controls (e.g. the All / None bulk buttons). */
-  actions?: ReactNode;
-  /** Larger title styling for the top-level sections in the sidebar column. */
-  large?: boolean;
-  /** Collapse control rendered at the far right of the header (spec 11). */
-  onCollapse?: () => void;
-  children: ReactNode;
+interface CollapsibleSectionProps { title: string; open: boolean; onToggle(): void; count?: string; actions?: ReactNode; large?: boolean; onCollapse?: () => void; children: ReactNode }
+function CollapsibleSection({ title, open, onToggle, count, actions, large, onCollapse, children }: CollapsibleSectionProps): JSX.Element {
+  return <section className={`sidebar__section${large ? ' sidebar__section--filter' : ''}`}><div className="sidebar__section-header"><button type="button" className="sidebar__section-toggle" aria-expanded={open} onClick={onToggle}><span className={`sidebar__chevron${open ? ' sidebar__chevron--open' : ''}`} aria-hidden="true" /><span className="sidebar__section-title">{title}</span></button>{actions !== undefined && <span className="sidebar__bulk">{actions}</span>}{count !== undefined && <span className="sidebar__count">{count}</span>}{onCollapse !== undefined && <button type="button" className="sidebar__collapse" title="Hide sidebar" aria-label="Hide sidebar" onClick={onCollapse}><span className="sidebar__chevron" aria-hidden="true" /></button>}</div>{open && <div className="sidebar__section-body">{children}</div>}</section>;
 }
 
-function CollapsibleSection({
-  title,
-  open,
-  onToggle,
-  count,
-  actions,
-  large,
-  onCollapse,
-  children,
-}: CollapsibleSectionProps): JSX.Element {
-  return (
-    <section className={`sidebar__section${large ? ' sidebar__section--filter' : ''}`}>
-      <div className="sidebar__section-header">
-        <button
-          type="button"
-          className="sidebar__section-toggle"
-          aria-expanded={open}
-          onClick={onToggle}
-        >
-          <span
-            className={`sidebar__chevron${open ? ' sidebar__chevron--open' : ''}`}
-            aria-hidden="true"
-          />
-          <span className="sidebar__section-title">{title}</span>
-        </button>
-        {actions !== undefined && <span className="sidebar__bulk">{actions}</span>}
-        {count !== undefined && <span className="sidebar__count">{count}</span>}
-        {onCollapse !== undefined && (
-          <button
-            type="button"
-            className="sidebar__collapse"
-            title="Hide sidebar"
-            aria-label="Hide sidebar"
-            onClick={onCollapse}
-          >
-            <span className="sidebar__chevron" aria-hidden="true" />
-          </button>
-        )}
-      </div>
-      {open && <div className="sidebar__section-body">{children}</div>}
-    </section>
-  );
-}
-
-interface FilterSidebarProps {
-  files: DiagramEntityFile[];
-  labels: DiagramModeLabels;
-  showSql: boolean;
-  /** Models of currently checked files — the reactive universe of the Models list. */
-  availableModelNames: string[];
-  selectedFiles: ReadonlySet<string>;
-  selectedModels: ReadonlySet<string>;
-  fileSearch: string;
-  modelSearch: string;
-  onFileSearchChange: (value: string) => void;
-  onModelSearchChange: (value: string) => void;
-  onToggleFile: (uri: string, checked: boolean) => void;
-  onToggleModel: (name: string, checked: boolean) => void;
-  onSelectAllFiles: () => void;
-  onClearFiles: () => void;
-  onSelectAllModels: () => void;
-  onClearModels: () => void;
-  /** Centers the diagram on a model and selects it (spec 15). */
-  onRevealModel: (name: string) => void;
-  /** Opens the model.yml declaring a model at its declaration line (spec 15). */
-  onOpenModelSource: (name: string) => void;
-  /** Model names with a `.sql` file; drives the item's enabled state (spec 38). */
+type DomainValues<T> = Readonly<Record<DiagramDomain, T>>;
+export interface FilterSidebarProps {
+  filesByDomain: DomainValues<DiagramEntityFile[]>;
+  availableEntitiesByDomain: DomainValues<string[]>;
+  selectedFilesByDomain: DomainValues<ReadonlySet<string>>;
+  selectedEntitiesByDomain: DomainValues<ReadonlySet<string>>;
+  searchByDomain: DomainValues<{ files: string; entities: string }>;
+  onFileSearchChange(domain: DiagramDomain, value: string): void;
+  onEntitySearchChange(domain: DiagramDomain, value: string): void;
+  onToggleFile(domain: DiagramDomain, uri: string, checked: boolean): void;
+  onToggleEntity(domain: DiagramDomain, id: string, checked: boolean): void;
+  onSelectAllFiles(domain: DiagramDomain): void;
+  onClearFiles(domain: DiagramDomain): void;
+  onSelectAllEntities(domain: DiagramDomain): void;
+  onClearEntities(domain: DiagramDomain): void;
+  onRevealEntity(id: string): void;
+  onOpenEntitySource(id: string): void;
   sqlModels: ReadonlySet<string>;
-  /** Opens the model's `.sql` file (spec 38). */
-  onOpenModelSql: (name: string) => void;
-  /** Opens the shared context menu (spec 15); the sidebar supplies the items. */
-  onOpenMenu: (x: number, y: number, items: ContextMenuItem[]) => void;
-  /** Hides the whole sidebar, leaving its reopen rail (spec 11). */
-  onCollapse: () => void;
-  /** Inline width from the App's resize state (spec 11). */
+  onOpenModelSql(id: string): void;
+  onOpenMenu(x: number, y: number, items: ContextMenuItem[]): void;
+  onCollapse(): void;
+  showSql: boolean;
   style?: CSSProperties;
 }
 
-export function FilterSidebar({
-  files,
-  labels,
-  showSql,
-  availableModelNames,
-  selectedFiles,
-  selectedModels,
-  fileSearch,
-  modelSearch,
-  onFileSearchChange,
-  onModelSearchChange,
-  onToggleFile,
-  onToggleModel,
-  onSelectAllFiles,
-  onClearFiles,
-  onSelectAllModels,
-  onClearModels,
-  onRevealModel,
-  onOpenModelSource,
-  sqlModels,
-  onOpenModelSql,
-  onOpenMenu,
-  onCollapse,
-  style,
-}: FilterSidebarProps): JSX.Element {
+const DOMAINS: readonly DiagramDomain[] = ['model', 'source'];
+function entityLabel(id: string): string {
+  const parsed = parseDiagramEntityId(id);
+  if (parsed === null) return id;
+  return parsed.kind === 'source' ? `${parsed.sourceName}.${parsed.tableName}` : parsed.name;
+}
+
+export function FilterSidebar(props: FilterSidebarProps): JSX.Element {
   const readOnly = useDiagramPresentationMode() === 'readonly';
-  // Collapse toggles are plain webview state: they survive panel hide/reveal
-  // (retainContextWhenHidden) and reset on reopen. All filter data still flows
-  // through props.
   const [filterOpen, setFilterOpen] = useState(true);
-  const [filesOpen, setFilesOpen] = useState(true);
-  const [modelsOpen, setModelsOpen] = useState(true);
+  const [open, setOpen] = useState<Record<string, boolean>>({ modelFiles: true, modelEntities: true, sourceFiles: true, sourceEntities: true });
+  const toggleSection = (key: string): void => setOpen((current) => ({ ...current, [key]: !current[key] }));
+  const menuItems = (id: string): ContextMenuItem[] => {
+    const kind = parseDiagramEntityId(id)?.kind;
+    const selected = kind === 'model' || kind === 'source' ? props.selectedEntitiesByDomain[kind].has(id) : false;
+    return [
+      { label: 'Reveal in diagram', disabled: !selected, title: selected ? undefined : 'Entity is hidden by the filter', onSelect: () => props.onRevealEntity(id) },
+      ...(!readOnly ? [{ label: `Reveal in ${kind === 'source' ? 'source yml' : 'model.yml'}`, onSelect: () => props.onOpenEntitySource(id) }] : []),
+      ...(!readOnly && props.showSql && kind === 'model' ? [{ label: 'Open SQL file', icon: <FileCode2 size={16} />, disabled: !props.sqlModels.has(entityLabel(id)), title: props.sqlModels.has(entityLabel(id)) ? undefined : `No .sql file found for "${entityLabel(id)}"`, onSelect: () => props.onOpenModelSql(id) }] : []),
+    ];
+  };
 
-  const visibleFiles = files.filter((file) => matchesSearch(file.label, fileSearch));
-  const visibleModels = availableModelNames.filter((name) => matchesSearch(name, modelSearch));
-  const checkedFileCount = files.filter((file) => selectedFiles.has(file.uri)).length;
-  const checkedModelCount = availableModelNames.filter((name) => selectedModels.has(name)).length;
-
-  // Spec 15: reveal is meaningless for a model the filter has hidden — there is
-  // no node to center on — so the item is offered disabled rather than absent.
-  const modelMenuItems = (name: string): ContextMenuItem[] => [
-    {
-      label: 'Reveal in diagram',
-      disabled: !selectedModels.has(name),
-      title: selectedModels.has(name) ? undefined : 'Model is hidden by the filter',
-      onSelect: () => onRevealModel(name),
-    },
-    ...(!readOnly ? [{ label: `Reveal in ${labels.sourceFile}`, onSelect: () => onOpenModelSource(name) }] : []),
-    ...(!readOnly && showSql ? [{
-      label: 'Open SQL file',
-      icon: <FileCode2 size={16} />,
-      disabled: !sqlModels.has(name),
-      title: sqlModels.has(name) ? undefined : `No .sql file found for "${name}"`,
-      onSelect: () => onOpenModelSql(name),
-    }] : []),
-  ];
-
-  return (
-    <aside className="sidebar" style={style}>
-      <CollapsibleSection
-        title="Filter"
-        open={filterOpen}
-        onToggle={() => setFilterOpen((open) => !open)}
-        onCollapse={onCollapse}
-        large
-      >
-        <CollapsibleSection
-          title={labels.fileSection}
-          count={`${checkedFileCount}/${files.length}`}
-          open={filesOpen}
-          onToggle={() => setFilesOpen((open) => !open)}
-          actions={
-            <>
-              <button
-                type="button"
-                className="sidebar__bulk-button"
-                aria-label="Select all model yml files"
-                disabled={checkedFileCount === files.length}
-                onClick={onSelectAllFiles}
-              >
-                All
-              </button>
-              <button
-                type="button"
-                className="sidebar__bulk-button"
-                aria-label="Clear model yml files selection"
-                disabled={checkedFileCount === 0}
-                onClick={onClearFiles}
-              >
-                None
-              </button>
-            </>
-          }
-        >
-          <input
-            className="sidebar__search"
-            aria-label="Search model yml files"
-            placeholder="Search files…"
-            value={fileSearch}
-            onChange={(e) => onFileSearchChange(e.target.value)}
-          />
-          <ul className="sidebar__list">
-            {visibleFiles.map((file) => (
-              <li key={file.uri}>
-                <label className="sidebar__item">
-                  <input
-                    type="checkbox"
-                    checked={selectedFiles.has(file.uri)}
-                    onChange={(e) => onToggleFile(file.uri, e.target.checked)}
-                  />
-                  <span className="sidebar__item-label" title={file.uri}>
-                    {file.label}
-                  </span>
-                </label>
-              </li>
-            ))}
-            {visibleFiles.length === 0 && <li className="sidebar__empty">No matches</li>}
-          </ul>
+  return <aside className="sidebar" style={props.style}><CollapsibleSection title="Filter" open={filterOpen} onToggle={() => setFilterOpen((value) => !value)} onCollapse={props.onCollapse} large>
+    {DOMAINS.map((domain) => {
+      const labels = diagramDomainLabels(domain);
+      const files = props.filesByDomain[domain];
+      const entities = props.availableEntitiesByDomain[domain];
+      const selectedFiles = props.selectedFilesByDomain[domain];
+      const selectedEntities = props.selectedEntitiesByDomain[domain];
+      const visibleFiles = files.filter((file) => matchesSearch(file.label, props.searchByDomain[domain].files));
+      const visibleEntities = entities.filter((id) => matchesSearch(entityLabel(id), props.searchByDomain[domain].entities));
+      const fileKey = `${domain}Files`; const entityKey = `${domain}Entities`;
+      const actions = (all: boolean, none: boolean, onAll: () => void, onNone: () => void, noun: string) => <><button type="button" className="sidebar__bulk-button" aria-label={`Select all ${noun}`} disabled={all} onClick={onAll}>All</button><button type="button" className="sidebar__bulk-button" aria-label={`Clear ${noun} selection`} disabled={none} onClick={onNone}>None</button></>;
+      return <div key={domain}>
+        <CollapsibleSection title={labels.fileSection} count={`${files.filter((file) => selectedFiles.has(file.uri)).length}/${files.length}`} open={open[fileKey]} onToggle={() => toggleSection(fileKey)} actions={actions(files.every((file) => selectedFiles.has(file.uri)), selectedFiles.size === 0, () => props.onSelectAllFiles(domain), () => props.onClearFiles(domain), labels.fileSection.toLowerCase())}>
+          <input className="sidebar__search" aria-label={`Search ${labels.fileSection.toLowerCase()}`} placeholder="Search files…" value={props.searchByDomain[domain].files} onChange={(event) => props.onFileSearchChange(domain, event.target.value)} />
+          <ul className="sidebar__list">{visibleFiles.map((file) => <li key={file.uri}><label className="sidebar__item"><input type="checkbox" checked={selectedFiles.has(file.uri)} onChange={(event) => props.onToggleFile(domain, file.uri, event.target.checked)} /><span className="sidebar__item-label" title={file.uri}>{file.label}</span></label></li>)}{visibleFiles.length === 0 && <li className="sidebar__empty">No matches</li>}</ul>
         </CollapsibleSection>
-
-        <CollapsibleSection
-          title={labels.entitySection}
-          count={`${checkedModelCount}/${availableModelNames.length}`}
-          open={modelsOpen}
-          onToggle={() => setModelsOpen((open) => !open)}
-          actions={
-            <>
-              <button
-                type="button"
-                className="sidebar__bulk-button"
-                aria-label="Select all models"
-                disabled={checkedModelCount === availableModelNames.length}
-                onClick={onSelectAllModels}
-              >
-                All
-              </button>
-              <button
-                type="button"
-                className="sidebar__bulk-button"
-                aria-label="Clear models selection"
-                disabled={checkedModelCount === 0}
-                onClick={onClearModels}
-              >
-                None
-              </button>
-            </>
-          }
-        >
-          <input
-            className="sidebar__search"
-            aria-label="Search models"
-            placeholder="Search models…"
-            value={modelSearch}
-            onChange={(e) => onModelSearchChange(e.target.value)}
-          />
-          <ul className="sidebar__list">
-            {availableModelNames.length === 0 && (
-              <li className="sidebar__empty">No files selected</li>
-            )}
-            {availableModelNames.length > 0 && visibleModels.length === 0 && (
-              <li className="sidebar__empty">No matches</li>
-            )}
-            {visibleModels.map((name) => (
-              <li
-                key={name}
-                className="sidebar__row"
-                onContextMenu={readOnly ? undefined : (event) => {
-                  event.preventDefault();
-                  onOpenMenu(event.clientX, event.clientY, modelMenuItems(name));
-                }}
-              >
-                <label className="sidebar__item">
-                  <input
-                    type="checkbox"
-                    checked={selectedModels.has(name)}
-                    onChange={(e) => onToggleModel(name, e.target.checked)}
-                  />
-                  <span className="sidebar__item-label">{name}</span>
-                </label>
-                {/* Keyboard-reachable equivalent of the right-click menu. */}
-                {readOnly ? <button type="button" className="sidebar__more" onClick={() => onRevealModel(name)} aria-label={`Reveal ${name} in diagram`}>⌖</button> : <button
-                  type="button"
-                  className="sidebar__more"
-                  aria-label={`Actions for ${name}`}
-                  onClick={(event) => {
-                    const rect = event.currentTarget.getBoundingClientRect();
-                    onOpenMenu(rect.left, rect.bottom, modelMenuItems(name));
-                  }}
-                >
-                  ⋯
-                </button>}
-              </li>
-            ))}
-            {visibleModels.length === 0 && <li className="sidebar__empty">No matches</li>}
-          </ul>
+        <CollapsibleSection title={labels.entitySection} count={`${entities.filter((id) => selectedEntities.has(id)).length}/${entities.length}`} open={open[entityKey]} onToggle={() => toggleSection(entityKey)} actions={actions(entities.every((id) => selectedEntities.has(id)), entities.every((id) => !selectedEntities.has(id)), () => props.onSelectAllEntities(domain), () => props.onClearEntities(domain), labels.entitySection.toLowerCase())}>
+          <input className="sidebar__search" aria-label={`Search ${labels.entitySection.toLowerCase()}`} placeholder={`Search ${labels.entitySection.toLowerCase()}…`} value={props.searchByDomain[domain].entities} onChange={(event) => props.onEntitySearchChange(domain, event.target.value)} />
+          <ul className="sidebar__list">{entities.length === 0 && <li className="sidebar__empty">No files selected</li>}{entities.length > 0 && visibleEntities.length === 0 && <li className="sidebar__empty">No matches</li>}{visibleEntities.map((id) => <li key={id} className="sidebar__row" onContextMenu={readOnly ? undefined : (event) => { event.preventDefault(); props.onOpenMenu(event.clientX, event.clientY, menuItems(id)); }}><label className="sidebar__item"><input type="checkbox" checked={selectedEntities.has(id)} onChange={(event) => props.onToggleEntity(domain, id, event.target.checked)} /><span className="sidebar__item-label">{entityLabel(id)}</span></label><button type="button" className="sidebar__more" aria-label={readOnly ? `Reveal ${entityLabel(id)} in diagram` : `Actions for ${entityLabel(id)}`} onClick={(event) => { if (readOnly) props.onRevealEntity(id); else { const rect = event.currentTarget.getBoundingClientRect(); props.onOpenMenu(rect.left, rect.bottom, menuItems(id)); } }}>{readOnly ? '⌖' : '⋯'}</button></li>)}</ul>
         </CollapsibleSection>
-      </CollapsibleSection>
-    </aside>
-  );
+      </div>;
+    })}
+  </CollapsibleSection></aside>;
 }

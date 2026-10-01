@@ -22,9 +22,8 @@ import type { MessageToWebview } from '../../../src/shared/protocol';
 
 const layout: DiagramLayout = {
   version: LAYOUT_VERSION,
-  mode: 'model',
   name: 'orders',
-  tables: [{ name: 'orders', x: 10, y: 20 }],
+  tables: [{ name: 'model:sample:orders', x: 10, y: 20 }],
   notes: [],
   groups: [],
 };
@@ -48,7 +47,6 @@ function createHost(overrides: Partial<LayoutHost> = {}): StubHost {
   let active: ActiveLayout | undefined;
   let pendingLayout: { layout: DiagramLayout; dirty: boolean } | undefined;
   const host: StubHost = {
-    mode: 'model',
     posted,
     writes,
     opened,
@@ -68,7 +66,7 @@ function createHost(overrides: Partial<LayoutHost> = {}): StubHost {
       writes.push({ fsPath, layout: written });
     },
     promptForLayoutPath: async () => undefined,
-    knownEntityNames: () => new Set(['orders']),
+    knownEntityNames: () => new Set(['model:sample:orders']),
     onLayoutOpened: (name) => {
       opened.push(name);
     },
@@ -90,6 +88,13 @@ function createHost(overrides: Partial<LayoutHost> = {}): StubHost {
 }
 
 describe('openLayout', () => {
+  it('opens a combined layout without a mode check', async () => {
+    const combined: DiagramLayout = { version: 2, name: 'combined', tables: [{ name: 'model:sample:orders', x: 1, y: 2 }, { name: 'source:finops:transactions', x: 3, y: 4 }], notes: [], groups: [] };
+    const host = createHost({ readLayout: async () => combined, knownEntityNames: () => new Set(combined.tables.map((table) => table.name)) });
+    await openLayout(host, '/w/combined.dbtiagram.yml');
+    expect(host.posted).toContainEqual({ type: 'layout:apply', layout: combined, missing: [] });
+    expect(host.posted.some((message) => message.type === 'diagram:error')).toBe(false);
+  });
   it('applies the layout and records it as active', async () => {
     const host = createHost();
     await openLayout(host, '/w/orders.dbtiagram.yml');
@@ -111,7 +116,7 @@ describe('openLayout', () => {
     await openLayout(host, '/w/orders.dbtiagram.yml');
 
     const applied = host.posted.find((m) => m.type === 'layout:apply');
-    expect(applied).toMatchObject({ missing: ['orders'] });
+    expect(applied).toMatchObject({ missing: ['model:sample:orders'] });
   });
 
   it('posts a readable error and stays inactive when the file is invalid', async () => {
@@ -235,16 +240,16 @@ describe('publishActiveLayout', () => {
 
 describe('groups (spec 31)', () => {
   it('passes model and source groups through layout messages', async () => {
-    const modelGroup = { id: 'g-1', name: 'Sales', color: 'blue' as const, models: ['orders'] };
+    const modelGroup = { id: 'g-1', name: 'Sales', color: 'blue' as const, models: ['model:sample:orders'] };
     const modelLayout: DiagramLayout = { ...layout, groups: [modelGroup] };
     const modelHost = createHost({ readLayout: async () => modelLayout });
     await openLayout(modelHost, '/w/model.dbtiagram.yml');
     expect(modelHost.posted).toContainEqual({ type: 'layout:apply', layout: modelLayout, missing: [] });
 
-    const sourceGroup = { ...modelGroup, models: ['finance.orders'] };
-    const sourceLayout: DiagramLayout = { ...layout, mode: 'source', groups: [sourceGroup] };
-    const sourceHost = createHost({ mode: 'source', readLayout: async () => sourceLayout, knownEntityNames: () => new Set(['finance.orders']) });
+    const sourceGroup = { ...modelGroup, models: ['source:finance:orders'] };
+    const sourceLayout: DiagramLayout = { ...layout, groups: [sourceGroup] };
+    const sourceHost = createHost({ readLayout: async () => sourceLayout, knownEntityNames: () => new Set(['source:finance:orders']) });
     await openLayout(sourceHost, '/w/source.dbtiagram.yml');
-    expect(sourceHost.posted).toContainEqual({ type: 'layout:apply', layout: sourceLayout, missing: ['orders'] });
+    expect(sourceHost.posted).toContainEqual({ type: 'layout:apply', layout: sourceLayout, missing: ['model:sample:orders'] });
   });
 });

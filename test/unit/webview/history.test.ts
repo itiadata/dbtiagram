@@ -6,7 +6,7 @@ import type { DiagramLayout } from '../../../src/diagram/layoutFile';
 
 const modelFile = (name: string) => ({ version: 2, models: [{ name, columns: [] }] });
 const sourceFile = (name: string) => ({ version: 2, sources: [{ name, tables: [] }] });
-const layout = (name: string): DiagramLayout => ({ version: 2, mode: 'model', name, tables: [], notes: [], groups: [] });
+const layout = (name: string): DiagramLayout => ({ version: 2, name, tables: [], notes: [], groups: [] });
 const entry = (label: string): NewUndoEntry => ({ label, domain: 'layout', before: layout('before'), after: layout(label) });
 
 describe('undo journal', () => {

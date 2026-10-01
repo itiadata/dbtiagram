@@ -9,7 +9,7 @@
 import { parse, stringify } from 'yaml';
 import { DEFAULT_COLUMN_DISPLAY, isColumnDisplayMode, type ColumnDisplayMode } from './columnDisplay';
 import type { NodePosition } from './positions';
-import type { DiagramMode } from '../shared/diagramMode';
+import { parseDiagramEntityId } from '../shared/entityId';
 import { normalizeGroups, parseGroups, type DiagramGroup } from './layoutGroups';
 export type { DiagramGroup, GroupColor, GroupRect, GroupTableRect } from './layoutGroups';
 export { GROUP_COLORS, GROUP_PADDING, GROUP_LABEL_HEIGHT, groupRect } from './layoutGroups';
@@ -48,7 +48,6 @@ export const NOTE_MIN_HEIGHT = 64;
 /** The full contents of a saved diagram layout file. */
 export interface DiagramLayout {
   version: typeof LAYOUT_VERSION;
-  mode: DiagramMode;
   name: string;
   tables: DiagramLayoutTable[];
   /** Always present in memory; `[]` when the file has no notes. */
@@ -78,7 +77,6 @@ export class DiagramLayoutParseError extends Error {
  */
 export function buildLayout(
   name: string,
-  mode: DiagramMode,
   visible: readonly { name: string; x: number; y: number }[],
   notes: readonly DiagramNote[] = [],
   columnDisplay?: { default: ColumnDisplayMode; overrides: ReadonlyMap<string, ColumnDisplayMode> },
@@ -107,7 +105,6 @@ export function buildLayout(
   const defaultColumnDisplay = columnDisplay?.default ?? DEFAULT_COLUMN_DISPLAY;
   return {
     version: LAYOUT_VERSION,
-    mode,
     name,
     tables,
     notes: sortedNotes,
@@ -140,7 +137,6 @@ export function createNote(x: number, y: number, id: string): DiagramNote {
 export function serializeDiagramLayout(layout: DiagramLayout): string {
   const root: Record<string, unknown> = {
     version: layout.version,
-    mode: layout.mode,
     name: layout.name,
     tables: layout.tables.map((table) => ({
       name: table.name,
@@ -194,13 +190,13 @@ export function parseDiagramLayout(text: string, fallbackName: string): DiagramL
     );
   }
 
-  if (raw.version !== 1 && raw.version !== LAYOUT_VERSION) {
+  if (raw.version !== LAYOUT_VERSION) {
     throw new DiagramLayoutParseError(
       fallbackName,
-      `Unsupported diagram version ${String(raw.version)}; expected ${LAYOUT_VERSION}`,
+      raw.version === 1 ? 'Unsupported diagram layout version 1' : `Unsupported diagram version ${String(raw.version)}; expected ${LAYOUT_VERSION}`,
     );
   }
-  const mode: DiagramMode = raw.version === 1 ? 'model' : raw.mode === 'model' || raw.mode === 'source' ? raw.mode : (() => { throw new DiagramLayoutParseError(fallbackName, 'Diagram version 2 requires mode "model" or "source"'); })();
+  if (raw.mode !== undefined) throw new DiagramLayoutParseError(fallbackName, 'Diagram layout version 2 requires namespaced table IDs and no mode');
 
   if (!Array.isArray(raw.tables)) {
     throw new DiagramLayoutParseError(
@@ -219,6 +215,7 @@ export function parseDiagramLayout(text: string, fallbackName: string): DiagramL
     if (typeof name !== 'string' || name === '') {
       throw new DiagramLayoutParseError(fallbackName, 'Every table entry needs a "name"');
     }
+    if (parseDiagramEntityId(name) === null) throw new DiagramLayoutParseError(fallbackName, 'Diagram layout version 2 requires namespaced table IDs and no mode');
     if (!isFiniteNumber(x) || !isFiniteNumber(y)) {
       throw new DiagramLayoutParseError(
         fallbackName,
@@ -250,7 +247,6 @@ export function parseDiagramLayout(text: string, fallbackName: string): DiagramL
     : undefined;
   return {
     version: LAYOUT_VERSION,
-    mode,
     name,
     tables,
     notes,

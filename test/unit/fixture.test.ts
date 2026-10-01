@@ -4,11 +4,10 @@ import * as path from 'path';
 import { describe, expect, it } from 'vitest';
 import { NotAModelYmlFileError, parseModelYml } from '../../src/dbt/parse';
 import { parseSourceYml } from '../../src/dbt/sourceParse';
-import { buildSourceDiagram } from '../../src/diagram/graph';
 import { findModelDeclaration } from '../../src/dbt/locate';
 import { serializeModelYml } from '../../src/dbt/serialize';
 import type { ModelDefinition } from '../../src/dbt/types';
-import { buildDiagram } from '../../src/diagram/graph';
+import { buildDiagram as buildCombinedDiagram } from '../../src/diagram/graph';
 import { applyLayout, isLayoutFilePath, parseDiagramLayout } from '../../src/diagram/layoutFile';
 import { disambiguateFileLabels } from '../../src/shared/labels';
 import { buildStaticSite } from '../../src/static/site';
@@ -44,7 +43,9 @@ function loadFixtureModels(): ModelDefinition[] {
   return models;
 }
 
-const expectedModelNames = ['customers', 'order_items', 'order_summary', 'orders', 'products', 'staging_orders'];
+const expectedModelNames = ['customers', 'order_items', 'order_summary', 'orders', 'payments', 'products', 'staging_orders'];
+const buildDiagram = (models: ModelDefinition[]) => buildCombinedDiagram(models.map((model) => ({ packageName: 'sample', model })), []);
+const buildSourceDiagram = (sources: Parameters<typeof buildCombinedDiagram>[1]) => buildCombinedDiagram([], sources);
 
 describe('sample fixture (fixtures/sample-dbt)', () => {
   it('parses every model.yml file, including nested ones', () => {
@@ -58,7 +59,7 @@ describe('sample fixture (fixtures/sample-dbt)', () => {
     const graph = buildDiagram(loadFixtureModels());
 
     const nodeNames = graph.nodes.map((node) => node.id).sort();
-    expect(nodeNames).toEqual(expectedModelNames);
+    expect(nodeNames).toEqual(expectedModelNames.map((name) => `model:sample:${name}`));
 
     const edges = graph.edges
       .map(
@@ -69,17 +70,17 @@ describe('sample fixture (fixtures/sample-dbt)', () => {
       )
       .sort();
     expect(edges).toEqual([
-      'order_items.order_id+customer_id->orders.order_id+customer_id',
-      'order_items.product_id->products.product_id',
-      'orders.customer_id->customers.customer_id',
-      'products.product_id->customers.customer_id (virtual)',
-      'staging_orders.order_id->orders.order_id',
+      'model:sample:order_items.order_id+customer_id->model:sample:orders.order_id+customer_id',
+      'model:sample:order_items.product_id->model:sample:products.product_id',
+      'model:sample:orders.customer_id->model:sample:customers.customer_id',
+      'model:sample:products.product_id->model:sample:customers.customer_id (virtual)',
+      'model:sample:staging_orders.order_id->model:sample:orders.order_id',
     ]);
   });
 
   it('reads the virtual PK and virtual FK off the products node (spec 08)', () => {
     const graph = buildDiagram(loadFixtureModels());
-    const products = graph.nodes.find((node) => node.id === 'products');
+    const products = graph.nodes.find((node) => node.id === 'model:sample:products');
     expect(products?.primaryKey).toEqual({
       columns: ['product_id'],
       virtual: true,
@@ -87,7 +88,7 @@ describe('sample fixture (fixtures/sample-dbt)', () => {
     });
     expect(products?.foreignKeys).toEqual([
       {
-        target: 'customers',
+        target: 'model:sample:customers',
         to: "ref('customers')",
         columns: ['product_id'],
         toColumns: ['customer_id'],
@@ -95,7 +96,7 @@ describe('sample fixture (fixtures/sample-dbt)', () => {
       },
     ]);
     // orders keeps its real PK from the fixtures.
-    const orders = graph.nodes.find((node) => node.id === 'orders');
+    const orders = graph.nodes.find((node) => node.id === 'model:sample:orders');
     expect(orders?.primaryKey).toEqual({
       columns: ['order_id'],
       virtual: false,
@@ -141,7 +142,7 @@ describe('sample fixture (fixtures/sample-dbt)', () => {
     expect(layout.name).toBe('orders');
     expect(layout.tables.length).toBeGreaterThan(0);
 
-    const known = new Set(loadFixtureModels().map((model) => model.name));
+    const known = new Set(loadFixtureModels().map((model) => `model:sample:${model.name}`));
     expect(applyLayout(layout, known).missing).toEqual([]);
   });
 
@@ -176,14 +177,14 @@ describe('sample fixture (fixtures/sample-dbt)', () => {
     const file = path.resolve(fixtureModelsDir, 'sources/finops.yml');
     const source = parseSourceYml(fs.readFileSync(file, 'utf8'), file);
     const graph = buildSourceDiagram(source.sources);
-    expect(graph.nodes.map((node) => node.id)).toEqual(['finops.costs', 'finops.workspaces']);
-    expect(graph.edges[0]).toMatchObject({ source: 'finops.costs', target: 'finops.workspaces', virtual: true });
+    expect(graph.nodes.map((node) => node.id)).toEqual(['source:finops:costs', 'source:finops:workspaces', 'source:finops:transactions']);
+    expect(graph.edges[0]).toMatchObject({ source: 'source:finops:costs', target: 'source:finops:workspaces', virtual: true });
   });
 
   it('carries column test names into the diagram graph (spec 30)', () => {
     const graph = buildDiagram(loadFixtureModels());
 
-    const customers = graph.nodes.find((n) => n.id === 'customers')!;
+    const customers = graph.nodes.find((n) => n.id === 'model:sample:customers')!;
     const email = customers.columns.find((c) => c.name === 'email')!;
     // email has unique + not_null + accepted_values; PK-owned not_null excluded for customer_id
     expect(email.tests).toEqual(['unique', 'not_null', 'accepted_values']);
@@ -192,11 +193,11 @@ describe('sample fixture (fixtures/sample-dbt)', () => {
     const customerId = customers.columns.find((c) => c.name === 'customer_id')!;
     expect(customerId.tests).toBeUndefined();
 
-    const orderItems = graph.nodes.find((n) => n.id === 'order_items')!;
+    const orderItems = graph.nodes.find((n) => n.id === 'model:sample:order_items')!;
     const quantity = orderItems.columns.find((c) => c.name === 'quantity')!;
     expect(quantity.tests).toEqual(['not_null', 'dbt_utils.accepted_range']);
 
-    const products = graph.nodes.find((n) => n.id === 'products')!;
+    const products = graph.nodes.find((n) => n.id === 'model:sample:products')!;
     const productName = products.columns.find((c) => c.name === 'name')!;
     expect(productName.tests).toEqual(['not_null', 'unique']);
   });
@@ -209,9 +210,11 @@ describe('sample fixture (fixtures/sample-dbt)', () => {
     }));
     const diagrams = path.join(root, 'diagrams');
     const layoutFiles = fs.readdirSync(diagrams).filter((name) => name.endsWith('.dbtiagram.yml')).map((name) => ({ relativePath: `diagrams/${name}`, text: fs.readFileSync(path.join(diagrams, name), 'utf8') }));
-    const built = buildStaticSite({ projectRoot: root, yamlFiles, layoutFiles }, 100);
-    expect(built.data.model?.graph.nodes.length).toBeGreaterThan(0);
-    expect(built.data.source?.graph.nodes.length).toBeGreaterThan(0);
+    const sqlFiles = fs.readdirSync(fixtureModelsDir).filter((name) => name.endsWith('.sql')).map((name) => ({ relativePath: `models/${name}`, text: fs.readFileSync(path.join(fixtureModelsDir, name), 'utf8') }));
+    const built = buildStaticSite({ projectRoot: root, packageName: 'sample', yamlFiles, sqlFiles, layoutFiles }, 100);
+    expect(built.data.universe?.graph.nodes.some((node) => node.entityKind === 'model')).toBe(true);
+    expect(built.data.universe?.graph.nodes.some((node) => node.entityKind === 'source')).toBe(true);
+    expect(built.data.universe?.graph.lineageEdges).toContainEqual({ parent: 'source:finops:transactions', child: 'model:sample:payments' });
     expect(built.warnings).toEqual([]);
   });
 });

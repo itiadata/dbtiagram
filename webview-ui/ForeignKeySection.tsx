@@ -85,7 +85,7 @@ export function ForeignKeySection({
   forceVirtual = false,
 }: ForeignKeySectionProps): JSX.Element {
   const readOnly = useDiagramPresentationMode() === 'readonly';
-  const modelNames = nodes.map((n) => n.id).sort();
+  const modelNames = nodes.filter((candidate) => candidate.entityKind === node.entityKind).map((n) => n.id).sort();
   const foreignKeys = node.foreignKeys;
 
   if (readOnly) {

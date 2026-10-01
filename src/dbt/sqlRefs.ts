@@ -1,8 +1,10 @@
 /** Surgical discovery and rewriting of literal dbt ref calls in executable Jinja. */
 export interface SqlRefOccurrence { start: number; end: number; package?: string; name: string }
+export interface SqlSourceOccurrence { start: number; end: number; source: string; table: string }
 
 interface Span { start: number; end: number }
 const REF = /^ref\s*\(\s*(['"])([^'"]+)\1\s*(?:,\s*(['"])([^'"]+)\3\s*)?\)/;
+const SOURCE = /^source\s*\(\s*(['"])([^'"]+)\1\s*,\s*(['"])([^'"]+)\3\s*\)/;
 
 export function findSqlRefs(text: string): SqlRefOccurrence[] {
   const result: SqlRefOccurrence[] = [];
@@ -26,6 +28,26 @@ export function findSqlRefs(text: string): SqlRefOccurrence[] {
         : match[0].lastIndexOf(`${quoted}${name}${quoted}`);
       const start = span.start + offset + relative + 1;
       result.push({ start, end: start + name.length, ...(second === undefined ? {} : { package: first }), name });
+      offset += match[0].length;
+    }
+  }
+  return result;
+}
+
+export function findSqlSources(text: string): SqlSourceOccurrence[] {
+  const result: SqlSourceOccurrence[] = [];
+  for (const span of jinjaSpans(text)) {
+    const body = text.slice(span.start, span.end);
+    let offset = 0; let quote: "'" | '"' | undefined;
+    while (offset < body.length) {
+      const char = body[offset];
+      if (quote !== undefined) { if (char === quote && body[offset - 1] !== '\\') quote = undefined; offset += 1; continue; }
+      if (char === "'" || char === '"') { quote = char; offset += 1; continue; }
+      if (!body.startsWith('source', offset) || (offset > 0 && /[\w]/.test(body[offset - 1] ?? ''))) { offset += 1; continue; }
+      const match = SOURCE.exec(body.slice(offset));
+      if (match === null || match[2] === undefined || match[4] === undefined || match[2].length === 0 || match[4].length === 0) { offset += 1; continue; }
+      const start = span.start + offset;
+      result.push({ start, end: start + match[0].length, source: match[2], table: match[4] });
       offset += match[0].length;
     }
   }

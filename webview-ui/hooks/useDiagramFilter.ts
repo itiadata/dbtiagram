@@ -1,9 +1,3 @@
-/**
- * The file/model filter (spec 05), its scoping to a single file (spec 14), and
- * the layout-driven visible set (spec 13).
- *
- * `filterTick` bumps on every explicit filter change so the canvas re-fits.
- */
 import { useCallback, useMemo, useRef, useState } from 'react';
 import {
   capInitialSelection,
@@ -13,252 +7,184 @@ import {
   removeModels,
   scopeSelectionToFile,
 } from '../../src/shared/filter';
+import type { DiagramDomain } from '../../src/shared/diagramMode';
+import { parseDiagramEntityId } from '../../src/shared/entityId';
 import type { DiagramEntityFile } from '../../src/shared/protocol';
 import { filesDeclaring } from '../../src/shared/relations';
 
-/** Spec 35: the one-time popup naming how many models were initially shown. */
-export interface InitialCapNotice {
-  shown: number;
-  total: number;
-}
+export interface InitialCapNotice { shown: number; total: number }
+
+type DomainSets = Record<DiagramDomain, Set<string>>;
+type DomainStrings = Record<DiagramDomain, string>;
+type DomainFiles = Record<DiagramDomain, DiagramEntityFile[]>;
+const DOMAINS: readonly DiagramDomain[] = ['model', 'source'];
+const emptySets = (): DomainSets => ({ model: new Set(), source: new Set() });
 
 export interface DiagramFilterState {
-  modelFiles: DiagramEntityFile[];
-  selectedFiles: Set<string>;
-  selectedModels: Set<string>;
-  availableModelNames: string[];
-  visibleModels: Set<string>;
-  fileSearch: string;
-  modelSearch: string;
-  setFileSearch: (value: string) => void;
-  setModelSearch: (value: string) => void;
+  filesByDomain: Readonly<DomainFiles>;
+  selectedFilesByDomain: Readonly<DomainSets>;
+  selectedEntitiesByDomain: Readonly<DomainSets>;
+  availableEntitiesByDomain: Readonly<Record<DiagramDomain, string[]>>;
+  visibleEntities: Set<string>;
+  searchByDomain: Readonly<Record<DiagramDomain, { files: string; entities: string }>>;
+  setFileSearch(domain: DiagramDomain, value: string): void;
+  setEntitySearch(domain: DiagramDomain, value: string): void;
+  toggleFile(domain: DiagramDomain, uri: string, checked: boolean): void;
+  toggleEntity(domain: DiagramDomain, id: string, checked: boolean): void;
+  selectAllFiles(domain: DiagramDomain): void;
+  clearFiles(domain: DiagramDomain): void;
+  selectAllEntities(domain: DiagramDomain): void;
+  clearEntities(domain: DiagramDomain): void;
   filterTick: number;
-  toggleFile: (uri: string, checked: boolean) => void;
-  toggleModel: (name: string, checked: boolean) => void;
-  selectAllFiles: () => void;
-  clearFiles: () => void;
-  selectAllModels: () => void;
-  clearModels: () => void;
-  /** Unchecks these models, exactly as the sidebar checkbox would (spec 36). */
-  removeModels: (names: readonly string[]) => void;
-  /**
-   * Checks `names` and the files declaring them (spec 37). Names already
-   * checked are left as they are; nothing is ever unchecked.
-   */
-  addModels: (names: readonly string[]) => void;
-  showImportedModels: (names: readonly string[], destinationUri: string) => void;
-  /** Adopts new host metadata, keeping the user's checked state (spec 05). */
-  applyModelFiles: (files: DiagramEntityFile[]) => void;
-  /** Scopes to one model.yml unless a layout already won (spec 14). */
-  applyScope: (uri: string) => void;
-  /** A saved layout's table list becomes the exact visible set (spec 13). */
-  applyLayoutTables: (names: string[]) => void;
-  /** Spec 35: set once when the first load capped the model selection. */
+  applyEntityFiles(files: DiagramEntityFile[]): void;
+  applyScope(domain: DiagramDomain, uri: string): void;
+  applyLayoutTables(ids: string[]): void;
+  addEntities(ids: readonly string[]): void;
+  removeEntities(ids: readonly string[]): void;
+  showImportedModels(ids: readonly string[], destinationUri: string): void;
   initialCapNotice: InitialCapNotice | null;
-  /** Dismisses the initial-cap popup (auto-timer or manual close). */
-  dismissInitialCapNotice: () => void;
+  dismissInitialCapNotice(): void;
+}
+
+function domainOf(id: string): DiagramDomain | null {
+  const kind = parseDiagramEntityId(id)?.kind;
+  return kind === 'model' || kind === 'source' ? kind : null;
 }
 
 export function useDiagramFilter(initialSelectionLimit: number = INITIAL_MODEL_SELECTION_LIMIT): DiagramFilterState {
-  const [modelFiles, setModelFiles] = useState<DiagramEntityFile[]>([]);
-  const [selectedFiles, setSelectedFiles] = useState<Set<string>>(new Set());
-  const [selectedModels, setSelectedModels] = useState<Set<string>>(new Set());
-  const [fileSearch, setFileSearch] = useState('');
-  const [modelSearch, setModelSearch] = useState('');
+  const [filesByDomain, setFilesByDomain] = useState<DomainFiles>({ model: [], source: [] });
+  const [selectedFilesByDomain, setSelectedFiles] = useState<DomainSets>(emptySets);
+  const [selectedEntitiesByDomain, setSelectedEntities] = useState<DomainSets>(emptySets);
+  const [fileSearch, setFileSearchState] = useState<DomainStrings>({ model: '', source: '' });
+  const [entitySearch, setEntitySearchState] = useState<DomainStrings>({ model: '', source: '' });
   const [filterTick, setFilterTick] = useState(0);
   const [initialCapNotice, setInitialCapNotice] = useState<InitialCapNotice | null>(null);
-  // Universes from the previous diagram:update, used to tell brand-new
-  // files/models (default checked) apart from ones the user unchecked.
-  const previousFileUrisRef = useRef<string[]>([]);
-  const previousModelNamesRef = useRef<string[]>([]);
-  // Spec 35: the initial model-selection cap applies only to the panel's
-  // very first diagram:update — this flips true after that first call.
-  const hasLoadedOnceRef = useRef(false);
-  // Spec 14: the freshest file metadata, readable synchronously by the
-  // `filter:scope` handler (which arrives as its own message event), and a
-  // latch making `layout:apply` win over any later scope message.
-  const modelFilesRef = useRef<DiagramEntityFile[]>([]);
+  const previousFilesRef = useRef<DomainStrings>({ model: '', source: '' });
+  const previousEntitiesRef = useRef<DomainStrings>({ model: '', source: '' });
+  const filesRef = useRef<DiagramEntityFile[]>([]);
+  const hasLoadedRef = useRef(false);
   const layoutAppliedRef = useRef(false);
 
-  // Models held by files that are currently checked: the Models filter only
-  // lists these (spec 05, reactive model list). Models of unchecked files are
-  // hidden from the list but keep their checked state, so re-checking a file
-  // restores them exactly (file precedence already hides them from the graph).
-  const availableModelNames = useMemo(() => {
+  const availableEntitiesByDomain = useMemo(() => Object.fromEntries(DOMAINS.map((domain) => {
     const names = new Set<string>();
-    for (const file of modelFiles) {
-      if (!selectedFiles.has(file.uri)) continue;
-      for (const model of file.entities) names.add(model);
+    for (const file of filesByDomain[domain]) {
+      if (selectedFilesByDomain[domain].has(file.uri)) for (const id of file.entities) names.add(id);
     }
-    return [...names];
-  }, [modelFiles, selectedFiles]);
+    return [domain, [...names]];
+  })) as Record<DiagramDomain, string[]>, [filesByDomain, selectedFilesByDomain]);
 
-  // Spec 05: the diagram is the full graph filtered by the checked files
-  // (with precedence) and checked models. Search boxes never enter this memo —
-  // they only narrow the sidebar checkbox lists.
-  const visibleModels = useMemo(
-    () => computeVisibleModels(modelFiles, selectedFiles, selectedModels),
-    [modelFiles, selectedFiles, selectedModels],
-  );
-
-  const applyModelFiles = useCallback((files: DiagramEntityFile[]): void => {
-    setModelFiles(files);
-    modelFilesRef.current = files;
-
-    const fileUris = files.map((file) => file.uri);
-    const previousUris = previousFileUrisRef.current;
-    setSelectedFiles((current) => reconcileSelection(previousUris, fileUris, current));
-    previousFileUrisRef.current = fileUris;
-
-    const modelNames = files.flatMap((file) => file.entities);
-    const previousNames = previousModelNamesRef.current;
-    // Spec 35: only the panel's very first load caps the model selection;
-    // every later call reconciles normally, uncapped.
-    const isInitialLoad = !hasLoadedOnceRef.current;
-    hasLoadedOnceRef.current = true;
-    if (isInitialLoad && modelNames.length > initialSelectionLimit) {
-      setSelectedModels(capInitialSelection(modelNames, initialSelectionLimit));
-      setInitialCapNotice({ shown: initialSelectionLimit, total: modelNames.length });
-    } else {
-      setSelectedModels((current) => reconcileSelection(previousNames, modelNames, current));
+  const visibleEntities = useMemo(() => {
+    const visible = new Set<string>();
+    for (const domain of DOMAINS) {
+      for (const id of computeVisibleModels(filesByDomain[domain], selectedFilesByDomain[domain], selectedEntitiesByDomain[domain])) visible.add(id);
     }
-    previousModelNamesRef.current = modelNames;
-  }, [initialSelectionLimit]);
+    return visible;
+  }, [filesByDomain, selectedFilesByDomain, selectedEntitiesByDomain]);
 
-  // Spec 14: this tab was opened from a single model.yml, so it starts showing
-  // only that file's models. A layout always wins, and an unknown file leaves
-  // spec 05's all-checked default alone.
-  //
-  // Spec 35: this always runs strictly after `applyModelFiles` in the startup
-  // sequence and unconditionally overwrites the model selection, so whatever
-  // cap decision `applyModelFiles` made a moment earlier is about to be
-  // replaced regardless. The cap must therefore be re-decided here, against
-  // the scoped file's own model count (not the workspace total) — and the
-  // notice explicitly set or cleared, rather than leaving `applyModelFiles`'s
-  // (possibly now-irrelevant) notice on screen.
-  const applyScope = useCallback((uri: string): void => {
-    if (layoutAppliedRef.current) return;
-    const scoped = scopeSelectionToFile(modelFilesRef.current, uri);
-    if (scoped === null) return;
-    setSelectedFiles(scoped.files);
-    const scopedNames = [...scoped.models];
-    if (scopedNames.length > initialSelectionLimit) {
-      setSelectedModels(capInitialSelection(scopedNames, initialSelectionLimit));
-      setInitialCapNotice({ shown: initialSelectionLimit, total: scopedNames.length });
-    } else {
-      setSelectedModels(scoped.models);
-      setInitialCapNotice(null);
-    }
-    setFilterTick((tick) => tick + 1);
-  }, [initialSelectionLimit]);
-
-  // Spec 13: every file is checked so file precedence can never hide a layout
-  // table; the layout's table list becomes the checked model set.
-  const applyLayoutTables = useCallback((names: string[]): void => {
-    layoutAppliedRef.current = true;
-    setSelectedFiles(() => new Set(previousFileUrisRef.current));
-    setSelectedModels(new Set(names));
-    setFilterTick((tick) => tick + 1);
-  }, []);
-
-  const toggleFile = useCallback((uri: string, checked: boolean): void => {
+  const applyEntityFiles = useCallback((files: DiagramEntityFile[]): void => {
+    filesRef.current = files;
+    const grouped: DomainFiles = {
+      model: files.filter((file) => file.domain === 'model'),
+      source: files.filter((file) => file.domain === 'source'),
+    };
+    setFilesByDomain(grouped);
+    const initial = !hasLoadedRef.current;
+    hasLoadedRef.current = true;
     setSelectedFiles((current) => {
-      const next = new Set(current);
-      if (checked) next.add(uri);
-      else next.delete(uri);
+      const next = emptySets();
+      for (const domain of DOMAINS) {
+        const all = grouped[domain].map((file) => file.uri);
+        next[domain] = reconcileSelection(previousFilesRef.current[domain].split('\0').filter(Boolean), all, current[domain]);
+        previousFilesRef.current[domain] = all.join('\0');
+      }
       return next;
+    });
+    setSelectedEntities((current) => {
+      const next = emptySets();
+      for (const domain of DOMAINS) {
+        const all = grouped[domain].flatMap((file) => file.entities);
+        const previous = previousEntitiesRef.current[domain].split('\0').filter(Boolean);
+        next[domain] = initial && domain === 'model' && all.length > initialSelectionLimit
+          ? capInitialSelection(all, initialSelectionLimit)
+          : reconcileSelection(previous, all, current[domain]);
+        previousEntitiesRef.current[domain] = all.join('\0');
+      }
+      return next;
+    });
+    if (initial) {
+      const total = grouped.model.flatMap((file) => file.entities).length;
+      if (total > initialSelectionLimit) setInitialCapNotice({ shown: initialSelectionLimit, total });
+    }
+  }, [initialSelectionLimit]);
+
+  const applyScope = useCallback((domain: DiagramDomain, uri: string): void => {
+    if (layoutAppliedRef.current) return;
+    const scoped = scopeSelectionToFile(filesRef.current, domain, uri);
+    if (scoped === null) return;
+    const entities = [...scoped.entities];
+    setSelectedFiles((current) => ({ ...current, [domain]: scoped.files, [domain === 'model' ? 'source' : 'model']: new Set() }));
+    setSelectedEntities((current) => ({
+      ...current,
+      [domain]: entities.length > initialSelectionLimit ? capInitialSelection(entities, initialSelectionLimit) : scoped.entities,
+      [domain === 'model' ? 'source' : 'model']: new Set(),
+    }));
+    setInitialCapNotice(entities.length > initialSelectionLimit ? { shown: initialSelectionLimit, total: entities.length } : null);
+    setFilterTick((tick) => tick + 1);
+  }, [initialSelectionLimit]);
+
+  const applyLayoutTables = useCallback((ids: string[]): void => {
+    layoutAppliedRef.current = true;
+    setSelectedFiles({
+      model: new Set(filesRef.current.filter((file) => file.domain === 'model').map((file) => file.uri)),
+      source: new Set(filesRef.current.filter((file) => file.domain === 'source').map((file) => file.uri)),
+    });
+    setSelectedEntities({
+      model: new Set(ids.filter((id) => domainOf(id) === 'model')),
+      source: new Set(ids.filter((id) => domainOf(id) === 'source')),
     });
     setFilterTick((tick) => tick + 1);
   }, []);
 
-  const toggleModel = useCallback((name: string, checked: boolean): void => {
-    setSelectedModels((current) => {
-      const next = new Set(current);
-      if (checked) next.add(name);
-      else next.delete(name);
-      return next;
-    });
+  const mutateSet = useCallback((setter: React.Dispatch<React.SetStateAction<DomainSets>>, domain: DiagramDomain, value: string, checked: boolean): void => {
+    setter((current) => { const next = new Set(current[domain]); checked ? next.add(value) : next.delete(value); return { ...current, [domain]: next }; });
     setFilterTick((tick) => tick + 1);
   }, []);
+  const toggleFile = useCallback((domain: DiagramDomain, uri: string, checked: boolean) => mutateSet(setSelectedFiles, domain, uri, checked), [mutateSet]);
+  const toggleEntity = useCallback((domain: DiagramDomain, id: string, checked: boolean) => mutateSet(setSelectedEntities, domain, id, checked), [mutateSet]);
+  const selectAllFiles = useCallback((domain: DiagramDomain) => { setSelectedFiles((current) => ({ ...current, [domain]: new Set(filesByDomain[domain].map((file) => file.uri)) })); setFilterTick((tick) => tick + 1); }, [filesByDomain]);
+  const clearFiles = useCallback((domain: DiagramDomain) => { setSelectedFiles((current) => ({ ...current, [domain]: new Set() })); setFilterTick((tick) => tick + 1); }, []);
+  const selectAllEntities = useCallback((domain: DiagramDomain) => { setSelectedEntities((current) => ({ ...current, [domain]: new Set([...current[domain], ...availableEntitiesByDomain[domain]]) })); setFilterTick((tick) => tick + 1); }, [availableEntitiesByDomain]);
+  const clearEntities = useCallback((domain: DiagramDomain) => { setSelectedEntities((current) => ({ ...current, [domain]: removeModels(current[domain], availableEntitiesByDomain[domain]) })); setFilterTick((tick) => tick + 1); }, [availableEntitiesByDomain]);
 
-  // Bulk All / None per filter level (spec 05): file handlers set the whole
-  // file Set; model handlers operate only on the listed (available) models,
-  // leaving the hidden models' checked state untouched. All of them behave
-  // like checkbox toggles for the refit policy.
-  const selectAllFiles = useCallback((): void => {
-    setSelectedFiles(new Set(modelFiles.map((file) => file.uri)));
-    setFilterTick((tick) => tick + 1);
-  }, [modelFiles]);
-
-  const clearFiles = useCallback((): void => {
-    setSelectedFiles(new Set());
-    setFilterTick((tick) => tick + 1);
-  }, []);
-
-  const selectAllModels = useCallback((): void => {
-    setSelectedModels((current) => new Set([...current, ...availableModelNames]));
-    setFilterTick((tick) => tick + 1);
-  }, [availableModelNames]);
-
-  const clearModels = useCallback((): void => {
-    setSelectedModels((current) => {
-      const next = new Set(current);
-      for (const name of availableModelNames) next.delete(name);
-      return next;
-    });
-    setFilterTick((tick) => tick + 1);
-  }, [availableModelNames]);
-
-  const dismissInitialCapNotice = useCallback((): void => {
-    setInitialCapNotice(null);
-  }, []);
-
-  // Spec 36: removal is filter-only — the same effect as unchecking the model
-  // in the sidebar, including the refit-triggering filterTick bump.
-  const removeModelsCallback = useCallback((names: readonly string[]): void => {
-    setSelectedModels((current) => removeModels(current, names));
+  const addEntities = useCallback((ids: readonly string[]): void => {
+    const declaring = new Set(filesDeclaring(filesRef.current, ids));
+    setSelectedFiles((current) => ({
+      model: new Set([...current.model, ...filesRef.current.filter((file) => file.domain === 'model' && declaring.has(file.uri)).map((file) => file.uri)]),
+      source: new Set([...current.source, ...filesRef.current.filter((file) => file.domain === 'source' && declaring.has(file.uri)).map((file) => file.uri)]),
+    }));
+    setSelectedEntities((current) => ({
+      model: new Set([...current.model, ...ids.filter((id) => domainOf(id) === 'model')]),
+      source: new Set([...current.source, ...ids.filter((id) => domainOf(id) === 'source')]),
+    }));
     setFilterTick((tick) => tick + 1);
   }, []);
-
-  // Spec 37: additive only — checks the models and the files declaring them
-  // so file precedence (spec 05) cannot keep the newly added tables hidden.
-  const addModelsCallback = useCallback((names: readonly string[]): void => {
-    const uris = filesDeclaring(modelFilesRef.current, names);
-    setSelectedFiles((current) => new Set([...current, ...uris]));
-    setSelectedModels((current) => new Set([...current, ...names]));
+  const removeEntities = useCallback((ids: readonly string[]): void => {
+    setSelectedEntities((current) => ({ model: removeModels(current.model, ids), source: removeModels(current.source, ids) }));
     setFilterTick((tick) => tick + 1);
   }, []);
-
-  const showImportedModels = useCallback((names: readonly string[], destinationUri: string): void => {
-    setSelectedFiles((current) => new Set([...current, destinationUri]));
-    setSelectedModels((current) => new Set([...current, ...names]));
+  const showImportedModels = useCallback((ids: readonly string[], destinationUri: string): void => {
+    setSelectedFiles((current) => ({ ...current, model: new Set([...current.model, destinationUri]) }));
+    setSelectedEntities((current) => ({ ...current, model: new Set([...current.model, ...ids]) }));
     setFilterTick((tick) => tick + 1);
   }, []);
 
   return {
-    modelFiles,
-    selectedFiles,
-    selectedModels,
-    availableModelNames,
-    visibleModels,
-    fileSearch,
-    modelSearch,
-    setFileSearch,
-    setModelSearch,
-    filterTick,
-    toggleFile,
-    toggleModel,
-    selectAllFiles,
-    clearFiles,
-    selectAllModels,
-    clearModels,
-    removeModels: removeModelsCallback,
-    addModels: addModelsCallback,
-    showImportedModels,
-    applyModelFiles,
-    applyScope,
-    applyLayoutTables,
-    initialCapNotice,
-    dismissInitialCapNotice,
+    filesByDomain, selectedFilesByDomain, selectedEntitiesByDomain, availableEntitiesByDomain, visibleEntities,
+    searchByDomain: { model: { files: fileSearch.model, entities: entitySearch.model }, source: { files: fileSearch.source, entities: entitySearch.source } },
+    setFileSearch: (domain, value) => setFileSearchState((current) => ({ ...current, [domain]: value })),
+    setEntitySearch: (domain, value) => setEntitySearchState((current) => ({ ...current, [domain]: value })),
+    toggleFile, toggleEntity, selectAllFiles, clearFiles, selectAllEntities, clearEntities, filterTick,
+    applyEntityFiles, applyScope, applyLayoutTables, addEntities, removeEntities, showImportedModels,
+    initialCapNotice, dismissInitialCapNotice: () => setInitialCapNotice(null),
   };
 }

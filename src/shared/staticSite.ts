@@ -1,13 +1,11 @@
 import type { DiagramLayout } from '../diagram/layoutFile';
 import type { DiagramGraph } from '../diagram/graph';
-import type { DiagramMode } from './diagramMode';
 import type { DiagramEntityFile } from './protocol';
 
-export const STATIC_SITE_SCHEMA_VERSION = 1;
-export type StaticDiagramRoute = 'models' | 'sources' | `diagram/${string}`;
+export const STATIC_SITE_SCHEMA_VERSION = 2;
+export type StaticDiagramRoute = 'explore' | `diagram/${string}`;
 
 export interface StaticDiagramUniverse {
-  mode: DiagramMode;
   graph: DiagramGraph;
   files: DiagramEntityFile[];
 }
@@ -23,8 +21,7 @@ export interface StaticLayoutEntry {
 export interface StaticSiteData {
   schemaVersion: typeof STATIC_SITE_SCHEMA_VERSION;
   initialSelectionLimit: number;
-  model?: StaticDiagramUniverse;
-  source?: StaticDiagramUniverse;
+  universe?: StaticDiagramUniverse;
   layouts: StaticLayoutEntry[];
 }
 
@@ -32,7 +29,6 @@ export interface StaticMenuEntry {
   route: StaticDiagramRoute;
   title: string;
   detail?: string;
-  mode: DiagramMode;
   kind: 'explorer' | 'layout';
 }
 
@@ -43,7 +39,7 @@ export function staticLayoutRoute(relativePath: string): StaticDiagramRoute {
 
 export function parseStaticDiagramHash(hash: string): StaticDiagramRoute | null {
   const route = hash.replace(/^#\/?/, '');
-  if (route === 'models' || route === 'sources') return route;
+  if (route === 'explore') return route;
   if (!route.startsWith('diagram/') || route.length === 'diagram/'.length) return null;
   try {
     const path = route.slice('diagram/'.length).split('/').map(decodeURIComponent).join('/');
@@ -55,8 +51,7 @@ export function parseStaticDiagramHash(hash: string): StaticDiagramRoute | null 
 
 export function buildStaticMenu(data: StaticSiteData, query = ''): StaticMenuEntry[] {
   const entries: StaticMenuEntry[] = [];
-  if (data.model !== undefined) entries.push({ route: 'models', title: 'Model explorer', mode: 'model', kind: 'explorer' });
-  if (data.source !== undefined) entries.push({ route: 'sources', title: 'Source explorer', mode: 'source', kind: 'explorer' });
+  if (data.universe !== undefined) entries.push({ route: 'explore', title: 'dbt explorer', kind: 'explorer' });
   const titleCounts = new Map<string, number>();
   for (const layout of data.layouts) {
     const key = layout.title.toLocaleLowerCase();
@@ -73,7 +68,6 @@ export function buildStaticMenu(data: StaticSiteData, query = ''): StaticMenuEnt
       route: layout.route,
       title: layout.title,
       ...(titleCounts.get(layout.title.toLocaleLowerCase())! > 1 ? { detail: layout.relativePath } : {}),
-      mode: layout.layout.mode,
       kind: 'layout',
     });
   }

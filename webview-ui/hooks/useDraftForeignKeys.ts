@@ -10,6 +10,7 @@ import { useCallback, useRef, useState } from 'react';
 import type { ModelEdit } from '../../src/dbt/edit';
 import type { ForeignKeyDescriptor } from '../../src/dbt/types';
 import type { DraftForeignKey } from '../ForeignKeySection';
+import type { DiagramEntityKind } from '../../src/shared/entityId';
 
 export interface DraftForeignKeysState {
   draftFks: Record<string, DraftForeignKey[]>;
@@ -27,7 +28,7 @@ export interface DraftForeignKeysState {
 
 export function useDraftForeignKeys(
   onEdit: (edit: ModelEdit) => void,
-  forceVirtual = false,
+  entityKind: (id: string) => DiagramEntityKind | null,
 ): DraftForeignKeysState {
   // Keyed by model id; each draft carries a locally unique id.
   const [draftFks, setDraftFks] = useState<Record<string, DraftForeignKey[]>>({});
@@ -52,9 +53,9 @@ export function useDraftForeignKeys(
 
   const addDraft = useCallback(
     (model: string, target: string): void => {
-      appendDraft(model, target, forceVirtual);
+      appendDraft(model, target, entityKind(model) === 'source');
     },
-    [appendDraft, forceVirtual],
+    [appendDraft, entityKind],
   );
 
   const removeDraft = useCallback((model: string, draftId: string): void => {
@@ -72,11 +73,11 @@ export function useDraftForeignKeys(
       setDraftFks((current) => ({
         ...current,
         [model]: (current[model] ?? []).map((d) =>
-          d.draftId === draftId ? { ...d, virtual: forceVirtual || virtual } : d,
+          d.draftId === draftId ? { ...d, virtual: entityKind(model) === 'source' || virtual } : d,
         ),
       }));
     },
-    [forceVirtual],
+    [entityKind],
   );
 
   const addDraftPair = useCallback(
@@ -87,11 +88,11 @@ export function useDraftForeignKeys(
         target: draft.target,
         columns: [source],
         toColumns: [target],
-        virtual: forceVirtual || draft.virtual,
+        virtual: entityKind(model) === 'source' || draft.virtual,
       });
       removeDraft(model, draft.draftId);
     },
-    [onEdit, removeDraft, forceVirtual],
+    [onEdit, removeDraft, entityKind],
   );
 
   const removeLastPair = useCallback(
@@ -99,10 +100,10 @@ export function useDraftForeignKeys(
       onEdit({ kind: 'removeForeignKey', model, fk });
       const target = fk.target;
       if (target !== undefined) {
-        appendDraft(model, target, forceVirtual || fk.virtual);
+        appendDraft(model, target, entityKind(model) === 'source' || fk.virtual);
       }
     },
-    [onEdit, appendDraft, forceVirtual],
+    [onEdit, appendDraft, entityKind],
   );
 
   return { draftFks, addDraft, removeDraft, setDraftVirtual, addDraftPair, removeLastPair };

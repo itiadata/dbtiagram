@@ -1,8 +1,8 @@
 import type { ModelEdit } from '../src/dbt/edit';
 import type { MatrixRow } from '../src/diagram/matrix';
-import type { DiagramMode } from '../src/shared/diagramMode';
+import type { DiagramDomain } from '../src/shared/diagramMode';
 
-export function matrixAllowsRowStructure(mode: DiagramMode): boolean {
+export function matrixAllowsRowStructure(mode: DiagramDomain): boolean {
   return mode === 'model';
 }
 

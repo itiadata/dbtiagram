@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { findSqlRefs, rewriteSqlRefs } from '../../../src/dbt/sqlRefs';
+import { findSqlRefs, findSqlSources, rewriteSqlRefs } from '../../../src/dbt/sqlRefs';
 
 describe('SQL refs', () => {
   it('finds literal refs in Jinja expressions and statements', () => {
@@ -19,5 +19,14 @@ describe('SQL refs', () => {
     expect(rewriteSqlRefs(text, (ref) => ref.package === 'sample', 'sales_orders')).toBe(
       `{{  ref( "sample" , 'sales_orders' )  }}`,
     );
+  });
+
+  it('finds a literal source call', () => {
+    expect(findSqlSources("select * from {{ source('finops', 'transactions') }}")).toMatchObject([{ source: 'finops', table: 'transactions' }]);
+  });
+
+  it('ignores source calls in comments and SQL strings', () => {
+    const text = `-- {{ source('a', 'b') }}\nselect '{{ source("c", "d") }}', * from {{ source('finops', 'transactions') }}`;
+    expect(findSqlSources(text)).toMatchObject([{ source: 'finops', table: 'transactions' }]);
   });
 });

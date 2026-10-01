@@ -5,7 +5,7 @@ import { matchesGlob, normalizePathForGlob } from '../shared/glob';
 
 export const STATIC_MODEL_SOURCE_GLOB = '**/models/**/*.yml';
 export interface StaticInputFile { relativePath: string; text: string }
-export interface StaticProjectInputs { projectRoot: string; yamlFiles: StaticInputFile[]; layoutFiles: StaticInputFile[] }
+export interface StaticProjectInputs { projectRoot: string; packageName: string; yamlFiles: StaticInputFile[]; sqlFiles: StaticInputFile[]; layoutFiles: StaticInputFile[] }
 
 export async function loadStaticProjectInputs(options: StaticGeneratorOptions): Promise<StaticProjectInputs> {
   const projectRoot = await fs.realpath(options.project);
@@ -28,9 +28,12 @@ export async function loadStaticProjectInputs(options: StaticGeneratorOptions): 
   const layoutPaths = relative.filter((file) => matchesGlob(file.relativePath, options.layoutGlob));
   const layoutSet = new Set(layoutPaths.map((file) => file.relativePath));
   const yamlPaths = relative.filter((file) => matchesGlob(file.relativePath, STATIC_MODEL_SOURCE_GLOB) && !layoutSet.has(file.relativePath));
+  const sqlPaths = relative.filter((file) => /^models\/.*\.sql$/i.test(file.relativePath));
   const read = async (file: { full: string; relativePath: string }): Promise<StaticInputFile> => {
     try { return { relativePath: file.relativePath, text: await fs.readFile(file.full, 'utf8') }; }
     catch (error) { throw new Error(`${file.relativePath}: ${String(error)}`); }
   };
-  return { projectRoot, yamlFiles: await Promise.all(yamlPaths.map(read)), layoutFiles: await Promise.all(layoutPaths.map(read)) };
+  let packageName = 'unknown';
+  try { const text = await fs.readFile(path.join(projectRoot, 'dbt_project.yml'), 'utf8'); const match = /^name:\s*([^\s#]+)/m.exec(text); packageName = match?.[1] ?? packageName; } catch { /* optional */ }
+  return { projectRoot, packageName, yamlFiles: await Promise.all(yamlPaths.map(read)), sqlFiles: await Promise.all(sqlPaths.map(read)), layoutFiles: await Promise.all(layoutPaths.map(read)) };
 }

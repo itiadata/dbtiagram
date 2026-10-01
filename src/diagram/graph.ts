@@ -10,6 +10,7 @@ import { columnTestNames } from '../dbt/tests';
 import { readVirtualConstraints } from '../dbt/virtual';
 import type { ForeignKeyDescriptor, ModelColumn, ModelDefinition } from '../dbt/types';
 import type { LineageEdge, LineageNodeKind } from './lineage';
+import { modelEntityId, sourceEntityId, type DiagramEntityKind } from '../shared/entityId';
 
 export interface TableNodeColumn {
   name: string;
@@ -49,6 +50,7 @@ export interface TableNode {
   readOnly?: boolean;
   lineageKind?: LineageNodeKind;
   packageName?: string;
+  entityKind?: DiagramEntityKind;
 }
 
 export interface RelationEdge {
@@ -75,11 +77,28 @@ export interface DiagramGraph {
  * stored in `config.meta.dbtiagram.virtual` (spec 08). The legacy `refs` key is
  * not a relationship source and never produces edges.
  */
-export function buildDiagram(models: ModelDefinition[]): DiagramGraph {
-  return buildGraph(models, (value) => parseRef(value)?.name ?? null, true);
+export interface DiagramModelInput { packageName: string; model: ModelDefinition }
+
+export function buildDiagram(models: readonly DiagramModelInput[], sources: readonly SourceDefinition[], lineageEdges: readonly LineageEdge[] = []): DiagramGraph {
+  const modelInputs = models;
+  const rawModels = modelInputs.map((input) => input.model);
+  const modelGraph = buildGraph(rawModels, (value) => parseRef(value)?.name ?? null, true);
+  const modelIds = new Map(modelInputs.map((input) => [input.model.name, modelEntityId(input.packageName, input.model.name)]));
+  const namespacedModels = modelGraph.nodes.map((node, index) => ({
+    ...node, id: modelIds.get(node.id)!, entityKind: 'model' as const, packageName: modelInputs[index].packageName,
+    foreignKeys: node.foreignKeys.map((fk) => ({ ...fk, ...(fk.target === undefined ? {} : { target: modelIds.get(fk.target) }) })),
+  }));
+  const sourceGraph = buildSourceDiagram([...sources]);
+  const sourceIds = new Map(flattenSourceTables([...sources]).map(({ id, sourceName, table }) => [id, sourceEntityId(sourceName, table.name)]));
+  const namespacedSources = sourceGraph.nodes.map((node) => ({
+    ...node, id: sourceIds.get(node.id)!, entityKind: 'source' as const,
+    foreignKeys: node.foreignKeys.map((fk) => ({ ...fk, ...(fk.target === undefined ? {} : { target: sourceIds.get(fk.target) }) })),
+  }));
+  const mapEdge = (edge: RelationEdge, ids: ReadonlyMap<string, string>): RelationEdge => ({ ...edge, source: ids.get(edge.source)!, target: ids.get(edge.target)! });
+  return { nodes: [...namespacedModels, ...namespacedSources], edges: [...modelGraph.edges.map((edge) => mapEdge(edge, modelIds)), ...sourceGraph.edges.map((edge) => mapEdge(edge, sourceIds))], lineageEdges: [...lineageEdges] };
 }
 
-export function buildSourceDiagram(sources: SourceDefinition[]): DiagramGraph {
+function buildSourceDiagram(sources: SourceDefinition[]): DiagramGraph {
   const tables = flattenSourceTables(sources);
   const tableNameCounts = new Map<string, number>();
   for (const { table } of tables) tableNameCounts.set(table.name, (tableNameCounts.get(table.name) ?? 0) + 1);

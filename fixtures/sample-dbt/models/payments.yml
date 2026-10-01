@@ -1,0 +1,7 @@
+version: 2
+models:
+  - name: payments
+    description: Payments sourced from FinOps transactions
+    columns:
+      - name: id
+        data_type: integer

@@ -14,11 +14,10 @@ import {
 
 const sample: DiagramLayout = {
   version: 2,
-  mode: 'model',
   name: 'Order marts',
   tables: [
-    { name: 'order_items', x: 520, y: 40 },
-    { name: 'orders', x: 120, y: 40 },
+    { name: 'model:sample:order_items', x: 520, y: 40 },
+    { name: 'model:sample:orders', x: 120, y: 40 },
   ],
   notes: [],
   groups: [],
@@ -68,17 +67,16 @@ describe('stripLayoutSuffix', () => {
 });
 
 describe('buildLayout', () => {  it('sorts tables by name and rounds coordinates', () => {
-    const layout = buildLayout('My diagram', 'model', [
-      { name: 'orders', x: 120.4, y: 39.6 },
-      { name: 'customers', x: -0.2, y: 10 },
+    const layout = buildLayout('My diagram', [
+      { name: 'model:sample:orders', x: 120.4, y: 39.6 },
+      { name: 'model:sample:customers', x: -0.2, y: 10 },
     ]);
     expect(layout).toEqual({
       version: 2,
-  mode: 'model',
       name: 'My diagram',
       tables: [
-        { name: 'customers', x: -0, y: 10 },
-        { name: 'orders', x: 120, y: 40 },
+        { name: 'model:sample:customers', x: -0, y: 10 },
+        { name: 'model:sample:orders', x: 120, y: 40 },
       ],
       notes: [],
       groups: [],
@@ -87,6 +85,12 @@ describe('buildLayout', () => {  it('sorts tables by name and rounds coordinates
 });
 
 describe('serializeDiagramLayout / parseDiagramLayout', () => {
+  it('rejects a version-1 layout', () => {
+    expect(() => parseDiagramLayout('version: 1\ntables: []\n', 'old')).toThrow('Unsupported diagram layout version 1');
+  });
+  it('rejects the old mode-bearing version-2 format', () => {
+    expect(() => parseDiagramLayout('version: 2\nmode: model\ntables:\n  - {name: orders, x: 0, y: 0}\n', 'old')).toThrow('Diagram layout version 2 requires namespaced table IDs and no mode');
+  });
   it('round-trips lineage-added table ids without edge data', () => {
     const layout: DiagramLayout = { ...sample, tables: [
       { name: 'model:sample:report', x: 1, y: 2 },
@@ -108,21 +112,20 @@ describe('serializeDiagramLayout / parseDiagramLayout', () => {
   });
 
   it('uses the fallback name when the file has none', () => {
-    const layout = parseDiagramLayout('version: 1\ntables: []\n', 'order-marts');
+    const layout = parseDiagramLayout('version: 2\ntables: []\n', 'order-marts');
     expect(layout.name).toBe('order-marts');
     expect(layout.tables).toEqual([]);
   });
 
   it('drops unknown keys', () => {
     const layout = parseDiagramLayout(
-      'version: 1\nname: x\nzoom: 3\ntables:\n  - name: orders\n    x: 1\n    y: 2\n    color: red\n',
+      'version: 2\nname: x\nzoom: 3\ntables:\n  - name: model:sample:orders\n    x: 1\n    y: 2\n    color: red\n',
       'fallback',
     );
     expect(layout).toEqual({
       version: 2,
-  mode: 'model',
       name: 'x',
-      tables: [{ name: 'orders', x: 1, y: 2 }],
+      tables: [{ name: 'model:sample:orders', x: 1, y: 2 }],
       notes: [],
       groups: [],
     });
@@ -130,10 +133,10 @@ describe('serializeDiagramLayout / parseDiagramLayout', () => {
 
   it('keeps the first of duplicate table names', () => {
     const layout = parseDiagramLayout(
-      'version: 1\ntables:\n  - name: orders\n    x: 1\n    y: 2\n  - name: orders\n    x: 9\n    y: 9\n',
+      'version: 2\ntables:\n  - name: model:sample:orders\n    x: 1\n    y: 2\n  - name: model:sample:orders\n    x: 9\n    y: 9\n',
       'fallback',
     );
-    expect(layout.tables).toEqual([{ name: 'orders', x: 1, y: 2 }]);
+    expect(layout.tables).toEqual([{ name: 'model:sample:orders', x: 1, y: 2 }]);
   });
 
   it.each([
@@ -141,10 +144,10 @@ describe('serializeDiagramLayout / parseDiagramLayout', () => {
     ['a non-mapping root', '- 1\n- 2\n'],
     ['a missing version', 'tables: []\n'],
     ['an unknown version', 'version: 99\ntables: []\n'],
-    ['a non-array tables', 'version: 1\ntables: nope\n'],
-    ['a non-mapping table entry', 'version: 1\ntables:\n  - orders\n'],
-    ['a table without a name', 'version: 1\ntables:\n  - x: 1\n    y: 2\n'],
-    ['non-numeric coordinates', 'version: 1\ntables:\n  - name: orders\n    x: a\n    y: 2\n'],
+    ['a non-array tables', 'version: 2\ntables: nope\n'],
+    ['a non-mapping table entry', 'version: 2\ntables:\n  - orders\n'],
+    ['a table without a name', 'version: 2\ntables:\n  - x: 1\n    y: 2\n'],
+    ['non-numeric coordinates', 'version: 2\ntables:\n  - name: model:sample:orders\n    x: a\n    y: 2\n'],
   ])('rejects %s', (_label, text) => {
     expect(() => parseDiagramLayout(text, 'diagram.dbtiagram.yml')).toThrow(DiagramLayoutParseError);
   });
@@ -152,29 +155,28 @@ describe('serializeDiagramLayout / parseDiagramLayout', () => {
 
 describe('applyLayout', () => {
   it('returns visible names and positions for known models', () => {
-    const applied = applyLayout(sample, new Set(['orders', 'order_items', 'customers']));
-    expect([...applied.visible].sort()).toEqual(['order_items', 'orders']);
-    expect(applied.positions.get('orders')).toEqual({ x: 120, y: 40 });
+    const applied = applyLayout(sample, new Set(['model:sample:orders', 'model:sample:order_items', 'model:sample:customers']));
+    expect([...applied.visible].sort()).toEqual(['model:sample:order_items', 'model:sample:orders']);
+    expect(applied.positions.get('model:sample:orders')).toEqual({ x: 120, y: 40 });
     expect(applied.missing).toEqual([]);
   });
 
   it('drops unknown models and reports them in file order', () => {
     const layout: DiagramLayout = {
       version: 2,
-  mode: 'model',
       name: 'x',
       tables: [
-        { name: 'legacy_orders', x: 0, y: 0 },
-        { name: 'orders', x: 10, y: 20 },
-        { name: 'gone', x: 0, y: 0 },
+        { name: 'model:sample:legacy_orders', x: 0, y: 0 },
+        { name: 'model:sample:orders', x: 10, y: 20 },
+        { name: 'model:sample:gone', x: 0, y: 0 },
       ],
       notes: [],
       groups: [],
     };
-    const applied = applyLayout(layout, new Set(['orders']));
-    expect([...applied.visible]).toEqual(['orders']);
-    expect(applied.missing).toEqual(['legacy_orders', 'gone']);
-    expect(applied.positions.has('legacy_orders')).toBe(false);
+    const applied = applyLayout(layout, new Set(['model:sample:orders']));
+    expect([...applied.visible]).toEqual(['model:sample:orders']);
+    expect(applied.missing).toEqual(['model:sample:legacy_orders', 'model:sample:gone']);
+    expect(applied.positions.has('model:sample:legacy_orders')).toBe(false);
   });
 
   it('passes notes through and still reconciles tables', () => {
@@ -191,20 +193,19 @@ describe('applyLayout', () => {
     ];
     const layout: DiagramLayout = {
       version: 2,
-  mode: 'model',
       name: 'x',
       tables: [
-        { name: 'orders', x: 10, y: 20 },
-        { name: 'ghost', x: 0, y: 0 },
+        { name: 'model:sample:orders', x: 10, y: 20 },
+        { name: 'model:sample:ghost', x: 0, y: 0 },
       ],
       notes,
       groups: [],
     };
 
-    const applied = applyLayout(layout, new Set(['orders']));
+    const applied = applyLayout(layout, new Set(['model:sample:orders']));
 
-    expect([...applied.visible]).toEqual(['orders']);
-    expect(applied.missing).toEqual(['ghost']);
+    expect([...applied.visible]).toEqual(['model:sample:orders']);
+    expect(applied.missing).toEqual(['model:sample:ghost']);
     expect(applied.notes).toEqual(notes);
   });
 });
@@ -222,22 +223,21 @@ describe('notes (spec 16)', () => {
 
   it('round-trips a layout with notes', () => {
     const layout: DiagramLayout = { version: 2,
-  mode: 'model', name: 'd', tables: [], notes: [note], groups: [] };
+  name: 'd', tables: [], notes: [note], groups: [] };
     expect(parseDiagramLayout(serializeDiagramLayout(layout), 'd')).toEqual(layout);
   });
 
   it('parses a file with no notes key as an empty array', () => {
-    expect(parseDiagramLayout('version: 1\nname: d\ntables: []\n', 'd').notes).toEqual([]);
+    expect(parseDiagramLayout('version: 2\nname: d\ntables: []\n', 'd').notes).toEqual([]);
   });
 
   it('omits the notes key when there are none', () => {
-    expect(serializeDiagramLayout(buildLayout('d', 'model', []))).not.toContain('notes');
+    expect(serializeDiagramLayout(buildLayout('d', []))).not.toContain('notes');
   });
 
   it('sorts notes by id and rounds coordinates and sizes', () => {
     const layout = buildLayout(
       'd',
-      'model',
       [],
       [
         { ...note, id: 'n-b', x: 10.6, y: 20.4, width: 200.5, height: 100.4 },
@@ -251,7 +251,7 @@ describe('notes (spec 16)', () => {
 
   it('defaults a missing collapsedByDefault to false', () => {
     const layout = parseDiagramLayout(
-      'version: 1\nname: d\ntables: []\nnotes:\n  - id: n-1\n    x: 1\n    y: 2\n',
+      'version: 2\nname: d\ntables: []\nnotes:\n  - id: n-1\n    x: 1\n    y: 2\n',
       'd',
     );
     expect(layout.notes[0]?.collapsedByDefault).toBe(false);
@@ -259,7 +259,7 @@ describe('notes (spec 16)', () => {
 
   it('defaults missing width and height', () => {
     const layout = parseDiagramLayout(
-      'version: 1\nname: d\ntables: []\nnotes:\n  - id: n-1\n    x: 1\n    y: 2\n',
+      'version: 2\nname: d\ntables: []\nnotes:\n  - id: n-1\n    x: 1\n    y: 2\n',
       'd',
     );
     expect(layout.notes[0]).toMatchObject({ width: 220, height: 120 });
@@ -267,7 +267,7 @@ describe('notes (spec 16)', () => {
 
   it('clamps below-minimum sizes', () => {
     const layout = parseDiagramLayout(
-      'version: 1\nname: d\ntables: []\nnotes:\n  - id: n-1\n    x: 1\n    y: 2\n    width: 10\n    height: 10\n',
+      'version: 2\nname: d\ntables: []\nnotes:\n  - id: n-1\n    x: 1\n    y: 2\n    width: 10\n    height: 10\n',
       'd',
     );
     expect(layout.notes[0]).toMatchObject({ width: 120, height: 64 });
@@ -275,7 +275,7 @@ describe('notes (spec 16)', () => {
 
   it('keeps the first of duplicate note ids', () => {
     const layout = parseDiagramLayout(
-      'version: 1\nname: d\ntables: []\nnotes:\n  - id: n-1\n    text: first\n    x: 1\n    y: 2\n  - id: n-1\n    text: second\n    x: 9\n    y: 9\n',
+      'version: 2\nname: d\ntables: []\nnotes:\n  - id: n-1\n    text: first\n    x: 1\n    y: 2\n  - id: n-1\n    text: second\n    x: 9\n    y: 9\n',
       'd',
     );
     expect(layout.notes).toHaveLength(1);
@@ -283,30 +283,30 @@ describe('notes (spec 16)', () => {
   });
 
   it.each([
-    ['a non-array notes key', 'version: 1\nname: d\ntables: []\nnotes: nope\n', 'Diagram file "notes" must be an array'],
+    ['a non-array notes key', 'version: 2\nname: d\ntables: []\nnotes: nope\n', 'Diagram file "notes" must be an array'],
     [
       'a note entry that is not a mapping',
-      'version: 1\nname: d\ntables: []\nnotes:\n  - x\n',
+      'version: 2\nname: d\ntables: []\nnotes:\n  - x\n',
       'Every entry in "notes" must be a mapping',
     ],
     [
       'a note with no id',
-      'version: 1\nname: d\ntables: []\nnotes:\n  - x: 1\n    y: 2\n',
+      'version: 2\nname: d\ntables: []\nnotes:\n  - x: 1\n    y: 2\n',
       'Every note entry needs an "id"',
     ],
     [
       'a non-string text',
-      'version: 1\nname: d\ntables: []\nnotes:\n  - id: n-1\n    text: 5\n    x: 1\n    y: 2\n',
+      'version: 2\nname: d\ntables: []\nnotes:\n  - id: n-1\n    text: 5\n    x: 1\n    y: 2\n',
       'Note "n-1" needs a string "text"',
     ],
     [
       'non-finite coordinates',
-      'version: 1\nname: d\ntables: []\nnotes:\n  - id: n-1\n    x: a\n    y: 2\n',
+      'version: 2\nname: d\ntables: []\nnotes:\n  - id: n-1\n    x: a\n    y: 2\n',
       'Note "n-1" needs numeric "x" and "y" coordinates',
     ],
     [
       'a non-boolean collapsedByDefault',
-      'version: 1\nname: d\ntables: []\nnotes:\n  - id: n-1\n    x: 1\n    y: 2\n    collapsedByDefault: yes please\n',
+      'version: 2\nname: d\ntables: []\nnotes:\n  - id: n-1\n    x: 1\n    y: 2\n    collapsedByDefault: yes please\n',
       'Note "n-1" needs a boolean "collapsedByDefault"',
     ],
   ])('rejects %s', (_label, text, message) => {
@@ -331,9 +331,8 @@ describe('columnDisplay (spec 24)', () => {
   it('round-trips through serialize/parse', () => {
     const layout: DiagramLayout = {
       version: 2,
-  mode: 'model',
       name: 'd',
-      tables: [{ name: 'orders', x: 0, y: 0, columnDisplay: 'pkOnly' }],
+      tables: [{ name: 'model:sample:orders', x: 0, y: 0, columnDisplay: 'pkOnly' }],
       notes: [],
       groups: [],
       defaultColumnDisplay: 'pkAndFk',
@@ -342,7 +341,7 @@ describe('columnDisplay (spec 24)', () => {
   });
 
   it('omits defaults from serialized YAML', () => {
-    const layout = buildLayout('d', 'model', [{ name: 'orders', x: 0, y: 0 }]);
+    const layout = buildLayout('d', [{ name: 'model:sample:orders', x: 0, y: 0 }]);
     const text = serializeDiagramLayout(layout);
     expect(text).not.toContain('columnDisplay');
     expect(text).not.toContain('defaultColumnDisplay');
@@ -351,36 +350,34 @@ describe('columnDisplay (spec 24)', () => {
   it('buildLayout carries the default and per-table overrides', () => {
     const layout = buildLayout(
       'd',
-      'model',
       [
-        { name: 'orders', x: 0, y: 0 },
-        { name: 'customers', x: 10, y: 10 },
+        { name: 'model:sample:orders', x: 0, y: 0 },
+        { name: 'model:sample:customers', x: 10, y: 10 },
       ],
       [],
-      { default: 'pkAndFk', overrides: new Map([['orders', 'pkOnly']]) },
+      { default: 'pkAndFk', overrides: new Map([['model:sample:orders', 'pkOnly']]) },
     );
     expect(layout.defaultColumnDisplay).toBe('pkAndFk');
-    expect(layout.tables.find((t) => t.name === 'orders')?.columnDisplay).toBe('pkOnly');
-    expect(layout.tables.find((t) => t.name === 'customers')?.columnDisplay).toBeUndefined();
+    expect(layout.tables.find((t) => t.name === 'model:sample:orders')?.columnDisplay).toBe('pkOnly');
+    expect(layout.tables.find((t) => t.name === 'model:sample:customers')?.columnDisplay).toBeUndefined();
   });
 
   it('applyLayout carries the default and per-table overrides through', () => {
     const layout: DiagramLayout = {
       version: 2,
-  mode: 'model',
       name: 'd',
-      tables: [{ name: 'orders', x: 0, y: 0, columnDisplay: 'nameOnly' }],
+      tables: [{ name: 'model:sample:orders', x: 0, y: 0, columnDisplay: 'nameOnly' }],
       notes: [],
       groups: [],
       defaultColumnDisplay: 'pkOnly',
     };
-    const applied = applyLayout(layout, new Set(['orders']));
+    const applied = applyLayout(layout, new Set(['model:sample:orders']));
     expect(applied.defaultColumnDisplay).toBe('pkOnly');
-    expect(applied.columnDisplay.get('orders')).toBe('nameOnly');
+    expect(applied.columnDisplay.get('model:sample:orders')).toBe('nameOnly');
   });
 
   it('applyLayout defaults to "all" for a pre-feature layout', () => {
-    const applied = applyLayout(sample, new Set(['orders', 'order_items']));
+    const applied = applyLayout(sample, new Set(['model:sample:orders', 'model:sample:order_items']));
     expect(applied.defaultColumnDisplay).toBe('all');
     expect(applied.columnDisplay.size).toBe(0);
   });
@@ -388,7 +385,7 @@ describe('columnDisplay (spec 24)', () => {
   it('rejects an invalid table columnDisplay', () => {
     expect(() =>
       parseDiagramLayout(
-        'version: 1\ntables:\n  - name: orders\n    x: 1\n    y: 2\n    columnDisplay: bogus\n',
+        'version: 2\ntables:\n  - name: model:sample:orders\n    x: 1\n    y: 2\n    columnDisplay: bogus\n',
         'fallback',
       ),
     ).toThrow(DiagramLayoutParseError);
@@ -396,10 +393,10 @@ describe('columnDisplay (spec 24)', () => {
 });
 
 describe('groups (spec 31)', () => {
-  const sales = { id: 'g-1', name: 'Sales', color: 'blue' as const, models: ['orders'] };
+  const sales = { id: 'g-1', name: 'Sales', color: 'blue' as const, models: ['model:sample:orders'] };
 
   it('round-trips groups without geometry', () => {
-    const layout = buildLayout('d', 'model', [{ name: 'orders', x: 1, y: 2 }], [], undefined, [sales]);
+    const layout = buildLayout('d', [{ name: 'model:sample:orders', x: 1, y: 2 }], [], undefined, [sales]);
     const text = serializeDiagramLayout(layout);
     const groupYaml = text.slice(text.indexOf('groups:'));
     expect(groupYaml).not.toMatch(/^\s+(x|y|width|height):/m);
@@ -410,23 +407,23 @@ describe('groups (spec 31)', () => {
 
   it('parses group members from the tables key', () => {
     const parsed = parseDiagramLayout(
-      'version: 2\nmode: model\nname: d\ntables: []\ngroups:\n  - id: g-1\n    name: Sales\n    color: blue\n    tables:\n      - orders\n',
+      'version: 2\nname: d\ntables: []\ngroups:\n  - id: g-1\n    name: Sales\n    color: blue\n    tables:\n      - model:sample:orders\n',
       'd',
     );
     expect(parsed.groups).toEqual([sales]);
   });
 
-  it('parses a pre-group file', () => {
-    expect(parseDiagramLayout('version: 1\ntables: []\n', 'd').groups).toEqual([]);
+  it('parses a file without groups', () => {
+    expect(parseDiagramLayout('version: 2\ntables: []\n', 'd').groups).toEqual([]);
   });
 
   it('omits empty groups', () => {
-    expect(serializeDiagramLayout(buildLayout('d', 'model', []))).not.toContain('groups:');
+    expect(serializeDiagramLayout(buildLayout('d', []))).not.toContain('groups:');
   });
 
   it('passes source groups through applyLayout', () => {
-    const sourceGroup = { ...sales, models: ['finance.orders'] };
-    const layout = buildLayout('d', 'source', [], [], undefined, [sourceGroup]);
+    const sourceGroup = { ...sales, models: ['source:finance:orders'] };
+    const layout = buildLayout('d', [], [], undefined, [sourceGroup]);
     expect(applyLayout(layout, new Set()).groups).toEqual([sourceGroup]);
   });
 });
