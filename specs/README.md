@@ -72,6 +72,7 @@ up-to-date spec in `specs/features/`.
 | 52  | Add SQL-derived model lineage to diagrams | Done |
 | 53  | Unify model and source diagrams | Done |
 | 54  | Open a single-model diagram from SQL | Implemented |
+| 55  | Group sidebar filters by domain and make file selection search-only | Approved |
 
 Status values: `draft` → `approved` → `implemented` → `done`.
 
