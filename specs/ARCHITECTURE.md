@@ -172,7 +172,8 @@ via `ExtensionContext.workspaceState` (spec 27). | `readMatrixColumnPrefs`, `wri
 | `webview-ui/App.tsx` | webview | Top-level combined-diagram composition with per-node domain capabilities, lineage, filtering, and progress UI (spec 53). | `App` |
 | `webview-ui/ProductTitle.tsx` | webview | The stacked dbt Diagram header, running extension version/status, and manual update-check button (spec 39). | `ProductTitle`, `ProductTitleProps` |
 | `webview-ui/DiagramCanvas.tsx` | webview | React Flow canvas: nodes, edges, pan/zoom, node drag; top-right toolbar groups Auto-layout with the diagram-wide column-display selector (spec 24); top-left toolbar hosts Add note/Add foreign key and the model-only Fields Matrix action, plus the FK-draw mouse-follow preview line and crosshair cursor (spec 26/40). | `DiagramCanvas`, `DiagramCanvasProps` |
-| `webview-ui/TableNode.tsx` | webview | Custom React Flow node rendering a table with its column rows and handles, including the header-positioned `HEADER_ANCHOR` handle for a hidden FK column (spec 24). | `TableNode` |
+| `webview-ui/TableNode.tsx` | webview | Custom React Flow table card with column handles and a top-right Database/Sheet icon identifying source versus model/external entities (spec 53). | `TableNode` |
+| `webview-ui/icons.ts` | webview | Centralized Lucide icon re-exports, including Database/Sheet entity-domain icons (spec 53). | Lucide icon re-exports |
 | `webview-ui/NoteNode.tsx` | webview | Custom React Flow node rendering a sticky note: resizable rectangle, textarea, or collapsed icon (spec 16). | `NoteNode`, `NoteNodeData` |
 | `webview-ui/GroupNode.tsx` | webview | Non-movable React Flow background node rendering a named, palette-coloured derived group rectangle (spec 31). | `GroupNode` |
 | `webview-ui/FkEdge.tsx` | webview | Custom FK edge renderer with hover-friendly interaction width. | `FkEdge`, `roundedPath` |
@@ -207,7 +208,7 @@ via `ExtensionContext.workspaceState` (spec 27). | `readMatrixColumnPrefs`, `wri
 | `webview-ui/host.ts` | webview | Typed `postMessage` to the extension host. | `postToHost` |
 | `webview-ui/vscode-api.ts` | webview | Acquire and memoize the webview VS Code API handle. | `VsCodeApi` |
 | `webview-ui/vscode.d.ts` | webview | Ambient declaration for `acquireVsCodeApi`. | — |
-| `webview-ui/styles.css` | webview | Webview styling, themed from VS Code CSS variables. | — |
+| `webview-ui/styles.css` | webview | Webview styling, including domain-icon placement in table headers, themed from VS Code CSS variables. | — |
 | `webview-ui/hooks/useHostMessages.ts` | webview | Subscribe to host → webview messages and dispatch to handlers, including running app version and update-check state (spec 39). | `useHostMessages`, `HostMessageHandlers`, `DiagramUpdateMessage`, `LayoutApplyMessage`, `LayoutActiveMessage` |
 | `webview-ui/hooks/useSettings.ts` | webview | Settings overlay state: current `OpenBehavior`, open/close, and posting `settings:setOpenBehavior` (spec 23). | `useSettings`, `SettingsState` |
 | `webview-ui/hooks/useSelection.ts` | webview | Current model/column selection state, including clearing the selection when its table is explicitly removed from the diagram (spec 36). | `useSelection`, `Selection`, `SelectionState` |

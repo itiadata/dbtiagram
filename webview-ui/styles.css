@@ -1067,6 +1067,7 @@ body.vscode-dark .group-color-swatch--cyan { --swatch: #22d3ee; }
 }
 
 .table-node__title {
+  position: relative;
   height: 44px;
   display: flex;
   align-items: center;
@@ -1076,8 +1077,18 @@ body.vscode-dark .group-color-swatch--cyan { --swatch: #22d3ee; }
   background: var(--card-header);
   border-bottom: 1px solid var(--border);
   overflow: hidden;
-  padding: 0 8px;
+  padding: 0 30px 0 8px;
   cursor: pointer;
+}
+
+.table-node__entity-icon {
+  position: absolute;
+  top: 50%;
+  right: 9px;
+  display: inline-flex;
+  color: var(--muted);
+  transform: translateY(-50%);
+  pointer-events: none;
 }
 
 .table-node__title-text {

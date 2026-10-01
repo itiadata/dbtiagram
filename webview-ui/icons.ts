@@ -33,4 +33,6 @@ export {
   GitBranch,
   ArrowLeftFromLine,
   ArrowRightFromLine,
+  Database,
+  Sheet,
 } from 'lucide-react';

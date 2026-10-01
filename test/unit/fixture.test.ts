@@ -11,6 +11,8 @@ import { buildDiagram as buildCombinedDiagram } from '../../src/diagram/graph';
 import { applyLayout, isLayoutFilePath, parseDiagramLayout } from '../../src/diagram/layoutFile';
 import { disambiguateFileLabels } from '../../src/shared/labels';
 import { buildStaticSite } from '../../src/static/site';
+import { sqlLineageTargets } from '../../src/diagram/lineage';
+import { externalEntityId, modelEntityId, sourceEntityId } from '../../src/shared/entityId';
 
 const fixtureModelsDir = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
@@ -46,6 +48,24 @@ function loadFixtureModels(): ModelDefinition[] {
 const expectedModelNames = ['customers', 'order_items', 'order_summary', 'orders', 'payments', 'products', 'staging_orders'];
 const buildDiagram = (models: ModelDefinition[]) => buildCombinedDiagram(models.map((model) => ({ packageName: 'sample', model })), []);
 const buildSourceDiagram = (sources: Parameters<typeof buildCombinedDiagram>[1]) => buildCombinedDiagram([], sources);
+
+function fixtureLineageEdges(): Array<{ parent: string; child: string }> {
+  const knownModels = new Set(loadFixtureModels().map((model) => model.name));
+  return fs.readdirSync(fixtureModelsDir)
+    .filter((name) => name.endsWith('.sql'))
+    .flatMap((name) => {
+      const childName = name.replace(/\.sql$/i, '');
+      const text = fs.readFileSync(path.join(fixtureModelsDir, name), 'utf8');
+      return sqlLineageTargets('sample', text).map((target) => ({
+        parent: target.kind === 'source'
+          ? sourceEntityId(target.sourceName, target.tableName)
+          : knownModels.has(target.name) && target.packageName === 'sample'
+            ? modelEntityId('sample', target.name)
+            : externalEntityId(target.packageName, target.name),
+        child: modelEntityId('sample', childName),
+      }));
+    });
+}
 
 describe('sample fixture (fixtures/sample-dbt)', () => {
   it('parses every model.yml file, including nested ones', () => {
@@ -179,6 +199,24 @@ describe('sample fixture (fixtures/sample-dbt)', () => {
     const graph = buildSourceDiagram(source.sources);
     expect(graph.nodes.map((node) => node.id)).toEqual(['source:finops:costs', 'source:finops:workspaces', 'source:finops:transactions']);
     expect(graph.edges[0]).toMatchObject({ source: 'source:finops:costs', target: 'source:finops:workspaces', virtual: true });
+  });
+
+  it('keeps one mixed FK and lineage example', () => {
+    const graph = buildDiagram(loadFixtureModels());
+    const fkPairs = new Set(graph.edges.map((edge) => [edge.source, edge.target].sort().join('\0')));
+    const overlaps = fixtureLineageEdges().filter((edge) => fkPairs.has([edge.parent, edge.child].sort().join('\0')));
+    expect(overlaps).toEqual([
+      { parent: 'model:sample:orders', child: 'model:sample:order_items' },
+    ]);
+  });
+
+  it('loads local and external fixture lineage', () => {
+    expect(fixtureLineageEdges()).toEqual(expect.arrayContaining([
+      { parent: 'source:finops:transactions', child: 'model:sample:payments' },
+      { parent: 'model:sample:orders', child: 'model:sample:order_items' },
+      { parent: 'model:sample:order_items', child: 'model:sample:order_summary' },
+      { parent: 'external:finance_pkg:dim_currency', child: 'model:sample:order_summary' },
+    ]));
   });
 
   it('carries column test names into the diagram graph (spec 30)', () => {

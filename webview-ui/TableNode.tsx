@@ -31,8 +31,9 @@ import {
 } from '../src/diagram/flow';
 import { HEADER_HEIGHT, ROW_HEIGHT } from '../src/diagram/layout';
 import { DiagramInteractionContext } from './diagram-interaction-context';
-import { KeyRound, FlaskConical, FlaskConicalOff } from './icons';
+import { Database, FlaskConical, FlaskConicalOff, KeyRound, Sheet } from './icons';
 import { useDiagramPresentationMode } from './presentation-mode';
+import { parseDiagramEntityId } from '../src/shared/entityId';
 
 const EMPTY_COLUMNS: ReadonlySet<string> = new Set();
 const EMPTY_PK_COLUMNS: readonly string[] = [];
@@ -49,6 +50,7 @@ function TableNodeComponent({ id, data }: NodeProps<FlowNode>): JSX.Element {
   const interaction = useContext(DiagramInteractionContext);
   const presentationReadOnly = useDiagramPresentationMode() === 'readonly';
   const readOnly = presentationReadOnly || data.readOnly === true;
+  const entityKind = parseDiagramEntityId(id)?.kind ?? 'model';
   const highlighted = interaction?.highlightedColumns.get(id) ?? EMPTY_COLUMNS;
   const selectedTable = interaction?.selectedTableId === id;
   const selectedColumnRef = interaction?.selectedColumnRef ?? null;
@@ -176,6 +178,13 @@ function TableNodeComponent({ id, data }: NodeProps<FlowNode>): JSX.Element {
         ) : (
           <span className="table-node__title-text">{data.label}</span>
         )}
+        <span
+          className="table-node__entity-icon nodrag"
+          title={entityKind === 'source' ? 'Source' : entityKind === 'external' ? 'External model' : 'Model'}
+          aria-label={entityKind === 'source' ? 'Source' : entityKind === 'external' ? 'External model' : 'Model'}
+        >
+          {entityKind === 'source' ? <Database size={14} /> : <Sheet size={14} />}
+        </span>
       </div>
       {data.columns.map((column, index) => {
         const isHighlighted = highlighted.has(column.name);

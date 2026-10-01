@@ -70,7 +70,7 @@ up-to-date spec in `specs/features/`.
 | 50  | Edit array meta values in the fields matrix | Done |
 | 51  | Rename a model across dbt project files | Done |
 | 52  | Add SQL-derived model lineage to diagrams | Done |
-| 53  | Unify model and source diagrams | Approved |
+| 53  | Unify model and source diagrams | Implemented |
 
 Status values: `draft` → `approved` → `implemented` → `done`.
 
