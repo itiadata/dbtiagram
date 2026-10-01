@@ -52,6 +52,21 @@ function domainOf(id: string): DiagramDomain | null {
   return kind === 'model' || kind === 'source' ? kind : null;
 }
 
+export interface LayoutFilterSelection {
+  selectedEntitiesByDomain: Readonly<DomainSets>;
+  initialCapNotice: null;
+}
+
+export function filterSelectionForLayout(ids: readonly string[]): LayoutFilterSelection {
+  return {
+    selectedEntitiesByDomain: {
+      model: new Set(ids.filter((id) => domainOf(id) === 'model')),
+      source: new Set(ids.filter((id) => domainOf(id) === 'source')),
+    },
+    initialCapNotice: null,
+  };
+}
+
 export function useDiagramFilter(initialSelectionLimit: number = INITIAL_MODEL_SELECTION_LIMIT): DiagramFilterState {
   const [filesByDomain, setFilesByDomain] = useState<DomainFiles>({ model: [], source: [] });
   const [selectedFilesByDomain, setSelectedFiles] = useState<DomainSets>(emptySets);
@@ -135,14 +150,13 @@ export function useDiagramFilter(initialSelectionLimit: number = INITIAL_MODEL_S
 
   const applyLayoutTables = useCallback((ids: string[]): void => {
     layoutAppliedRef.current = true;
+    const selection = filterSelectionForLayout(ids);
     setSelectedFiles({
       model: new Set(filesRef.current.filter((file) => file.domain === 'model').map((file) => file.uri)),
       source: new Set(filesRef.current.filter((file) => file.domain === 'source').map((file) => file.uri)),
     });
-    setSelectedEntities({
-      model: new Set(ids.filter((id) => domainOf(id) === 'model')),
-      source: new Set(ids.filter((id) => domainOf(id) === 'source')),
-    });
+    setSelectedEntities(selection.selectedEntitiesByDomain);
+    setInitialCapNotice(selection.initialCapNotice);
     setFilterTick((tick) => tick + 1);
   }, []);
 
