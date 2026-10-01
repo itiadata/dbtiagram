@@ -72,7 +72,7 @@ export type MessageToWebview =
    * opened from that file, so it starts showing only that file's models. Sent
    * only for model-file sources, never for layouts or palette invocations.
    */
-  | { type: 'filter:scope'; domain: DiagramDomain; uri: string }
+  | { type: 'filter:scope'; domain: DiagramDomain; uri: string; entities?: DiagramEntityId[] }
   /** A saved layout was opened: apply its visible tables and positions (spec 13). */
   | { type: 'layout:apply'; layout: DiagramLayout; missing: string[] }
   /** Which layout file the panel writes back to, if any (spec 13). */

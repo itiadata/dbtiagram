@@ -5,77 +5,44 @@
  */
 import * as vscode from 'vscode';
 import {
-  isDiagramLayoutFile,
+  editorButtonContexts,
   layoutFileContextKey,
   modelFileContextKey,
   sourceFileContextKey,
-  classifyDbtYml,
-  shouldShowButton,
+  sqlFileContextKey,
 } from './editorButton';
-import { isLayoutFilePath } from '../diagram/layoutFile';
 
 export function registerEditorTitleButton(): vscode.Disposable[] {
   const disposables: vscode.Disposable[] = [];
-  let modelPaths = new Set<string>();
-  let sourcePaths = new Set<string>();
-  let syncing = false;
-
   const updateContext = async (): Promise<void> => {
     const active = vscode.window.activeTextEditor;
-    const activePath = active?.document.uri.fsPath;
-    await vscode.commands.executeCommand(
-      'setContext',
-      modelFileContextKey,
-      shouldShowButton(activePath, modelPaths),
+    const configuration = vscode.workspace.getConfiguration('dbtiagram');
+    const contexts = editorButtonContexts(
+      active?.document.uri.fsPath,
+      active?.document.getText(),
+      configuration.get<string>('modelFileGlob', '**/models/**/*.yml'),
+      configuration.get<string>('sourceFileGlob', '**/models/**/*.yml'),
     );
-    await vscode.commands.executeCommand('setContext', sourceFileContextKey, shouldShowButton(activePath, sourcePaths));
-    // Layout files are recognized by their path alone (spec 13).
-    await vscode.commands.executeCommand(
-      'setContext',
-      layoutFileContextKey,
-      isDiagramLayoutFile(activePath),
-    );
-  };
-
-  const refresh = async (): Promise<void> => {
-    if (syncing) {
-      return;
-    }
-    syncing = true;
-    try {
-      const glob = vscode.workspace
-        .getConfiguration('dbtiagram')
-        .get<string>('modelFileGlob', '**/models/**/*.yml');
-      const sourceGlob = vscode.workspace.getConfiguration('dbtiagram').get<string>('sourceFileGlob', '**/models/**/*.yml');
-      const [modelUris, sourceUris] = await Promise.all([vscode.workspace.findFiles(glob, '**/node_modules/**'), vscode.workspace.findFiles(sourceGlob, '**/node_modules/**')]);
-      modelPaths = new Set(); sourcePaths = new Set();
-      const unique = new Map([...modelUris, ...sourceUris].map((uri) => [uri.fsPath, uri]));
-      for (const uri of unique.values()) {
-        if (isLayoutFilePath(uri.fsPath)) continue;
-        try {
-          const kind = classifyDbtYml(Buffer.from(await vscode.workspace.fs.readFile(uri)).toString('utf8'));
-          if (kind === 'model' && modelUris.some((candidate) => candidate.fsPath === uri.fsPath)) modelPaths.add(uri.fsPath);
-          if (kind === 'source' && sourceUris.some((candidate) => candidate.fsPath === uri.fsPath)) sourcePaths.add(uri.fsPath);
-        } catch { /* unreadable candidates are not classified */ }
-      }
-    } finally {
-      syncing = false;
-    }
-    await updateContext();
+    await Promise.all([
+      vscode.commands.executeCommand('setContext', modelFileContextKey, contexts.model),
+      vscode.commands.executeCommand('setContext', sourceFileContextKey, contexts.source),
+      vscode.commands.executeCommand('setContext', sqlFileContextKey, contexts.sql),
+      vscode.commands.executeCommand('setContext', layoutFileContextKey, contexts.layout),
+    ]);
   };
 
   disposables.push(
     vscode.window.onDidChangeActiveTextEditor(() => void updateContext()),
-    vscode.workspace.onDidCreateFiles(() => void refresh()),
-    vscode.workspace.onDidDeleteFiles(() => void refresh()),
-    vscode.workspace.onDidRenameFiles(() => void refresh()),
+    vscode.workspace.onDidChangeTextDocument((event) => {
+      if (event.document === vscode.window.activeTextEditor?.document) void updateContext();
+    }),
     vscode.workspace.onDidChangeConfiguration((event) => {
       if (event.affectsConfiguration('dbtiagram.modelFileGlob') || event.affectsConfiguration('dbtiagram.sourceFileGlob')) {
-        void refresh();
+        void updateContext();
       }
     }),
   );
 
-  void refresh();
+  void updateContext();
   return disposables;
 }

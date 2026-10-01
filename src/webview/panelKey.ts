@@ -11,6 +11,7 @@ import type { DiagramDomain } from '../shared/diagramMode';
 export type DiagramSource =
   | { kind: 'layout'; fsPath: string }
   | { kind: 'entityFile'; domain: DiagramDomain; fsPath: string }
+  | { kind: 'sql'; fsPath: string; modelYmlPath: string; modelName: string }
   | { kind: 'adhoc'; id: string };
 
 /** Base title shared by every diagram tab. */
@@ -38,6 +39,7 @@ export function diagramPanelKey(
   if (source.kind === 'entityFile') {
     return `entityFile:${source.domain}:${normalizePath(source.fsPath, caseInsensitive)}`;
   }
+  if (source.kind === 'sql') return `sql:${normalizePath(source.fsPath, caseInsensitive)}`;
   return `${source.kind}:${normalizePath(source.fsPath, caseInsensitive)}`;
 }
 
@@ -59,6 +61,8 @@ export function diagramPanelTitle(source: DiagramSource, layoutName?: string): s
       return `${name} — ${BASE_TITLE}`;
     }
     case 'entityFile':
+      return `${baseName(source.fsPath)} — ${BASE_TITLE}`;
+    case 'sql':
       return `${baseName(source.fsPath)} — ${BASE_TITLE}`;
     case 'adhoc':
       return BASE_TITLE;

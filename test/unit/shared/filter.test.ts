@@ -199,6 +199,17 @@ describe('scopeSelectionToFile', () => {
   it('returns null when there are no files at all', () => {
     expect(scopeSelectionToFile([], 'model', 'C:/repo/models/orders.yml')).toBeNull();
   });
+
+  it('checks one requested model in its declaring file', () => {
+    expect(scopeSelectionToFile(files, 'model', 'C:/repo/models/orders.yml', ['model:sample:orders'])).toEqual({
+      files: new Set(['C:/repo/models/orders.yml']),
+      entities: new Set(['model:sample:orders']),
+    });
+  });
+
+  it('ignores a stale requested model scope', () => {
+    expect(scopeSelectionToFile(files, 'model', 'C:/repo/models/orders.yml', ['model:sample:missing'])).toBeNull();
+  });
 });
 
 describe('removeModels', () => {

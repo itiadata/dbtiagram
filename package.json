@@ -22,6 +22,7 @@
   ],
   "activationEvents": [
     "onCommand:dbtiagram.open",
+    "onCommand:dbtiagram.openFromSql",
     "onStartupFinished"
   ],
   "main": "./dist/extension.js",
@@ -39,6 +40,15 @@
       {
         "command": "dbtiagram.openSource",
         "title": "Open dbt Source Diagram",
+        "category": "dbt Diagram",
+        "icon": {
+          "light": "media/diagram-project.svg",
+          "dark": "media/diagram-project-dark.svg"
+        }
+      },
+      {
+        "command": "dbtiagram.openFromSql",
+        "title": "Open dbt Model Diagram",
         "category": "dbt Diagram",
         "icon": {
           "light": "media/diagram-project.svg",
@@ -66,6 +76,11 @@
           "command": "dbtiagram.openSource",
           "group": "navigation@1",
           "when": "dbtiagram.isSourceYml"
+        },
+        {
+          "command": "dbtiagram.openFromSql",
+          "group": "navigation@1",
+          "when": "dbtiagram.isModelSql"
         },
         {
           "command": "dbtiagram.openLayout",

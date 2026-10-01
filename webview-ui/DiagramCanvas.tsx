@@ -46,7 +46,7 @@ import type { LineageEdge as LineageRelationship } from '../src/diagram/lineage'
 import { FkEdge } from './FkEdge';
 import { StickyNotePlus, Cable, Grid3x3, Network, Import, Group } from './icons';
 import type { RevealTarget } from './hooks/useRevealModel';
-import { shouldRunInitialFit, shouldRunPendingFit } from './initial-fit';
+import { shouldRequestPendingFit, shouldRunInitialFit, shouldRunPendingFit } from './initial-fit';
 import { NoteNode } from './NoteNode';
 import { TableNode } from './TableNode';
 import { GroupNode } from './GroupNode';
@@ -168,8 +168,6 @@ export function DiagramCanvas({
   // effect below); later flow changes flow through the effect.
   const [rfNodes, setRfNodes] = useState<Node[]>(() => flow.nodes);
   const lastTickRef = useRef(layoutTick);
-  const lastFilterTickRef = useRef(filterTick);
-  const lastIdsRef = useRef<string[]>([]);
   const lastSeedTickRef = useRef(seedTick);
   const didInitialFitRef = useRef(false);
   // Spec 21: set on the first pointerdown anywhere on the canvas, in the
@@ -196,15 +194,12 @@ export function DiagramCanvas({
   // — spec 04), only genuinely brand-new ids receive an automatic slot, and
   // vanished ids are dropped. Auto-layout (layoutTick bump) resets every node
   // to the fresh dagre arrangement. The view re-fits only on the first render,
-  // when the node set grows, after Auto-layout, or after an explicit filter
-  // toggle (filterTick) — never on ordinary live edits or renames — so
-  // pan/zoom survives typing (spec 04) and filter changes snap the remaining
-  // tables into view (spec 05).
+  // after Auto-layout or saved-layout application — never on ordinary live
+  // edits, renames, or table additions/removals — so pan/zoom survives both
+  // editing (spec 04) and diagram curation (spec 54).
   useEffect(() => {
     const reset = layoutTick !== lastTickRef.current;
     lastTickRef.current = layoutTick;
-    const filterChanged = filterTick !== lastFilterTickRef.current;
-    lastFilterTickRef.current = filterTick;
     // Spec 13: opening a saved layout overrides the automatic arrangement for
     // every table the layout stores a position for. Tables the layout does not
     // mention (e.g. re-checked later) still get their dagre slot.
@@ -221,13 +216,7 @@ export function DiagramCanvas({
       ? mergeFlowNodes(flow.nodes, current)
       : placeLineageNodes(flow.nodes, current, lineageEdges, lineagePlacementDirection));
 
-    const ids = flow.nodes.map((node) => node.id);
-    // Fit only when the node set actually grows (net count up); a rename swaps
-    // one id for another and must neither refit nor disturb the layout (spec
-    // 04 — the renamed card keeps its position via mergeFlowNodes).
-    const added = ids.length > lastIdsRef.current.length;
-    lastIdsRef.current = ids;
-    if (added || reset || filterChanged || seeded) {
+    if (shouldRequestPendingFit(reset, seeded)) {
       pendingFitRef.current = true;
     }
   }, [flow, layoutTick, filterTick, seedTick, seedPositions, fitView, lineageEdges, lineagePlacementDirection]);

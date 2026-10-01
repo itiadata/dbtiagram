@@ -151,7 +151,7 @@ export function App(): JSX.Element {
       // graph — so only the bookkeeping ref is dropped.
       selection.clearPendingRename();
     },
-    onFilterScope: (domain, uri) => filter.applyScope(domain, uri),
+    onFilterScope: (domain, uri, entities) => filter.applyScope(domain, uri, entities),
     onLayoutApply: (message) => {
       filter.applyLayoutTables(layout.applyLayout(message));
       lineage.restoreLayoutNodes(message.layout.tables.map((table) => table.name));

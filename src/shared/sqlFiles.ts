@@ -55,3 +55,36 @@ export function indexSqlPaths(paths: readonly string[]): Map<string, string> {
   }
   return index;
 }
+
+export interface SqlDiagramModelFile {
+  uri: string;
+  models: readonly string[];
+}
+
+export type SqlDiagramResolution =
+  | { kind: 'resolved'; modelName: string; modelYmlPath: string }
+  | { kind: 'invalidSqlPath' }
+  | { kind: 'notFound'; modelName: string }
+  | { kind: 'ambiguous'; modelName: string; modelYmlPaths: string[] };
+
+export function resolveSqlDiagram(
+  sqlPath: string,
+  files: readonly SqlDiagramModelFile[],
+): SqlDiagramResolution {
+  const modelName = modelNameFromSqlPath(sqlPath);
+  if (modelName === null) return { kind: 'invalidSqlPath' };
+  const modelYmlPaths = [...new Set(files
+    .filter((file) => file.models.includes(modelName))
+    .map((file) => file.uri))].sort((left, right) => left.localeCompare(right));
+  if (modelYmlPaths.length === 0) return { kind: 'notFound', modelName };
+  if (modelYmlPaths.length > 1) return { kind: 'ambiguous', modelName, modelYmlPaths };
+  return { kind: 'resolved', modelName, modelYmlPath: modelYmlPaths[0] };
+}
+
+export function sqlDiagramResolutionError(
+  resolution: Exclude<SqlDiagramResolution, { kind: 'resolved' }>,
+): string {
+  if (resolution.kind === 'invalidSqlPath') return 'Open a dbt model SQL file first.';
+  if (resolution.kind === 'notFound') return `Cannot open dbt Diagram for "${resolution.modelName}": no model YAML definition was found.`;
+  return `Cannot open dbt Diagram for "${resolution.modelName}": multiple model YAML files define it: ${resolution.modelYmlPaths.join(', ')}.`;
+}

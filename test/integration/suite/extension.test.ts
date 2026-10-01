@@ -39,6 +39,7 @@ suite('dbtiagram extension', () => {
       'the "dbtiagram.open" command must be registered after activation',
     );
     assert.ok(commands.includes('dbtiagram.openSource'), 'the source-open command must be registered');
+    assert.ok(commands.includes('dbtiagram.openFromSql'), 'the SQL-open command must be registered');
   });
 
   test('discovers project model SQL for lineage', async () => {
@@ -60,6 +61,10 @@ suite('dbtiagram extension', () => {
     const changed: string[] = [];
     const watcher = watchLineageSqlFiles([vscode.Uri.file(displayed)], (uri) => changed.push(uri.fsPath));
     try {
+      // Let any delayed create event from fixture setup drain before asserting
+      // which subsequent write the exact-file watcher observes.
+      await new Promise((resolve) => setTimeout(resolve, 400));
+      changed.length = 0;
       fs.writeFileSync(hidden, 'select 2');
       await new Promise((resolve) => setTimeout(resolve, 400));
       assert.strictEqual(changed.length, 0);
@@ -84,6 +89,21 @@ suite('dbtiagram extension', () => {
       isCancelled: () => reads >= 1,
     }, 'cancel-test', 'root');
     assert.strictEqual(result, null);
+  });
+
+  test('opens a SQL-keyed diagram for a uniquely declared model', async () => {
+    const fixtureRoot = vscode.Uri.file(path.resolve(__dirname, '../../../../fixtures/sample-dbt'));
+    const sqlUri = vscode.Uri.joinPath(fixtureRoot, 'models', 'order_summary.sql');
+    const configuration = vscode.workspace.getConfiguration('dbtiagram');
+    const previous = configuration.inspect<string>('openBehavior')?.globalValue;
+    await configuration.update('openBehavior', 'newTab', vscode.ConfigurationTarget.Global);
+    try {
+      await vscode.commands.executeCommand('dbtiagram.openFromSql', sqlUri);
+      const appeared = await waitFor(() => diagramTabLabels().includes('order_summary.sql — dbt Diagram'), 10_000);
+      assert.ok(appeared, 'the focused SQL diagram should open for the model fixture');
+    } finally {
+      await configuration.update('openBehavior', previous, vscode.ConfigurationTarget.Global);
+    }
   });
 
   test('source command opens a combined diagram scoped from a source file', async () => {
@@ -130,6 +150,9 @@ suite('dbtiagram extension', () => {
       layoutEntry.when?.includes('dbtiagram.isDiagramLayout'),
       'the layout button must be gated by the layout-file context key',
     );
+    const sqlEntry = titleMenu!.find((item) => item.command === 'dbtiagram.openFromSql');
+    assert.ok(sqlEntry, 'dbtiagram.openFromSql must be contributed to the editor title menu');
+    assert.ok(sqlEntry.when?.includes('dbtiagram.isModelSql'), 'the SQL button must be gated by the SQL-file context key');
   });
 
   test('openLayout command opens the diagram with a saved layout', async () => {

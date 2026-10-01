@@ -5,10 +5,13 @@
 import { isLayoutFilePath } from '../diagram/layoutFile';
 import { parse } from 'yaml';
 import type { DiagramMode } from '../shared/diagramMode';
+import { matchesGlob } from '../shared/glob';
+import { modelNameFromSqlPath, sqlGlobForModelGlob } from '../shared/sqlFiles';
 
 /** Context key gating the editor/title menu item. */
 export const modelFileContextKey = 'dbtiagram.isModelYml';
 export const sourceFileContextKey = 'dbtiagram.isSourceYml';
+export const sqlFileContextKey = 'dbtiagram.isModelSql';
 export type DbtYmlKind = DiagramMode | 'none';
 
 export function classifyDbtYml(content: string): DbtYmlKind {
@@ -45,4 +48,30 @@ export function shouldShowButton(
  */
 export function isDiagramLayoutFile(activePath: string | undefined): boolean {
   return isLayoutFilePath(activePath);
+}
+
+export interface EditorButtonContexts {
+  model: boolean;
+  source: boolean;
+  sql: boolean;
+  layout: boolean;
+}
+
+export function editorButtonContexts(
+  activePath: string | undefined,
+  activeText: string | undefined,
+  modelGlob: string,
+  sourceGlob: string,
+): EditorButtonContexts {
+  const layout = isDiagramLayoutFile(activePath);
+  if (activePath === undefined || activePath === '' || layout) {
+    return { model: false, source: false, sql: false, layout };
+  }
+  const kind = activeText === undefined ? 'none' : classifyDbtYml(activeText);
+  return {
+    model: matchesGlob(activePath, modelGlob) && kind === 'model',
+    source: matchesGlob(activePath, sourceGlob) && kind === 'source',
+    sql: matchesGlob(activePath, sqlGlobForModelGlob(modelGlob)) && modelNameFromSqlPath(activePath) !== null,
+    layout: false,
+  };
 }

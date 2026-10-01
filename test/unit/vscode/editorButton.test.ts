@@ -5,6 +5,8 @@ import {
   modelFileContextKey,
   shouldShowButton,
   classifyDbtYml,
+  editorButtonContexts,
+  sqlFileContextKey,
 } from '../../../src/vscode/editorButton';
 
 const MODEL_PATHS = new Set([
@@ -28,6 +30,22 @@ describe('shouldShowButton', () => {
   it('hides the button for an unsaved/untitled editor', () => {
     expect(shouldShowButton('', MODEL_PATHS)).toBe(false);
   });
+});
+
+describe('editorButtonContexts', () => {
+  const modelGlob = '**/models/**/*.yml';
+  const sourceGlob = '**/models/**/*.yml';
+  it('classifies model SQL immediately from its derived glob', () => {
+    expect(editorButtonContexts('C:/repo/models/marts/orders.sql', 'select 1', modelGlob, sourceGlob)).toEqual({ model: false, source: false, sql: true, layout: false });
+  });
+  it('classifies active YAML text without discovery', () => {
+    expect(editorButtonContexts('C:/repo/models/schema.yml', 'models: []', modelGlob, sourceGlob).model).toBe(true);
+    expect(editorButtonContexts('C:/repo/models/schema.yml', 'sources: []', modelGlob, sourceGlob).source).toBe(true);
+  });
+  it('rejects SQL outside the configured model tree', () => {
+    expect(editorButtonContexts('C:/repo/analysis/orders.sql', 'select 1', modelGlob, sourceGlob).sql).toBe(false);
+  });
+  it('exports the SQL context key', () => expect(sqlFileContextKey).toBe('dbtiagram.isModelSql'));
 });
 
 describe('classifyDbtYml', () => {

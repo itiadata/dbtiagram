@@ -10,6 +10,7 @@ import {
 import type { DiagramDomain } from '../../src/shared/diagramMode';
 import { parseDiagramEntityId } from '../../src/shared/entityId';
 import type { DiagramEntityFile } from '../../src/shared/protocol';
+import type { DiagramEntityId } from '../../src/shared/entityId';
 import { filesDeclaring } from '../../src/shared/relations';
 
 export interface InitialCapNotice { shown: number; total: number }
@@ -37,7 +38,7 @@ export interface DiagramFilterState {
   clearEntities(domain: DiagramDomain): void;
   filterTick: number;
   applyEntityFiles(files: DiagramEntityFile[]): void;
-  applyScope(domain: DiagramDomain, uri: string): void;
+  applyScope(domain: DiagramDomain, uri: string, entities?: readonly DiagramEntityId[]): void;
   applyLayoutTables(ids: string[]): void;
   addEntities(ids: readonly string[]): void;
   removeEntities(ids: readonly string[]): void;
@@ -117,9 +118,9 @@ export function useDiagramFilter(initialSelectionLimit: number = INITIAL_MODEL_S
     }
   }, [initialSelectionLimit]);
 
-  const applyScope = useCallback((domain: DiagramDomain, uri: string): void => {
+  const applyScope = useCallback((domain: DiagramDomain, uri: string, requested?: readonly DiagramEntityId[]): void => {
     if (layoutAppliedRef.current) return;
-    const scoped = scopeSelectionToFile(filesRef.current, domain, uri);
+    const scoped = scopeSelectionToFile(filesRef.current, domain, uri, requested);
     if (scoped === null) return;
     const entities = [...scoped.entities];
     setSelectedFiles((current) => ({ ...current, [domain]: scoped.files, [domain === 'model' ? 'source' : 'model']: new Set() }));

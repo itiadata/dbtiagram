@@ -71,7 +71,7 @@ up-to-date spec in `specs/features/`.
 | 51  | Rename a model across dbt project files | Done |
 | 52  | Add SQL-derived model lineage to diagrams | Done |
 | 53  | Unify model and source diagrams | Done |
-| 54  | Open a single-model diagram from SQL | Approved |
+| 54  | Open a single-model diagram from SQL | Implemented |
 
 Status values: `draft` → `approved` → `implemented` → `done`.
 

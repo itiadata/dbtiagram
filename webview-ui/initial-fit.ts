@@ -32,3 +32,11 @@ export function shouldRunInitialFit(
 export function shouldRunPendingFit(nodesInitialized: boolean, fitPending: boolean): boolean {
   return nodesInitialized && fitPending;
 }
+
+/** Only explicit layout operations request an automatic deferred fit. */
+export function shouldRequestPendingFit(
+  autoLayoutChanged: boolean,
+  savedLayoutApplied: boolean,
+): boolean {
+  return autoLayoutChanged || savedLayoutApplied;
+}

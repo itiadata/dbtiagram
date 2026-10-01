@@ -356,10 +356,17 @@ export class DiagramPanel {
    * defaults (the layout's tables / all files checked).
    */
   private publishScope(): void {
-    if (this.source.kind !== 'entityFile') {
-      return;
+    if (this.source.kind === 'entityFile') {
+      this.postMessage({ type: 'filter:scope', domain: this.source.domain, uri: this.source.fsPath });
+    } else if (this.source.kind === 'sql') {
+      const packageName = this.modelPackages.get(this.source.modelYmlPath) ?? 'unknown';
+      this.postMessage({
+        type: 'filter:scope',
+        domain: 'model',
+        uri: this.source.modelYmlPath,
+        entities: [modelEntityId(packageName, this.source.modelName)],
+      });
     }
-    this.postMessage({ type: 'filter:scope', domain: this.source.domain, uri: this.source.fsPath });
   }
 
   /** Reloads every model.yml file from disk, keeping last good data for broken files. */

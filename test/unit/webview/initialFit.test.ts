@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { shouldRunInitialFit, shouldRunPendingFit } from '../../../webview-ui/initial-fit';
+import { shouldRequestPendingFit, shouldRunInitialFit, shouldRunPendingFit } from '../../../webview-ui/initial-fit';
 
 describe('initial-fit', () => {
   describe('shouldRunInitialFit', () => {
@@ -35,6 +35,18 @@ describe('initial-fit', () => {
 
     it('does nothing when neither holds', () => {
       expect(shouldRunPendingFit(false, false)).toBe(false);
+    });
+  });
+
+  describe('shouldRequestPendingFit', () => {
+    it('does not request a fit for an ordinary table-set change', () => {
+      expect(shouldRequestPendingFit(false, false)).toBe(false);
+    });
+    it('requests a fit after Auto-layout', () => {
+      expect(shouldRequestPendingFit(true, false)).toBe(true);
+    });
+    it('requests a fit after applying a saved layout', () => {
+      expect(shouldRequestPendingFit(false, true)).toBe(true);
     });
   });
 });

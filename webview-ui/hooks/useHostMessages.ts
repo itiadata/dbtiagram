@@ -15,6 +15,8 @@ import type { DiagramLayout } from '../../src/diagram/layoutFile';
 import type { TableNode } from '../../src/diagram/graph';
 import type { LineageEdge } from '../../src/diagram/lineage';
 import type { LineageExpansionResult } from '../../src/webview/lineage';
+import type { DiagramEntityId } from '../../src/shared/entityId';
+import type { DiagramDomain } from '../../src/shared/diagramMode';
 
 export type DiagramUpdateMessage = Extract<MessageToWebview, { type: 'diagram:update' }>;
 export type LayoutApplyMessage = Extract<MessageToWebview, { type: 'layout:apply' }>;
@@ -23,7 +25,7 @@ export type LayoutActiveMessage = Extract<MessageToWebview, { type: 'layout:acti
 export interface HostMessageHandlers {
   onDiagramUpdate: (message: DiagramUpdateMessage) => void;
   onDiagramError: (message: string) => void;
-  onFilterScope: (domain: import('../../src/shared/diagramMode').DiagramDomain, uri: string) => void;
+  onFilterScope: (domain: DiagramDomain, uri: string, entities?: readonly DiagramEntityId[]) => void;
   onLayoutApply: (message: LayoutApplyMessage) => void;
   onLayoutActive: (message: LayoutActiveMessage) => void;
   onSettingsCurrent: (openBehavior: OpenBehavior) => void;
@@ -61,7 +63,7 @@ export function useHostMessages(handlers: HostMessageHandlers): void {
           current.onDiagramError(message.message);
           break;
         case 'filter:scope':
-          current.onFilterScope(message.domain, message.uri);
+          current.onFilterScope(message.domain, message.uri, message.entities);
           break;
         case 'layout:apply':
           current.onLayoutApply(message);

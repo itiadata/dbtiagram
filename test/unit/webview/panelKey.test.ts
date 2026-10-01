@@ -31,6 +31,13 @@ describe('diagramPanelKey', () => {
     expect(diagramPanelKey({ kind: 'entityFile', domain: 'model', fsPath: '/a/x.yml' }, false)).not.toBe(diagramPanelKey({ kind: 'entityFile', domain: 'source', fsPath: '/a/x.yml' }, false));
   });
 
+  it('keeps SQL and YAML panel identities independent', () => {
+    const sql: DiagramSource = { kind: 'sql', fsPath: '/repo/models/orders.sql', modelYmlPath: '/repo/models/schema.yml', modelName: 'orders' };
+    const yaml: DiagramSource = { kind: 'entityFile', domain: 'model', fsPath: '/repo/models/schema.yml' };
+    expect(diagramPanelKey(sql, false)).toBe('sql:/repo/models/orders.sql');
+    expect(diagramPanelKey(sql, false)).not.toBe(diagramPanelKey(yaml, false));
+  });
+
   it('unifies path separators', () => {
     expect(diagramPanelKey({ kind: 'entityFile', domain: 'model', fsPath: 'C:\\repo\\models\\a.yml' }, false)).toBe(
       diagramPanelKey({ kind: 'entityFile', domain: 'model', fsPath: 'C:/repo/models/a.yml' }, false),
@@ -78,5 +85,9 @@ describe('diagramPanelTitle', () => {
 
   it('uses the plain title for an adhoc source', () => {
     expect(diagramPanelTitle({ kind: 'adhoc', id: '1' })).toBe('dbt Diagram');
+  });
+
+  it('titles a SQL-origin panel from its SQL file', () => {
+    expect(diagramPanelTitle({ kind: 'sql', fsPath: 'C:/repo/models/orders.sql', modelYmlPath: 'schema.yml', modelName: 'orders' })).toBe('orders.sql — dbt Diagram');
   });
 });

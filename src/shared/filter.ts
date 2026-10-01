@@ -10,6 +10,7 @@
 import type { DiagramGraph } from '../diagram/graph';
 import type { DiagramEntityFile } from './protocol';
 import type { DiagramDomain } from './diagramMode';
+import type { DiagramEntityId } from './entityId';
 
 /**
  * Default cap on how many models start checked on a diagram's first load
@@ -97,12 +98,17 @@ export function scopeSelectionToFile(
   files: readonly DiagramEntityFile[],
   domain: DiagramDomain,
   uri: string,
+  entities?: readonly DiagramEntityId[],
 ): DomainSelection | null {
   const file = files.find((candidate) => candidate.domain === domain && candidate.uri === uri);
   if (file === undefined) {
     return null;
   }
-  return { files: new Set([file.uri]), entities: new Set(file.entities) };
+  const selected = entities === undefined
+    ? file.entities
+    : entities.filter((entity) => file.entities.includes(entity));
+  if (selected.length === 0) return null;
+  return { files: new Set([file.uri]), entities: new Set(selected) };
 }
 
 export interface DomainSelection { files: Set<string>; entities: Set<string> }

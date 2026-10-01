@@ -1,7 +1,7 @@
 ---
 id: 54
 title: Open a single-model diagram from SQL
-status: approved
+status: implemented
 priority: high
 created: 2026-09-30
 owner: unassigned
