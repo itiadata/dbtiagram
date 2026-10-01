@@ -73,6 +73,7 @@ up-to-date spec in `specs/features/`.
 | 53  | Unify model and source diagrams | Done |
 | 54  | Open a single-model diagram from SQL | Implemented |
 | 55  | Group sidebar filters by domain and make file selection search-only | Approved |
+| 56  | Add downstream lineage from source cards | Approved |
 
 Status values: `draft` → `approved` → `implemented` → `done`.
 
