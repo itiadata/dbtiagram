@@ -1,7 +1,7 @@
 ---
 id: 53
 title: Unify model and source diagrams
-status: implemented
+status: approved
 priority: medium
 created: 2026-09-30
 owner: unassigned
@@ -131,6 +131,7 @@ Then each source card has the Lucide Database icon at the top right
 And each local or external model card has the Lucide Sheet icon at the top right
 And source icons are orange
 And model and external-model icons use the primary accent colour
+And the source icon uses a 2.5 stroke width for comparable visual weight
 ```
 
 ### Show representative fixture lineage
@@ -444,7 +445,8 @@ export interface GenerateStaticSiteResult {
   entities use Lucide `Database`; model and external entities use Lucide
   `Sheet`. Source icons use `var(--vscode-charts-orange, #f59e0b)`; local and
   external model icons use `var(--accent)`. The icon has the tooltip `Source`,
-  `Model`, or `External model`.
+  `Model`, or `External model`. The Database icon uses `strokeWidth={2.5}` so
+  its curved lines have comparable visual weight to the Sheet icon.
 - Both stores load for every panel. Opening from a file applies initial scope
   only to that domain: the invoked file is checked and the other domain starts
   unchecked. Palette/layout opens follow their existing all/layout behavior.
@@ -552,5 +554,6 @@ export interface GenerateStaticSiteResult {
 - [ ] Layout files store tables but no lineage arrows; current SQL reconstructs arrows without removing tables.
 - [ ] Card headers distinguish sources from local/external models with Database and Sheet icons.
 - [ ] Source icons are orange; local and external model icons use the primary accent colour.
+- [ ] The source Database icon uses a 2.5 stroke width.
 - [ ] The sample fixture demonstrates source, local-model and external-package lineage with only one intentional FK/lineage overlap.
 - [ ] `npm run verify` is green.
