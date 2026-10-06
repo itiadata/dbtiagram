@@ -444,12 +444,25 @@ body.vscode-dark .group-color-swatch--cyan { --swatch: #22d3ee; }
   color: var(--muted);
 }
 
-.sidebar__section--filter .sidebar__section-title {
+.sidebar__section--filter > .sidebar__section-header .sidebar__section-title {
   font-size: 14px;
   font-weight: 600;
   text-transform: none;
   letter-spacing: normal;
   color: var(--text);
+}
+
+.sidebar__section--domain > .sidebar__section-header .sidebar__section-title {
+  font-size: 12px;
+  color: var(--text);
+}
+
+.sidebar__domain {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding-left: 10px;
+  border-left: 1px solid var(--border);
 }
 
 .sidebar__section-body {

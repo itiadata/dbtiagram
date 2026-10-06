@@ -2,7 +2,8 @@ import { describe, expect, it } from 'vitest';
 import type { DiagramGraph } from '../../../src/diagram/graph';
 import {
   capInitialSelection,
-  computeVisibleModels,
+  combineSelectedEntities,
+  entitiesInSelectedFiles,
   filterGraph,
   matchesSearch,
   reconcileSelection,
@@ -19,9 +20,6 @@ const combinedFiles: DiagramModelFile[] = [
   ...files,
   { uri: 'C:/repo/models/sources.yml', label: 'sources.yml', domain: 'source', entities: ['source:finops:transactions'] },
 ];
-
-const allFileUris = new Set(files.map((file) => file.uri));
-const allModelNames = new Set(['model:sample:orders', 'model:sample:order_items', 'model:sample:products']);
 
 describe('matchesSearch', () => {
   it('matches everything for an empty or whitespace query', () => {
@@ -59,46 +57,34 @@ describe('reconcileSelection', () => {
   });
 });
 
-describe('computeVisibleModels', () => {
-  it('filters model and source domains independently', () => {
-    const visible = computeVisibleModels(
-      combinedFiles,
-      new Set(['C:/repo/models/orders.yml']),
-      new Set(['model:sample:orders', 'source:finops:transactions']),
-    );
-    expect(visible).toEqual(new Set(['model:sample:orders']));
-  });
-  it('shows every model when everything is selected', () => {
-    const visible = computeVisibleModels(files, allFileUris, allModelNames);
-    expect([...visible].sort()).toEqual(['model:sample:order_items', 'model:sample:orders', 'model:sample:products']);
-  });
-
-  it('hides all models of an unchecked file', () => {
-    const visible = computeVisibleModels(
-      files,
-      new Set(['C:/repo/models/orders.yml']),
-      allModelNames,
-    );
-    expect([...visible].sort()).toEqual(['model:sample:order_items', 'model:sample:orders']);
+describe('entitiesInSelectedFiles', () => {
+  it('lists unique entities from selected files in declaration order', () => {
+    const duplicated: DiagramModelFile[] = [
+      files[0],
+      { uri: 'C:/repo/models/more.yml', label: 'more.yml', domain: 'model', entities: ['model:sample:orders'] },
+      files[1],
+    ];
+    expect(entitiesInSelectedFiles(duplicated, new Set([duplicated[0].uri, duplicated[1].uri]))).toEqual([
+      'model:sample:orders',
+      'model:sample:order_items',
+    ]);
   });
 
-  it('hides a selected model when its file is unchecked (file precedence)', () => {
-    const visible = computeVisibleModels(
-      files,
-      new Set(['C:/repo/models/products.yml']),
-      allModelNames,
-    );
-    expect([...visible]).toEqual(['model:sample:products']);
+  it('returns no available entities when no files are selected', () => {
+    expect(entitiesInSelectedFiles(files, new Set())).toEqual([]);
   });
+});
 
-  it('narrows within checked files via the model selection', () => {
-    const visible = computeVisibleModels(files, allFileUris, new Set(['model:sample:order_items']));
-    expect([...visible]).toEqual(['model:sample:order_items']);
-  });
-
-  it('shows nothing when no file is checked', () => {
-    const visible = computeVisibleModels(files, new Set(), allModelNames);
-    expect(visible.size).toBe(0);
+describe('combineSelectedEntities', () => {
+  it('combines diagram membership without consulting file scope', () => {
+    expect(combineSelectedEntities({
+      model: new Set(['model:sample:orders', 'model:sample:customers']),
+      source: new Set(['source:finops:transactions']),
+    })).toEqual(new Set([
+      'model:sample:orders',
+      'model:sample:customers',
+      'source:finops:transactions',
+    ]));
   });
 });
 
@@ -234,12 +220,11 @@ describe('removeModels', () => {
     expect(result).toEqual(new Set(['b']));
   });
 
-  it('hides a removed model from computeVisibleModels', () => {
-    const singleFile: DiagramModelFile[] = [
-      { uri: 'f', label: 'f', domain: 'model', entities: ['model:sample:orders', 'model:sample:customers'] },
-    ];
-    const selectedModels = removeModels(new Set(['model:sample:orders', 'model:sample:customers']), ['model:sample:orders']);
-    const visible = computeVisibleModels(singleFile, new Set(['f']), selectedModels);
-    expect(visible).toEqual(new Set(['model:sample:customers']));
+  it('keeps selected entities outside a scoped None bulk action', () => {
+    const selectedModels = removeModels(
+      new Set(['model:sample:orders', 'model:sample:customers']),
+      ['model:sample:orders'],
+    );
+    expect(selectedModels).toEqual(new Set(['model:sample:customers']));
   });
 });

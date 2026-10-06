@@ -1,7 +1,8 @@
 import { useCallback, useMemo, useRef, useState } from 'react';
 import {
   capInitialSelection,
-  computeVisibleModels,
+  combineSelectedEntities,
+  entitiesInSelectedFiles,
   INITIAL_MODEL_SELECTION_LIMIT,
   reconcileSelection,
   removeModels,
@@ -82,20 +83,13 @@ export function useDiagramFilter(initialSelectionLimit: number = INITIAL_MODEL_S
   const layoutAppliedRef = useRef(false);
 
   const availableEntitiesByDomain = useMemo(() => Object.fromEntries(DOMAINS.map((domain) => {
-    const names = new Set<string>();
-    for (const file of filesByDomain[domain]) {
-      if (selectedFilesByDomain[domain].has(file.uri)) for (const id of file.entities) names.add(id);
-    }
-    return [domain, [...names]];
+    return [domain, entitiesInSelectedFiles(filesByDomain[domain], selectedFilesByDomain[domain])];
   })) as Record<DiagramDomain, string[]>, [filesByDomain, selectedFilesByDomain]);
 
-  const visibleEntities = useMemo(() => {
-    const visible = new Set<string>();
-    for (const domain of DOMAINS) {
-      for (const id of computeVisibleModels(filesByDomain[domain], selectedFilesByDomain[domain], selectedEntitiesByDomain[domain])) visible.add(id);
-    }
-    return visible;
-  }, [filesByDomain, selectedFilesByDomain, selectedEntitiesByDomain]);
+  const visibleEntities = useMemo(
+    () => combineSelectedEntities(selectedEntitiesByDomain),
+    [selectedEntitiesByDomain],
+  );
 
   const applyEntityFiles = useCallback((files: DiagramEntityFile[]): void => {
     filesRef.current = files;
@@ -164,10 +158,16 @@ export function useDiagramFilter(initialSelectionLimit: number = INITIAL_MODEL_S
     setter((current) => { const next = new Set(current[domain]); checked ? next.add(value) : next.delete(value); return { ...current, [domain]: next }; });
     setFilterTick((tick) => tick + 1);
   }, []);
-  const toggleFile = useCallback((domain: DiagramDomain, uri: string, checked: boolean) => mutateSet(setSelectedFiles, domain, uri, checked), [mutateSet]);
+  const toggleFile = useCallback((domain: DiagramDomain, uri: string, checked: boolean): void => {
+    setSelectedFiles((current) => {
+      const next = new Set(current[domain]);
+      checked ? next.add(uri) : next.delete(uri);
+      return { ...current, [domain]: next };
+    });
+  }, []);
   const toggleEntity = useCallback((domain: DiagramDomain, id: string, checked: boolean) => mutateSet(setSelectedEntities, domain, id, checked), [mutateSet]);
-  const selectAllFiles = useCallback((domain: DiagramDomain) => { setSelectedFiles((current) => ({ ...current, [domain]: new Set(filesByDomain[domain].map((file) => file.uri)) })); setFilterTick((tick) => tick + 1); }, [filesByDomain]);
-  const clearFiles = useCallback((domain: DiagramDomain) => { setSelectedFiles((current) => ({ ...current, [domain]: new Set() })); setFilterTick((tick) => tick + 1); }, []);
+  const selectAllFiles = useCallback((domain: DiagramDomain) => { setSelectedFiles((current) => ({ ...current, [domain]: new Set(filesByDomain[domain].map((file) => file.uri)) })); }, [filesByDomain]);
+  const clearFiles = useCallback((domain: DiagramDomain) => { setSelectedFiles((current) => ({ ...current, [domain]: new Set() })); }, []);
   const selectAllEntities = useCallback((domain: DiagramDomain) => { setSelectedEntities((current) => ({ ...current, [domain]: new Set([...current[domain], ...availableEntitiesByDomain[domain]]) })); setFilterTick((tick) => tick + 1); }, [availableEntitiesByDomain]);
   const clearEntities = useCallback((domain: DiagramDomain) => { setSelectedEntities((current) => ({ ...current, [domain]: removeModels(current[domain], availableEntitiesByDomain[domain]) })); setFilterTick((tick) => tick + 1); }, [availableEntitiesByDomain]);
 

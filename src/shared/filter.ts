@@ -66,24 +66,24 @@ export function reconcileSelection(
   return next;
 }
 
-/**
- * Model names visible in the diagram, applying the file filter **with
- * precedence** over the model filter (spec 05): a model is visible only when
- * its file is checked AND the model itself is checked.
- */
-export function computeVisibleModels(
+/** Entity IDs available for selection through the current file search scope. */
+export function entitiesInSelectedFiles(
   files: readonly DiagramEntityFile[],
   selectedFiles: ReadonlySet<string>,
-  selectedModels: ReadonlySet<string>,
-): Set<string> {
-  const visible = new Set<string>();
+): string[] {
+  const available = new Set<string>();
   for (const file of files) {
     if (!selectedFiles.has(file.uri)) continue;
-    for (const model of file.entities) {
-      if (selectedModels.has(model)) visible.add(model);
-    }
+    for (const entity of file.entities) available.add(entity);
   }
-  return visible;
+  return [...available];
+}
+
+/** Local diagram membership is controlled only by entity selections. */
+export function combineSelectedEntities(
+  selections: Readonly<Record<DiagramDomain, ReadonlySet<string>>>,
+): Set<string> {
+  return new Set([...selections.model, ...selections.source]);
 }
 
 /**

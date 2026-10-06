@@ -1,7 +1,7 @@
 ---
 id: 55
 title: Group sidebar filters by domain and make file selection search-only
-status: approved
+status: implemented
 priority: medium
 created: 2026-10-01
 owner: unassigned
