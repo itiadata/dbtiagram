@@ -1,7 +1,7 @@
 ---
 id: 56
 title: Add downstream lineage from source cards
-status: implemented
+status: done
 priority: medium
 created: 2026-10-01
 owner: unassigned
