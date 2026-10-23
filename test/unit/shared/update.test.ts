@@ -18,10 +18,10 @@ function host(overrides: Partial<UpdateHost> = {}): UpdateHost {
   return {
     installedVersion: '0.0.2',
     fetchLatestRelease: vi.fn(() => Promise.resolve(latest)),
-    promptUpdate: vi.fn(() => Promise.resolve('Later')),
+    promptUpdate: vi.fn<UpdateHost['promptUpdate']>(async () => 'Later'),
     download: vi.fn(() => Promise.resolve('C:\\store\\dbtiagram-0.0.3.vsix')),
     install: vi.fn(() => Promise.resolve()),
-    promptReload: vi.fn(() => Promise.resolve('Later')),
+    promptReload: vi.fn<UpdateHost['promptReload']>(async () => 'Later'),
     reload: vi.fn(() => Promise.resolve()),
     warn: vi.fn(),
     ...overrides,
@@ -72,7 +72,10 @@ describe('update messages', () => {
 
 describe('runUpdateCheck', () => {
   it('downloads installs and reloads an accepted update', async () => {
-    const value = host({ promptUpdate: vi.fn(() => Promise.resolve('Update')), promptReload: vi.fn(() => Promise.resolve('Reload Now')) });
+    const value = host({
+      promptUpdate: vi.fn<UpdateHost['promptUpdate']>(async () => 'Update'),
+      promptReload: vi.fn<UpdateHost['promptReload']>(async () => 'Reload Now'),
+    });
     await runUpdateCheck(value);
 
     expect(value.fetchLatestRelease).toHaveBeenCalledOnce();
@@ -83,7 +86,7 @@ describe('runUpdateCheck', () => {
   });
 
   it.each(['Later', undefined] as const)('postpones the update with %s', async (choice) => {
-    const value = host({ promptUpdate: vi.fn(() => Promise.resolve(choice)) });
+    const value = host({ promptUpdate: vi.fn<UpdateHost['promptUpdate']>(async () => choice) });
     await runUpdateCheck(value);
     expect(value.download).not.toHaveBeenCalled();
     expect(value.install).not.toHaveBeenCalled();
@@ -93,7 +96,10 @@ describe('runUpdateCheck', () => {
   });
 
   it.each(['Later', undefined] as const)('postpones reload with %s', async (choice) => {
-    const value = host({ promptUpdate: vi.fn(() => Promise.resolve('Update')), promptReload: vi.fn(() => Promise.resolve(choice)) });
+    const value = host({
+      promptUpdate: vi.fn<UpdateHost['promptUpdate']>(async () => 'Update'),
+      promptReload: vi.fn<UpdateHost['promptReload']>(async () => choice),
+    });
     await runUpdateCheck(value);
     expect(value.download).toHaveBeenCalledOnce();
     expect(value.install).toHaveBeenCalledOnce();
@@ -134,14 +140,20 @@ describe('runUpdateCheck', () => {
   });
 
   it('warns when download fails', async () => {
-    const value = host({ promptUpdate: vi.fn(() => Promise.resolve('Update')), download: vi.fn(() => Promise.reject(new Error('network error'))) });
+    const value = host({
+      promptUpdate: vi.fn<UpdateHost['promptUpdate']>(async () => 'Update'),
+      download: vi.fn(() => Promise.reject(new Error('network error'))),
+    });
     await runUpdateCheck(value);
     expect(value.warn).toHaveBeenCalledWith('dbt Diagram could not install v0.0.3: network error');
     expect(value.install).not.toHaveBeenCalled();
   });
 
   it('reports the VSIX path when installation fails', async () => {
-    const value = host({ promptUpdate: vi.fn(() => Promise.resolve('Update')), install: vi.fn(() => Promise.reject(new Error('code not found'))) });
+    const value = host({
+      promptUpdate: vi.fn<UpdateHost['promptUpdate']>(async () => 'Update'),
+      install: vi.fn(() => Promise.reject(new Error('code not found'))),
+    });
     await runUpdateCheck(value);
     expect(value.warn).toHaveBeenCalledWith(
       'dbt Diagram could not install v0.0.3: code not found Downloaded VSIX: C:\\store\\dbtiagram-0.0.3.vsix',
